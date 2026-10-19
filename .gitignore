@@ -3,3 +3,4 @@ _testserver/
 node_modules/
 dist/
 .output/
+_mockups/_shots/
