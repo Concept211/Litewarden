@@ -1,0 +1,4 @@
+{
+  "_note": "Throwaway Vaultwarden test servers. Windows builds from nextyancc/Vaultwarden-Windows-Binary (sha256-verified) in _testserver/<version>/. Port 8222 is the real vault and is never used.",
+  "servers": { "1.37.4": 8301, "1.37.2": 8302, "1.36.0": 8303, "1.35.8": 8304 }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "litewarden",
+  "description": "A fast, lightweight password manager extension for Vaultwarden (and Bitwarden) servers.",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "GPL-3.0-only",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "postinstall": "wxt prepare",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --project unit",
+    "test:live": "vitest run --project live",
+    "testserver:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/testserver/start.ps1",
+    "testserver:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/testserver/stop.ps1",
+    "testserver:seed": "tsx scripts/testserver/seed.ts"
+  },
+  "dependencies": {
+    "@preact/signals": "2.11.3",
+    "hash-wasm": "4.12.0",
+    "preact": "11.0.1",
+    "tldts": "7.4.18"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.3.5",
+    "@types/node": "26.6.5",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "vite": "8.3.4",
+    "vitest": "5.0.5",
+    "wxt": "0.21.4"
+  }
+}

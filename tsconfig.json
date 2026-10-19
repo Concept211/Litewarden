@@ -1,0 +1,23 @@
+{
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": false,
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
+    "types": [
+      "chrome",
+      "node"
+    ]
+  },
+  "include": [
+    ".wxt/wxt.d.ts",
+    "src",
+    "tests",
+    "scripts",
+    "wxt.config.ts",
+    "vitest.config.ts"
+  ]
+}
