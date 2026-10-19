@@ -1,0 +1,134 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// What Litewarden keeps where. Two rules:
+//  - chrome.storage.local (disk) only ever holds encrypted vault data, tokens, settings and the account's
+//    public facts. Never a key, a password or a decrypted name.
+//  - chrome.storage.session (memory, cleared when the browser closes) holds the unlocked session: the user key,
+//    org keys and the decrypted list index the popup reads directly on open.
+import type { Kdf, ServerInfo, SyncResponse, Tokens } from '../core';
+import type { ListItem } from '../core/vault';
+
+export interface Account {
+  server: string;
+  email: string;
+  userId: string;
+  name: string | null;
+  kdf: Kdf;
+  /** Protected user key (EncString, wrapped by the stretched master key). */
+  encUserKey: string;
+  encPrivateKey: string | null;
+  deviceId: string;
+  serverInfo: ServerInfo;
+}
+
+export interface Settings {
+  /** Minutes of no Litewarden use before locking. 0 = only when the browser closes / manually. */
+  lockMinutes: number;
+  /** Lock when the browser closes. Off keeps the session on disk (less safe, said so in Settings). */
+  lockOnClose: boolean;
+  /** PIN unlock keeps working after a browser restart (wrapped key on disk). Off = until the browser closes. */
+  pinSurvivesRestart: boolean;
+  /** After filling a login with a 2FA secret, copy the current code. */
+  copyTotpAfterFill: boolean;
+  /** Seconds before a copied secret is cleared from the clipboard. 0 = never. */
+  clipboardSeconds: number;
+  theme: 'system' | 'light' | 'dark';
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  lockMinutes: 15,
+  lockOnClose: true,
+  pinSurvivesRestart: false,
+  copyTotpAfterFill: true,
+  clipboardSeconds: 30,
+  theme: 'system',
+};
+
+/** The decrypted list entry the popup shows: list stage plus the favicon domain and display hosts. */
+export interface IndexItem extends ListItem {
+  /** Hostname to ask the user's server for an icon (/icons/<domain>/icon.png), or null. */
+  domain: string | null;
+  /** Hostnames of the item's URIs, for display and search. */
+  hosts: string[];
+}
+
+export interface Session {
+  /** base64 raw user key (64 bytes) */
+  userKey: string;
+  /** org id -> base64 raw org key */
+  orgKeys: Record<string, string>;
+  unlockedAt: number;
+  /** When auto-lock is due (ms since epoch), or null for never. */
+  lockAt: number | null;
+}
+
+export interface TabMatch {
+  url: string;
+  /** Item ids that match this tab's URL, best first. */
+  ids: string[];
+  /** The matching items themselves (first 20), so the popup can paint without reading the whole index. */
+  items: IndexItem[];
+}
+
+export interface Lockout {
+  pwFails: number;
+  /** Master password tries are blocked until this time (ms). */
+  pwUntil: number;
+  pinFails: number;
+}
+
+/** chrome.storage.local shape */
+export interface LocalStore {
+  account?: Account;
+  tokens?: Tokens | null;
+  vault?: SyncResponse;
+  lastSync?: number;
+  lastSyncError?: string | null;
+  settings?: Partial<Settings>;
+  /** Most recently used item ids, newest first. */
+  recent?: string[];
+  /** This browser's device id for the server. Kept across log out, so "remember this browser" keeps working. */
+  deviceId?: string;
+  /** Remember-device token for two-step login, per email. */
+  twoFactorRemember?: Record<string, string>;
+  /** PIN-wrapped user key when pinSurvivesRestart is on. */
+  pinWrapped?: string | null;
+  /** Unlocked session mirrored to disk only when lockOnClose is off. */
+  persistedSession?: Session | null;
+}
+
+/** chrome.storage.session shape */
+export interface SessionStore {
+  session?: Session | null;
+  index?: IndexItem[];
+  /** How many items the index holds (the popup paints before it reads the index). */
+  indexCount?: number;
+  /** The most recently used items (small; read on popup open). */
+  recentItems?: IndexItem[];
+  /** item id -> decrypted notes, for search. Written after the index, never to disk. */
+  notes?: Record<string, string>;
+  tabMatches?: Record<string, TabMatch>;
+  /** domain -> data: URL, or '' when the server has no icon for it. */
+  iconCache?: Record<string, string>;
+  /** PIN-wrapped user key (default: lives until the browser closes). */
+  pinWrapped?: string | null;
+  lockout?: Lockout;
+  /** Decrypt failures from the last unlock/sync, shown to the user. */
+  failures?: Array<{ id: string; message: string }>;
+}
+
+export const local = {
+  get: <K extends keyof LocalStore>(...keys: K[]) => chrome.storage.local.get(keys) as Promise<Pick<LocalStore, K>>,
+  set: (v: Partial<LocalStore>) => chrome.storage.local.set(v),
+  remove: (...keys: Array<keyof LocalStore>) => chrome.storage.local.remove(keys),
+};
+
+export const mem = {
+  get: <K extends keyof SessionStore>(...keys: K[]) => chrome.storage.session.get(keys) as Promise<Pick<SessionStore, K>>,
+  set: (v: Partial<SessionStore>) => chrome.storage.session.set(v),
+  remove: (...keys: Array<keyof SessionStore>) => chrome.storage.session.remove(keys),
+};
+
+export async function getSettings(): Promise<Settings> {
+  const { settings } = await local.get('settings');
+  return { ...DEFAULT_SETTINGS, ...settings };
+}

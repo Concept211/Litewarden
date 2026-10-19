@@ -1,14 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Placeholder popup. The real Slip UI arrives in M2b.
 import { render } from 'preact';
+import '@fontsource/hanken-grotesk/latin-400.css';
+import '@fontsource/hanken-grotesk/latin-500.css';
+import '@fontsource/hanken-grotesk/latin-600.css';
+import '@fontsource/hanken-grotesk/latin-700.css';
+import '@fontsource/hanken-grotesk/latin-800.css';
+import '@fontsource/fragment-mono/latin-400.css';
+import '../../ui/slip.css';
+import { App } from './App';
+import { applyTheme, boot } from './boot';
 
-function App() {
-  return (
-    <main style={{ width: '380px', padding: '16px', font: '14px system-ui, sans-serif' }}>
-      <strong>Litewarden</strong>
-      <p>Scaffold build. The popup lands in M2b.</p>
-    </main>
-  );
-}
-
-render(<App />, document.getElementById('app')!);
+performance.mark('lw-start');
+// A popup opened as a normal tab (tests, pop-out later) fills the window instead of the 380x600 frame.
+if (new URLSearchParams(location.search).has('wide')) document.documentElement.classList.add('wide');
+boot().then((b) => {
+  performance.mark('lw-booted');
+  applyTheme(b.settings.theme);
+  render(<App boot={b} />, document.getElementById('app')!);
+});

@@ -56,7 +56,10 @@ function subsequence(hay: string, needle: string): Range[] | null {
       j++;
     }
   }
-  return j === needle.length ? out : null;
+  if (j < needle.length) return null;
+  // A match scattered across a long name ("blue" in "...bravo...lima...uniform...echo") is noise, not a hit.
+  const span = out[out.length - 1]![1] - out[0]![0];
+  return span <= needle.length * 3 ? out : null;
 }
 
 function merge(rs: Range[]): Range[] {
@@ -127,7 +130,8 @@ export class SearchIndex<T extends SearchDoc = SearchDoc> {
       });
       const n = r.notes.indexOf(t);
       if (n >= 0) {
-        best = Math.max(best, 4);
+        // An exact hit in the notes beats a fuzzy guess at the name.
+        best = Math.max(best, 6);
         ranges.notes.push([n, n + t.length]);
       }
       if (!best && t.length >= 3) {

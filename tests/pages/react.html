@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Controlled inputs (React-style)</title><link rel="stylesheet" href="_base.css"></head><body>
+<header>Controlled inputs</header><main><form id="f" onsubmit="event.preventDefault()"><label>Username</label><div class="f"><input id="u" autocomplete="username"></div>
+<label>Password</label><div class="f"><input id="p" type="password" autocomplete="current-password"></div><button type="submit">Sign in</button><pre id="out">{}</pre></form></main><script>
+// Mimics React: state only changes on input events that its value tracker sees as a real change, and every
+// render writes state back into the DOM. A fill that skips the events, or goes through the element's own
+// (tracked) value setter, gets reverted on the next render.
+const state={u:'',p:''};
+function track(el){const d=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');let last=el.value;
+ Object.defineProperty(el,'value',{configurable:true,get(){return d.get.call(this)},set(v){last=String(v);d.set.call(this,v)}});
+ el._t={get:()=>last,set:(v)=>{last=v}};}
+for(const el of [u,p]){track(el);el.addEventListener('input',()=>{const now=el.value;if(now===el._t.get())return;el._t.set(now);state[el.id]=now;render();});}
+function render(){u.value=state.u;p.value=state.p;out.textContent=JSON.stringify(state);}
+setInterval(render,250);
+</script></body></html>

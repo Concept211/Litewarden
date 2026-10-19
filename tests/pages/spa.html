@@ -1,0 +1,6 @@
+<!doctype html><html><head><meta charset="utf-8"><title>SPA re-render</title><link rel="stylesheet" href="_base.css"></head><body>
+<header>Single-page app</header><main><div id="root" class="card">Loading...</div></main><script>
+// Renders late, then throws the form away and renders fresh elements, like a framework re-mount.
+let n=0;function render(){n++;root.innerHTML='<form onsubmit="event.preventDefault()"><p>render '+n+'</p><label>Email</label><div class="f"><input name="email" type="email" autocomplete="email"></div><label>Password</label><div class="f"><input name="pw" type="password"></div><button type="submit">Sign in</button></form>';document.body.dataset.render=n;}
+setTimeout(render,300);setTimeout(render,900);
+</script></body></html>

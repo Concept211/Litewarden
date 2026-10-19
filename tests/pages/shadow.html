@@ -1,0 +1,7 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Shadow DOM login</title><link rel="stylesheet" href="_base.css"></head><body>
+<header>Web components portal</header><main><x-login></x-login></main><script>
+const css='<style>input{display:block;width:300px;height:36px;margin:4px 0 12px}</style>';
+customElements.define('x-login',class extends HTMLElement{connectedCallback(){const r=this.attachShadow({mode:'open'});
+r.innerHTML=css+'<form><label>User<input id="u" name="user" autocomplete="username"></label><x-pass></x-pass><button>Sign in</button></form>'}});
+customElements.define('x-pass',class extends HTMLElement{connectedCallback(){const r=this.attachShadow({mode:'open'});r.innerHTML=css+'<label>Password<input id="p" type="password" autocomplete="current-password"></label>'}});
+</script></body></html>

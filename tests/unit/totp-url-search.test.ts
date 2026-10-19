@@ -132,3 +132,14 @@ describe('search', () => {
     expect(performance.now() - t).toBeLessThan(50);
   });
 });
+
+describe('search ranking regressions', () => {
+  it('an exact notes hit outranks a fuzzy match scattered across a long name', () => {
+    const idx = new SearchIndex([
+      { id: 'long', name: 'harbor juliet romeo india uniform bravo lima echo folder delta' },
+      { id: 'notes', name: 'Corpus Alice', notes: 'Recovery codes are in the blue folder.' },
+    ]);
+    expect(idx.search('blue folder')[0]!.doc.id).toBe('notes');
+    expect(idx.search('blue').map((h) => h.doc.id)).toEqual(['notes']);
+  });
+});

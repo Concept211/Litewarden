@@ -33,6 +33,9 @@ foreach ($v in $Versions) {
   $env:DOMAIN = "http://127.0.0.1:$port"
   $env:LOGIN_RATELIMIT_MAX_BURST = '1000'
   $env:LOGIN_RATELIMIT_SECONDS = '1'
+  # 1.37.4 added a separate limit for unauthenticated endpoints (prelogin, config); the e2e suite needs headroom.
+  $env:UNAUTHENTICATED_RATELIMIT_MAX_BURST = '1000'
+  $env:UNAUTHENTICATED_RATELIMIT_SECONDS = '1'
   # Launch through cmd with shell execute (no handle inheritance), so callers like `npm run` don't hang on our pipes.
   $exe = "$dir\vaultwarden.exe"
   $null = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', "`"`"$exe`" > stdout.log 2> stderr.log`"" -WorkingDirectory $dir -WindowStyle Hidden -PassThru

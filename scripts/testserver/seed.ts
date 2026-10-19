@@ -43,7 +43,7 @@ export async function loginAccount(server: string, a: TestAccount) {
 }
 
 /** `encryptedFor` (the user id) is required on writes since Vaultwarden 1.37.4; older servers ignore it. */
-async function buildCipher(it: SeedItem, baseKey: SymKey, opts: { organizationId?: string | null; encryptedFor: string }): Promise<Partial<Cipher>> {
+export async function buildCipher(it: SeedItem, baseKey: SymKey, opts: { organizationId?: string | null; encryptedFor: string }): Promise<Partial<Cipher>> {
   let key = baseKey;
   let keyField: string | null = null;
   if (it.itemKey) {

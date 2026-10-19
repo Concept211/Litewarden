@@ -1,0 +1,7 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Stacked login</title><link rel="stylesheet" href="_base.css"></head><body>
+<header>Harbor Point Credit Union</header><main><form id="f" onsubmit="event.preventDefault();out.textContent='submitted'">
+<h1 style="font-size:20px">Sign in to online banking</h1>
+<label for="u">Username</label><div class="f"><input id="u" name="username" autocomplete="username"></div>
+<label for="p">Password</label><div class="f"><input id="p" name="password" type="password" autocomplete="current-password"><button type="button" class="eye" aria-label="Show password" onclick="p.type=p.type==='password'?'text':'password'">o</button></div>
+<label style="display:flex;gap:6px;align-items:center"><input type="checkbox"> Remember this device</label><br>
+<button type="submit">Sign in</button><pre id="out"></pre></form></main></body></html>

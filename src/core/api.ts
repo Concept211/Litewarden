@@ -160,6 +160,8 @@ export class Api {
       if (r.status === 200 && r.data && typeof r.data === 'object') {
         return { ...parsePrelogin(r.data as Record<string, unknown>), endpoint: p };
       }
+      // Rate limited (Vaultwarden 1.37.4 limits unauthenticated endpoints): stop, don't misreport it as missing.
+      if (r.status === 429) throw new ApiError(429, 'Too many requests. Wait a minute, then try again.', 'Reading the key settings (prelogin)');
       tried.push(`${p} ${r.status}`);
     }
     throw new ApiError(404, tried.join(', '), 'Reading the key settings (prelogin)');
