@@ -105,6 +105,8 @@ test('menu: Esc closes, the field stays usable, an outside click closes', async 
   await expect(m.locator('.m-row')).toHaveCount(1);
   await p.keyboard.press('Escape');
   await expect.poll(() => gone(p, 'menu')).toBe(true);
+  // the keyboard goes back to the field the menu belonged to
+  await expect(p.locator('#u')).toBeFocused();
   // the field under the menu still takes clicks and typing
   await clickIcon(p, '#u');
   await surface(p, 'menu');
@@ -537,3 +539,4 @@ test('cost: the content script adds under 5 ms on pages without a login form', a
   }
   console.log('content-script cost (ms):', JSON.stringify(out));
 });
+

@@ -126,6 +126,18 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
     shadow!.appendChild(fr);
     return fr;
   }
+  /**
+   * Remove one of our frames. If it has the keyboard focus (Esc pressed inside it), give the focus back to the page
+   * first: to `back` (the field the menu belongs to) or the page itself. Removing a focused frame mid-keypress leaves
+   * the key's release aimed at a frame that no longer exists, and the user's cursor nowhere.
+   */
+  function drop(fr: HTMLIFrameElement, back: HTMLElement | null) {
+    if (host && document.activeElement === host) {
+      if (back?.isConnected) back.focus({ preventScroll: true });
+      else window.focus();
+    }
+    fr.remove();
+  }
   const put = (el: HTMLElement, r: Rect) => Object.assign(el.style, { left: `${Math.round(r.x)}px`, top: `${Math.round(r.y)}px`, width: `${Math.ceil(r.w)}px`, height: `${Math.ceil(r.h)}px` });
 
   // ---------- activation (first login field seen) ----------
@@ -281,7 +293,7 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
     if (!menu) return;
     const m = menu;
     menu = null;
-    m.fr.remove();
+    drop(m.fr, m.anchor);
     if (tell) void cs('cs:closed', { token: m.token }).catch(() => {});
   }
 
@@ -352,7 +364,7 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
     if (!prompt) return;
     const p = prompt;
     prompt = null;
-    p.fr.remove();
+    drop(p.fr, null);
     if (tell) void cs('cs:closed', { token: p.token }).catch(() => {});
   }
 
@@ -483,7 +495,7 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
     const t = teach;
     teach = null;
     document.removeEventListener('mouseover', teachHover, true);
-    t.fr.remove();
+    drop(t.fr, null);
     t.hover?.remove();
     t.marks.forEach((m) => m.remove());
     if (!silent) void cs('cs:closed', { token: t.token }).catch(() => {});

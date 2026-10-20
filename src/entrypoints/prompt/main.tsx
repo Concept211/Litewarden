@@ -69,7 +69,12 @@ function Prompt() {
     }
   }
 
-  const onKey = (e: KeyboardEvent) => e.key === 'Escape' && void send('promptAct', { token, act: 'notnow' }).catch(() => {});
+  // Esc anywhere in the frame (focus may be on <body>).
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => e.key === 'Escape' && void send('promptAct', { token, act: 'notnow' }).catch(() => {});
+    document.addEventListener('keydown', on);
+    return () => document.removeEventListener('keydown', on);
+  }, [token]);
   if (!d) return <div ref={root}>{err && <div class="conf"><div class="t"><b>{err}</b></div></div>}</div>;
 
   const upd = d.kind === 'update';
@@ -84,7 +89,7 @@ function Prompt() {
   if (d.state === 'saved' || d.state === 'never') {
     const never = d.state === 'never';
     return (
-      <div ref={root} onKeyDown={onKey}>
+      <div ref={root}>
         <div class="conf" role="status">
           <span class={`ok-dot${never ? ' off' : ''}`}>{never ? <BellOff /> : <Check />}</span>
           <div class="t">
@@ -106,7 +111,7 @@ function Prompt() {
 
   if (bar)
     return (
-      <div ref={root} onKeyDown={onKey}>
+      <div ref={root}>
         <div class="bar">
           <Keep />
           <div class="t">
@@ -122,7 +127,7 @@ function Prompt() {
     );
 
   return (
-    <div ref={root} onKeyDown={onKey}>
+    <div ref={root}>
       <div class="prompt" role="dialog" aria-label={title}>
         <div class="p-head">
           <Keep />

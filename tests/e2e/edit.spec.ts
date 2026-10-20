@@ -23,6 +23,12 @@ test.beforeAll(async ({ popup }) => {
   for (const n of [NAME, 'Pushed from another device', 'Renamed on the phone']) {
     for (let hit = await d.find(n); hit; hit = await d.find(n)) await d.api.trashCipher(hit.cipher.id);
   }
+  // Anything else an interrupted run left on the test site (whatever its name ended up as).
+  for (const c of (await d.api.sync()).ciphers) {
+    if (c.deletedDate || c.organizationId || c.type !== 1) continue;
+    const it = await decryptItem(C, c, d.keys).catch(() => null);
+    if (it?.login?.uris.some((u) => u.uri.includes('newsite-lw.test'))) await d.api.trashCipher(c.id);
+  }
 });
 
 const creds = e2eCreds();

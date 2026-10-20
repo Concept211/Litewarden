@@ -285,7 +285,12 @@ export function ItemView({
     return () => document.removeEventListener('keydown', onKey);
   }, []);
   useEffect(() => {
-    if (mode === 'edit') setTimeout(() => (document.getElementById('f-name') as HTMLInputElement | null)?.focus(), 0);
+    // Focus the name, unless the user already went to another field (typing must never land in the wrong one).
+    if (mode === 'edit')
+      setTimeout(() => {
+        const a = document.activeElement;
+        if (!a || a === document.body || !a.closest('.body')) (document.getElementById('f-name') as HTMLInputElement | null)?.focus();
+      }, 0);
   }, [mode, !!draft]);
 
   const pwStrength = useMemo(() => strength((mode === 'edit' ? draft?.login?.password : detail?.item.login?.password) ?? ''), [draft?.login?.password, detail, mode]);

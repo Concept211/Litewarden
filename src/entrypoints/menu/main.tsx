@@ -114,10 +114,20 @@ function Menu() {
     }
   }
 
+  // Keys are handled for the whole frame: right after it opens, the focus can still be on <body> rather than the
+  // filter box, and Esc, the arrows and Enter must work then too.
+  const keys = useRef(onKey);
+  keys.current = onKey;
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => keys.current(e);
+    document.addEventListener('keydown', on);
+    return () => document.removeEventListener('keydown', on);
+  }, []);
+
   if (!data) return <div class="menu" ref={root} />;
   const locked = data.status !== 'unlocked';
   return (
-    <div class="menu" ref={root} onKeyDown={onKey}>
+    <div class="menu" ref={root}>
       <label class="m-top">
         <Keep />
         <input ref={input} placeholder={locked ? 'Litewarden is locked' : `Filter ${data.site}`} aria-label="Filter logins" value={q} disabled={locked} onInput={(e) => setQ((e.currentTarget as HTMLInputElement).value)} />
