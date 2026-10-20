@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Live protocol suite: log in, sync and decrypt the seeded vault on every running test server.
 // Start and seed first:  npm run testserver:start && npm run testserver:seed
-// Only loopback ports 8301+ (scripts/testserver/versions.json). Never the real vault.
+// Only loopback ports 8301+ (scripts/testserver/versions.json). Never a real vault.
 import { afterAll, describe, expect, it } from 'vitest';
 import { Api, compareVersions } from '../../src/core/api';
 import { webCrypto as C } from '../../src/core/crypto';

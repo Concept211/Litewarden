@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // E2E: the built extension (npm run build) loaded unpacked into Chromium, against the throwaway test servers
-// (npm run testserver:start) and the local login-form corpus. Never the real vault.
+// (npm run testserver:start) and the local login-form corpus. Never a real vault.
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({

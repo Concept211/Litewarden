@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Memory soak: one browser with the built extension, used in a loop for hours, against a throwaway test server.
-// Run through tests/soak/run.mjs (npm run soak -- --minutes 30). Never the real vault.
+// Run through tests/soak/run.mjs (npm run soak -- --minutes 30). Never a real vault.
 //
 // Each cycle: fill from the popup, copy from the popup, search in a long-lived pop-out style popup, open and
 // close the in-page menu in a tab that stays open the whole run, and every few cycles sync and lock/unlock.

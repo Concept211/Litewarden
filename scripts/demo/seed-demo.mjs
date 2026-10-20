@@ -2,7 +2,7 @@
 // Seed a demo account on a throwaway test server for the README, social-preview and Web Store images.
 // Usage: npx tsx scripts/demo/seed-demo.mjs [--version 1.37.4]
 //
-// What it does (test servers only, ports 8301+, never the real vault):
+// What it does (test servers only, ports 8301+, never a real vault):
 //  - registers alex.morgan@example.com (a throwaway account; the password is generated into _testserver/demo-creds.json)
 //  - adds about 40 logins for well-known sites plus two notes, all with made-up usernames and passwords
 //  - drops the fictional Northwind icon into the server's icon cache and warms the real favicons, so the

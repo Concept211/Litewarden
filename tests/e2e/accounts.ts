@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// E2E accounts on the throwaway test servers (never the real vault):
+// E2E accounts on the throwaway test servers (never a real vault):
 //  - e2e@:      the seeded 2,000-item vault plus logins for the local test-page corpus (corpus.lw.test)
 //  - empty@:    an empty vault
 //  - twofa@:    a small vault behind authenticator two-step login

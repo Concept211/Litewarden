@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Shared by the demo-shot scripts: a Chromium with the built extension, signed in to the demo vault on a throwaway
-// test server (port 8301+, never the real vault), with the Northwind sign-in page routed in.
+// test server (port 8301+, never a real vault), with the Northwind sign-in page routed in.
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from '@playwright/test';

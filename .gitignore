@@ -1,12 +1,7 @@
-_research/
-_testserver/
+# Private working folders (notes, mockups, research, test servers, build sources) never go public
+_*/
 node_modules/
 dist/
 .output/
-_mockups/_shots/
-_mockups/logo/ideas/
-_mockups/logo/polished/
-_mockups/logo/polished2/
-_mockups/logo/refs/
 .wxt/
 coverage/

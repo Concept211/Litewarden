@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // No-cover placement for everything Litewarden draws on a page (menu, save prompt, teach panel). A spot is
 // rejected when it overlaps any protected element (other fields, buttons inside fields, checkboxes, the submit
-// button) or leaves the viewport. Pure geometry, so it can be unit tested. Spec: _mockups/r3 showcase.js.
+// button) or leaves the viewport. Pure geometry, so it can be unit tested.
 
 export interface Rect {
   x: number;

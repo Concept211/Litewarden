@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* Litewarden Slip system, web-vault blue palette. Source of truth: _md/DESIGN.md and _mockups/r3, r4. */
+/* Litewarden Slip system, web-vault blue palette. Source of truth: the design mockups (kept outside the repo). */
 :root,[data-theme=light]{
   --ground: #f1f3f7; --surface: #ffffff; --raised: #e6e9ef; --ink: #1b2029; --muted: #536383; --line: #d9dee8;
   --accent: #1252a3; --accent-ink: #ffffff; --accent-hover: #0d3c77; --accent-tint: #dbe5f6; --accent-text: #1252a3;

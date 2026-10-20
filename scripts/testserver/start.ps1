@@ -9,7 +9,7 @@ if (-not $Versions) { $Versions = $map.PSObject.Properties.Name }
 foreach ($v in $Versions) {
   $port = [int]$map.$v
   if (-not $port) { throw "unknown version $v (add it to versions.json)" }
-  if ($port -eq 8222 -or $port -lt 8301) { throw "refusing port ${port}: test servers use 8301 and up" }
+  if ($port -lt 8301) { throw "refusing port ${port}: test servers use 8301 and up" }
   $dir = Join-Path $root "_testserver\$v"
   if ($dir -like '*Portable*') { throw 'refusing: path inside Portable' }
   if (-not (Test-Path "$dir\vaultwarden.exe")) { throw "missing $dir\vaultwarden.exe" }
