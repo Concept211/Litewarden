@@ -1,0 +1,8 @@
+title: Litewarden
+description: Fast, lightweight password manager extension for Vaultwarden. Free and open source.
+url: https://concept211.github.io
+baseurl: /litewarden
+theme: jekyll-theme-primer
+plugins:
+  - jekyll-seo-tag
+  - jekyll-sitemap

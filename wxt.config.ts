@@ -4,8 +4,10 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   srcDir: 'src',
   manifest: {
-    name: 'Litewarden',
-    description: 'A fast, lightweight password manager for Vaultwarden servers.',
+    // The store title comes from the name: lead with the search phrase. The toolbar title stays "Litewarden".
+    name: 'Litewarden: Password Manager for Vaultwarden',
+    short_name: 'Litewarden',
+    description: 'Fast password manager for self-hosted Vaultwarden. Fill with one key, 2FA codes, PIN unlock. Works with Bitwarden servers too.',
     // Every permission is justified in the Chrome Web Store listing:
     // storage/unlimitedStorage: the encrypted vault copy; alarms: auto-lock and clipboard clearing;
     // scripting: fill a form when you ask; offscreen + clipboardWrite: clear a copied password after 30 s;
