@@ -95,7 +95,7 @@ describe('editing items', () => {
     name: 'GitHub',
     notes: 'old notes',
     folderId: null,
-    login: { username: 'me@pablo.dev', password: 'old-pass', totp: 'JBSW Y3DP EHPK 3PXP', uris: [{ uri: 'https://github.com', match: null }] },
+    login: { username: 'alex.morgan@example.com', password: 'old-pass', totp: 'JBSW Y3DP EHPK 3PXP', uris: [{ uri: 'https://github.com', match: null }] },
   };
 
   it('validates', () => {
@@ -111,7 +111,7 @@ describe('editing items', () => {
     expect(body.organizationId).toBeNull();
     expect(String(body.name)).toMatch(/^2\./);
     const back = await decryptItem(C, { ...(body as unknown as Cipher), id: 'x' }, k);
-    expect(back).toMatchObject({ name: 'GitHub', notes: 'old notes', login: { username: 'me@pablo.dev', password: 'old-pass', totp: 'JBSWY3DPEHPK3PXP', uris: [{ uri: 'https://github.com', match: null }] } });
+    expect(back).toMatchObject({ name: 'GitHub', notes: 'old notes', login: { username: 'alex.morgan@example.com', password: 'old-pass', totp: 'JBSWY3DPEHPK3PXP', uris: [{ uri: 'https://github.com', match: null }] } });
     const login = body.login as { uris: Array<{ uriChecksum: string }> };
     const sum = await C.decryptString(login.uris[0]!.uriChecksum, k.userKey);
     const want = b64encode(new Uint8Array(await crypto.subtle.digest('SHA-256', buf(utf8('https://github.com')))));

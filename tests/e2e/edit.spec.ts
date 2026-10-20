@@ -107,7 +107,7 @@ test('settings: default username for new logins', async ({ popup }) => {
   await expect(p.locator('.cat')).toHaveCount(7);
   await shot(p, 'settings-home-light', 2);
   await p.click('[data-cat=autofill]');
-  await p.fill('input[aria-label="Default username"]', 'pablo-default');
+  await p.fill('input[aria-label="Default username"]', 'alex-default');
   await p.keyboard.press('Enter');
   await expect(p.locator('#toast')).toContainText('Saved');
   await p.close();
@@ -122,7 +122,7 @@ test('new login from "Nothing saved for this site": prefilled, generator, saved 
   await expect(p.locator('.hdr h1')).toHaveText('New login');
   await expect(p.locator('#f-name')).toHaveValue(NAME);
   await expect(p.locator('#f-name')).toBeFocused();
-  await expect(p.locator('#f-user')).toHaveValue('pablo-default');
+  await expect(p.locator('#f-user')).toHaveValue('alex-default');
   expect((await p.locator('#f-pw').inputValue()).length).toBe(20);
   await expect(p.locator('input[aria-label="Website 1"]')).toHaveValue(NEWSITE);
   await shot(p, 'new-light', 2);
@@ -140,18 +140,18 @@ test('new login from "Nothing saved for this site": prefilled, generator, saved 
   await p.click('button[type=submit]');
   await expect(p.locator('#toast')).toContainText('Saved to');
   await expect(p.locator('.hdr h1')).toHaveText(NAME);
-  await expect(p.locator('.kv', { hasText: 'Username' })).toContainText('pablo-default');
+  await expect(p.locator('.kv', { hasText: 'Username' })).toContainText('alex-default');
   await shot(p, 'item-view-light', 2);
   // What the server holds decrypts to exactly that (checked from a second device).
   const d = await device();
   const got = await d.find(NAME);
-  expect(got?.item.login).toMatchObject({ username: 'pablo-default', password: gen, uris: [{ uri: NEWSITE, match: null }] });
+  expect(got?.item.login).toMatchObject({ username: 'alex-default', password: gen, uris: [{ uri: NEWSITE, match: null }] });
   // Back in the list the new card is there, and Enter fills the page.
   await p.click('button[aria-label="Back"]');
   await expect(p.locator('.card')).toHaveCount(1);
   await p.keyboard.press('Enter');
   await p.waitForEvent('close', { timeout: 3000 }).catch(() => {});
-  await expect(page.locator('#u')).toHaveValue('pablo-default');
+  await expect(page.locator('#u')).toHaveValue('alex-default');
   await expect(page.locator('#p')).toHaveValue(gen);
   await page.close();
 });
@@ -163,7 +163,7 @@ test('edit: username and a second website; a new password keeps the old one in t
   await p.locator('.card button[aria-label^="Open"]').click();
   await p.click('button:has-text("Edit")');
   await expect(p.locator('.hdr h1')).toHaveText('Edit login');
-  await p.fill('#f-user', 'pablo-edited');
+  await p.fill('#f-user', 'alex-edited');
   await p.click('button:has-text("Add website")');
   await p.fill('input[aria-label="Website 2"]', 'https://login.newsite-lw.test');
   await p.selectOption('select[aria-label="Match for website 2"]', '1');
@@ -173,7 +173,7 @@ test('edit: username and a second website; a new password keeps the old one in t
   await expect(p.locator('.kv', { hasText: 'Exact host' })).toContainText('https://login.newsite-lw.test');
   const d = await device();
   let got = await d.find(NAME);
-  expect(got?.item.login?.username).toBe('pablo-edited');
+  expect(got?.item.login?.username).toBe('alex-edited');
   expect(got?.item.login?.uris).toEqual([{ uri: NEWSITE, match: null }, { uri: 'https://login.newsite-lw.test', match: 1 }]);
   expect((got?.cipher.passwordHistory as unknown[] | null)?.length ?? 0).toBe(0);
   const oldPw = got!.item.login!.password;
@@ -245,7 +245,7 @@ test('errors keep the edit: empty name, a value the server refuses, the server g
   await p.keyboard.press('Escape');
   await expect(p.locator('.sheet')).toContainText('Discard your changes?');
   await p.click('.sheet button:has-text("Discard")');
-  await expect(p.locator('.kv', { hasText: 'Username' })).toContainText('pablo-edited');
+  await expect(p.locator('.kv', { hasText: 'Username' })).toContainText('alex-edited');
   await p.close();
   await page.close();
 });

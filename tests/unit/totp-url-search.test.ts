@@ -91,11 +91,11 @@ describe('URL matching', () => {
 
 describe('search', () => {
   const docs = [
-    { id: '1', name: 'GitHub', username: 'me@pablo.dev', urls: ['github.com'] },
+    { id: '1', name: 'GitHub', username: 'alex.morgan@example.com', urls: ['github.com'] },
     { id: '2', name: 'GitHub · deploy bot', username: 'c211-deploy', urls: ['github.com'] },
-    { id: '3', name: 'Cloudflare', username: 'ops@concept211.com', urls: ['dash.cloudflare.com'], notes: 'API token rotated in March' },
-    { id: '4', name: 'Café Müller GmbH', username: 'pablo', urls: ['cafe-mueller.de'] },
-    { id: '5', name: 'Hetzner Cloud', username: 'me@pablo.dev', urls: ['hetzner.com'], favorite: true },
+    { id: '3', name: 'Cloudflare', username: 'ops@northwind.example', urls: ['dash.cloudflare.com'], notes: 'API token rotated in March' },
+    { id: '4', name: 'Café Müller GmbH', username: 'alexm', urls: ['cafe-mueller.de'] },
+    { id: '5', name: 'Hetzner Cloud', username: 'alex.morgan@example.com', urls: ['hetzner.com'], favorite: true },
   ];
   const idx = new SearchIndex(docs);
   it('name prefix beats substring beats username', () => {
@@ -113,7 +113,7 @@ describe('search', () => {
     expect(hit!.ranges.name).toEqual([[3, 6]]);
   });
   it('matches usernames, URLs and notes', () => {
-    expect(idx.search('concept211')[0]!.ranges.username).toEqual([[4, 14]]);
+    expect(idx.search('northwind')[0]!.ranges.username).toEqual([[4, 13]]);
     expect(idx.search('dash')[0]!.ranges.url.get(0)).toEqual([[0, 4]]);
     expect(idx.search('rotated')[0]!.doc.id).toBe('3');
   });
