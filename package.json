@@ -17,7 +17,8 @@
     "testserver:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/testserver/stop.ps1",
     "testserver:seed": "tsx scripts/testserver/seed.ts",
     "e2e": "wxt build && playwright test",
-    "e2e:corpus": "node tests/pages/server.mjs 8411"
+    "e2e:corpus": "node tests/pages/server.mjs 8411",
+    "soak": "node tests/soak/run.mjs"
   },
   "dependencies": {
     "@fontsource/fragment-mono": "5.3.0",

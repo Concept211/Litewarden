@@ -35,8 +35,18 @@ export function loadCreds(): Creds {
   return creds;
 }
 
-/** Only loopback test ports, never the real vault on 8222. */
+/**
+ * Base URL of the test server for `version`. Locally: the Windows binaries on loopback ports 8301+.
+ * CI (or Docker anywhere): set LW_SERVER_<version with dots as underscores>, e.g.
+ * LW_SERVER_1_37_4=http://127.0.0.1:8301. Port 8222 (the real vault) is refused either way.
+ */
 export function serverUrl(version: string): string {
+  const override = process.env[`LW_SERVER_${version.replace(/\./g, '_')}`];
+  if (override) {
+    const u = new URL(override);
+    if (u.port === '8222') throw new Error('refusing port 8222');
+    return u.origin;
+  }
   const port = SERVERS[version];
   if (!port) throw new Error(`unknown test server version ${version}`);
   if (port === 8222 || port < 8301) throw new Error(`refusing port ${port}`);

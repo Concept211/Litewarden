@@ -1,0 +1,108 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# CI for Litewarden. NOT YET RUN: written locally on Windows before the GitHub repository exists, so treat the
+# first run as a shakedown.
+#
+# 1. check: types, unit tests, build (and the built extension as an artifact).
+# 2. servers: one job per Vaultwarden version. The official Docker image runs as a service container on the same
+#    loopback port the Windows test servers use (scripts/testserver/versions.json), so the test code needs no
+#    changes; LW_SERVER_* is set anyway to make the target explicit. LW_DOCKER_* lets the "server goes away" tests
+#    stop and start the container.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: litewarden-chrome-mv3
+          path: .output/chrome-mv3
+          retention-days: 14
+
+  servers:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { version: 1.37.4, port: 8301, var: 1_37_4 }
+          - { version: 1.37.2, port: 8302, var: 1_37_2 }
+          - { version: 1.36.0, port: 8303, var: 1_36_0 }
+          - { version: 1.35.8, port: 8304, var: 1_35_8 }
+    services:
+      vw:
+        image: vaultwarden/server:${{ matrix.version }}
+        ports:
+          - ${{ matrix.port }}:80
+        env:
+          SIGNUPS_ALLOWED: 'true'
+          WEB_VAULT_ENABLED: 'false'
+          DISABLE_ICON_DOWNLOAD: 'true'
+          I_REALLY_WANT_VOLATILE_STORAGE: 'true'
+          DOMAIN: http://127.0.0.1:${{ matrix.port }}
+          LOGIN_RATELIMIT_MAX_BURST: '1000'
+          LOGIN_RATELIMIT_SECONDS: '1'
+          UNAUTHENTICATED_RATELIMIT_MAX_BURST: '1000'
+          UNAUTHENTICATED_RATELIMIT_SECONDS: '1'
+    env:
+      E2E_VERSIONS: ${{ matrix.version }}
+    steps:
+      # Env var names can't hold expressions, so the per-version names go through GITHUB_ENV.
+      - name: Point the tests at this job's server
+        run: |
+          echo "LW_SERVER_${{ matrix.var }}=http://127.0.0.1:${{ matrix.port }}" >> "$GITHUB_ENV"
+          echo "LW_DOCKER_${{ matrix.var }}=${{ job.services.vw.id }}" >> "$GITHUB_ENV"
+      - name: Wait for Vaultwarden ${{ matrix.version }}
+        run: |
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:${{ matrix.port }}/alive && exit 0; sleep 1; done
+          docker logs ${{ job.services.vw.id }}; exit 1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Seed the 2,000-item test accounts
+        run: npm run testserver:seed -- --versions ${{ matrix.version }}
+      - name: Live protocol suite
+        run: npm run test:live
+      - name: End-to-end (the built extension in Chromium)
+        run: xvfb-run --auto-servernum npx playwright test
+      - name: Short memory soak
+        if: matrix.version == '1.37.4'
+        run: xvfb-run --auto-servernum npm run soak -- --minutes 10 --every 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-${{ matrix.version }}
+          path: |
+            _testserver/shots
+            _testserver/e2e-results
+            _testserver/soak
+          retention-days: 7

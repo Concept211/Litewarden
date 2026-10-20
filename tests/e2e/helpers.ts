@@ -65,6 +65,30 @@ export async function clipboard(ctx: BrowserContext, _extId?: string): Promise<s
   return reader.evaluate(() => navigator.clipboard.readText());
 }
 
+/**
+ * Stop or start the test server (the "server goes away" tests). Locally: the Windows scripts. In Docker (CI): set
+ * LW_DOCKER_<version with dots as underscores> to the container id, and this uses `docker stop/start`.
+ */
 export function testServer(action: 'start' | 'stop', version = VERSION) {
+  const container = process.env[`LW_DOCKER_${version.replace(/\./g, '_')}`];
+  if (container) {
+    execFileSync('docker', [action, container], { stdio: 'pipe' });
+    if (action === 'start') waitAlive(version);
+    return;
+  }
   execFileSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(ROOT, 'scripts', 'testserver', `${action}.ps1`), '-Versions', version], { stdio: 'pipe' });
+}
+
+/** Block until the server answers /alive (up to 60 s). Synchronous on purpose, like the Windows start script. */
+function waitAlive(version: string) {
+  const url = serverUrl(version) + '/alive';
+  for (let i = 0; i < 120; i++) {
+    try {
+      execFileSync('curl', ['-fsS', '-o', '/dev/null', '--max-time', '2', url], { stdio: 'pipe' });
+      return;
+    } catch {
+      execFileSync('sleep', ['0.5']);
+    }
+  }
+  throw new Error(`${version} did not come back at ${url}`);
 }
