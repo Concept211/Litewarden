@@ -194,7 +194,6 @@ Other things we make:
   files and git in one window.
 - [CarSnipe](https://carsnipe.com): instant Telegram alerts for new car listings on Facebook Marketplace.
 - [ConceptSEO](https://seo.concept211.com): weekly SEO audits and AI-search readiness reports.
-- [SocialBotify](https://socialbotify.com): writes, schedules and A/B tests social posts across 10 platforms.
 
 If Litewarden saves you time, a star on GitHub helps other Vaultwarden users find it.
 
