@@ -1,11 +1,8 @@
-<h1 align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="brand/readme/logo-dark.svg">
-    <img alt="Litewarden" src="brand/readme/logo-light.svg" width="320">
-  </picture>
-</h1>
+<p align="center">
+  <img alt="Litewarden" src="brand/readme/banner.svg" width="360">
+</p>
 
-<h3 align="center">Fast, lightweight password manager extension for Vaultwarden</h3>
+<h1 align="center">Fast, lightweight password manager extension for Vaultwarden</h1>
 
 <p align="center">
   <a href="https://github.com/Concept211/litewarden/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Concept211/litewarden/actions/workflows/ci.yml/badge.svg"></a>

@@ -13,6 +13,7 @@ Wordmark: "lite" in Hanken Grotesk Light next to "warden" in Hanken Grotesk Extr
 | `symbol-dark.svg` | Same path in the dark-mode primary (#65ABFF), for dark grounds. |
 | `favicon.svg` | The 16 px drawing (shorter neck, wider tower, bigger ring) on a square canvas. Switches to #65ABFF in dark browser UIs. |
 | `wordmark.svg` | "litewarden" alone, ink. |
+| `readme/banner.svg` | README and landing page header: white lockup on a rounded #1252A3 tile. Reads on any background, so it doesn't depend on the viewer's theme (GitHub mobile can show a light page while the phone is in dark mode). |
 | `readme/logo-light.svg`, `readme/logo-dark.svg` | README header lockup, transparent, for light and dark GitHub themes. |
 | `icons/icon-16.png`, `icon-32.png`, `icon-48.png`, `icon-128.png` | Chrome extension icons for `manifest.json`. Blue tile, white mark. `icon-128.png` is 96 px artwork with 16 px transparent padding. |
 | `icons/locked-16.png`, `locked-32.png` | Toolbar icon while the vault is locked: slate tile, pale mark, small padlock badge. Use `icon-*` when unlocked. |

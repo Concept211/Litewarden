@@ -3,7 +3,7 @@ title: Litewarden, a fast password manager extension for Vaultwarden
 description: Free, open-source Chrome extension for self-hosted Vaultwarden. Opens in about 100 ms, fills with one key, 2FA codes built in. Also works with Bitwarden servers.
 ---
 
-<p align="center"><img src="https://raw.githubusercontent.com/Concept211/litewarden/main/brand/readme/logo-light.svg" width="300" alt="Litewarden"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/Concept211/litewarden/main/brand/readme/banner.svg" width="320" alt="Litewarden"></p>
 
 # A fast, lightweight password manager for Vaultwarden
 
