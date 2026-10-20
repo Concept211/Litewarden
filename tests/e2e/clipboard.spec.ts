@@ -34,9 +34,13 @@ async function clearNow(sw: () => Promise<Worker>) {
 }
 
 async function copyStub(p: Page, what: 'Password' | 'Username') {
-  await p.bringToFront();
-  await p.locator('.card', { hasText: 'Corpus · Alice' }).locator('.stub', { hasText: what === 'Username' ? 'User' : what }).click();
-  await expect(p.locator('#toast')).toContainText(`${what} copied`);
+  // Retry the click: right after the clipboard reader tab had the focus, the first click can land while the popup
+  // tab is still coming forward (writeText refuses an unfocused page).
+  await expect(async () => {
+    await p.bringToFront();
+    await p.locator('.card', { hasText: 'Corpus · Alice' }).locator('.stub', { hasText: what === 'Username' ? 'User' : what }).click();
+    await expect(p.locator('#toast')).toContainText(`${what} copied`, { timeout: 4000 });
+  }).toPass({ timeout: 30_000 });
 }
 
 test('clear removes our copy but never a newer one', async ({ popup, corpus, ctx, sw }) => {

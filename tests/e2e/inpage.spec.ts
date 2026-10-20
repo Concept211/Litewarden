@@ -190,8 +190,10 @@ test('a site with many saved logins: submitting one that exists gives no prompt'
     { name: 'Zz the one', username: `zz-${RUN}`, password: 'Zz-Pa55', uri: url },
   ]);
   const s = await popup();
-  await s.click('button[aria-label="Sync now"]');
-  await expect(s.locator('#toast')).toContainText('Vault synced', { timeout: 20_000 });
+  // Sync through the worker and check its answer. (The popup's "Vault synced" toast is gone within a second, which a
+  // slow runner can miss; what matters here is that the worker has the new logins before the page loads.)
+  const synced = (await s.evaluate(() => chrome.runtime.sendMessage({ type: 'sync' }))) as { ok: boolean };
+  expect(synced.ok).toBe(true);
   await s.close();
   const p = await page(ctx, url);
   await expect.poll(async () => (await icons(p)).length).toBe(2);

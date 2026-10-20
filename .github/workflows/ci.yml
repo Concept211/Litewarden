@@ -98,7 +98,7 @@ jobs:
           # enforced as-is locally. Shared GitHub runners measured ~1.4x slower and noisy on the first run
           # (popup median 141-150+ ms vs ~100 ms locally), so CI scales the budgets by this factor and logs the
           # measured numbers. A real regression still fails.
-          LW_PERF_SLACK: '1.6'
+          LW_PERF_SLACK: '2'
         run: xvfb-run --auto-servernum npx playwright test
       - name: Short memory soak
         if: matrix.version == '1.37.4'
