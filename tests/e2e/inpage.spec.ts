@@ -5,10 +5,12 @@
 import type { Page } from '@playwright/test';
 import { CORPUS_PORT, e2eCreds } from './accounts';
 import { expect, test } from './fixtures';
-import { finishFirstRun, shot, signIn, signOut, watchErrors } from './helpers';
+import { finishFirstRun, shot, signIn, signOut, watchErrors, budget } from './helpers';
 import { clickIcon, contentCost, frameBox, gone, icons, overlaps, protectedBoxes, serverLogins, surface, tabIdOf } from './inpage-helpers';
 
-test.describe.configure({ mode: 'serial' });
+// Independent tests: each opens its own page. Sign-in happens per worker in beforeAll, so after a failure
+// Playwright's fresh worker signs in again and the rest of the file still runs (serial mode would skip it).
+test.describe.configure({ mode: 'default' });
 
 const creds = e2eCreds();
 const errors: string[] = [];
@@ -20,6 +22,13 @@ test.beforeAll(async ({ popup, ctx }) => {
   // Popup tabs left open by earlier spec files stop Playwright's input from reaching extension frames in other
   // tabs (a harness quirk; the real toolbar popup and pop-out window don't do it). Start clean.
   for (const x of ctx.pages()) if (x.url().startsWith('chrome-extension://')) await x.close();
+  const p0 = await page(ctx, C('stacked.html'));
+  const p = await popup(p0);
+  watchErrors(p, errors);
+  await signIn(p, creds.main.email, creds.main.password);
+  await finishFirstRun(p);
+  await p.close();
+  await p0.close();
 });
 test.afterAll(() => {
   if (errors.length) console.log('console errors:\n' + errors.join('\n'));
@@ -43,16 +52,6 @@ async function assertCoversNothing(p: Page, box: { x: number; y: number; w: numb
   expect(box.y + box.h, 'inside the window (bottom)').toBeLessThanOrEqual(vp.height + 0.5);
   for (const b of await protectedBoxes(p, scope)) expect(overlaps(box, b), `covers ${b.label}`).toBe(false);
 }
-
-test('sign in for the in-page tests', async ({ popup, ctx }) => {
-  const p0 = await page(ctx, C('stacked.html'));
-  const p = await popup(p0);
-  watchErrors(p, errors);
-  await signIn(p, creds.main.email, creds.main.password);
-  await finishFirstRun(p);
-  await p.close();
-  await p0.close();
-});
 
 test('field icons: in the username and password fields, clear of the eye button', async ({ ctx }) => {
   const p = await page(ctx, C('stacked.html'));
@@ -531,12 +530,12 @@ test('cost: the content script adds under 5 ms on pages without a login form', a
     expect(c, 'content script ran').not.toBeNull();
     out[f] = c!;
     // On the page's load path: start-up plus the first (cheap) scan. Later, at idle: the shadow-DOM walk.
-    expect(c!.init, `${f}: start-up plus the first scan`).toBeLessThan(5);
-    expect(c!.init + c!.idle, `${f}: everything it ran`).toBeLessThan(5);
+    expect(c!.init, `${f}: start-up plus the first scan`).toBeLessThan(budget(5));
+    expect(c!.init + c!.idle, `${f}: everything it ran`).toBeLessThan(budget(5));
     // nothing drawn, no worker round trip
     expect((await icons(p)).length).toBe(0);
     await p.close();
   }
-  console.log('content-script cost (ms):', JSON.stringify(out));
+  console.log(`content-script cost (ms, budget ${budget(5).toFixed(1)}):`, JSON.stringify(out));
 });
 

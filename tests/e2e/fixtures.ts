@@ -29,6 +29,16 @@ export const test = base.extend<{}, Fx>({
         `--host-resolver-rules=MAP *.lw.test 127.0.0.1, MAP *.example-lw.test 127.0.0.1, MAP *.newsite-lw.test 127.0.0.1, MAP *.save-lw.test 127.0.0.1`,
       ],
     });
+    // LW_CPU_THROTTLE=4 slows every page down (CDP) to reproduce timing seen on slow CI runners. Off by default.
+    const slow = Number(process.env.LW_CPU_THROTTLE ?? '0');
+    if (slow > 1) {
+      const throttle = async (pg: import('@playwright/test').Page) => {
+        const c = await ctx.newCDPSession(pg).catch(() => null);
+        await c?.send('Emulation.setCPUThrottlingRate', { rate: slow }).catch(() => {});
+      };
+      for (const pg of ctx.pages()) await throttle(pg);
+      ctx.on('page', (pg) => void throttle(pg));
+    }
     await use(ctx);
     await ctx.close();
   }, { scope: 'worker' }],

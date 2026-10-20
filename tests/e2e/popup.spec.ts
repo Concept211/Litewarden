@@ -5,7 +5,7 @@ import type { Page } from '@playwright/test';
 import { totp } from '../../src/core/totp';
 import { CORPUS_PORT, OTHER, e2eCreds } from './accounts';
 import { expect, test } from './fixtures';
-import { clipboard, finishFirstRun, shot, signIn, signOut, testServer, watchErrors } from './helpers';
+import { clipboard, finishFirstRun, shot, signIn, signOut, testServer, watchErrors, budget } from './helpers';
 
 test.describe.configure({ mode: 'serial' });
 test.beforeAll(async ({ popup }) => signOut(() => popup()));
@@ -176,14 +176,22 @@ test('copy: password stub copies and the clipboard clears after 30 s; 2FA code c
   await expect(p.locator('#toast')).toContainText('Password copied');
   await expect(p.locator('#toast .t-time')).toContainText('Clears in');
   await shot(p, 'copied-light', 1);
-  expect(await clipboard(ctx, extId)).toBe('alice-Pa55-word');
+  // The popup shows "copied" only after its write resolved, but reading from another tab right away races the
+  // write on a slow machine: poll.
+  await expect.poll(() => clipboard(ctx, extId)).toBe('alice-Pa55-word');
   // TOTP stub: the code shown is the code copied.
   await p.bringToFront();
   const stub = p.locator('.card', { hasText: 'Corpus · Alice' }).locator('.stub').nth(2);
   await stub.click();
-  const want = await totp('JBSWY3DPEHPK3PXP');
-  const got = await clipboard(ctx, extId);
-  expect([want, await totp('JBSWY3DPEHPK3PXP', Date.now() - 2000)]).toContain(got);
+  // Wait for the popup's own confirmation before reading from another tab: bringing that tab forward takes focus
+  // from the popup, and navigator.clipboard.writeText refuses to write from an unfocused document.
+  await expect(p.locator('#toast')).toContainText(/Code \d{3} \d{3} copied/);
+  await expect
+    .poll(async () => {
+      const got = await clipboard(ctx, extId);
+      return [await totp('JBSWY3DPEHPK3PXP'), await totp('JBSWY3DPEHPK3PXP', Date.now() - 2000)].includes(got);
+    })
+    .toBe(true);
   // Clipboard clear: the alarm fires 30 s after the last copy.
   await page.waitForTimeout(33_000);
   expect(await clipboard(ctx, extId)).toBe('');
@@ -191,7 +199,7 @@ test('copy: password stub copies and the clipboard clears after 30 s; 2FA code c
   // Fill copies the 2FA code (setting on by default). Bob was used last, so his card is first now: click Alice.
   await fillFrom(popup, page, 'Corpus · Alice');
   await expect(page.locator('#p')).toHaveValue('alice-Pa55-word');
-  expect(await clipboard(ctx, extId)).toMatch(/^\d{6}$/);
+  await expect.poll(() => clipboard(ctx, extId)).toMatch(/^\d{6}$/);
   await page.close();
 });
 
@@ -311,8 +319,8 @@ test('popup open time with the full vault (target < 150 ms)', async ({ popup, co
   }
   times.sort((a, b) => a - b);
   const median = times[Math.floor(times.length / 2)]!;
-  console.log(`popup interactive (ms from navigation start): ${times.join(', ')}; median ${median}`);
-  expect(median).toBeLessThan(150);
+  console.log(`popup interactive (ms from navigation start): ${times.join(', ')}; median ${median}; budget ${budget(150).toFixed(0)}`);
+  expect(median).toBeLessThan(budget(150));
   await page.close();
 });
 

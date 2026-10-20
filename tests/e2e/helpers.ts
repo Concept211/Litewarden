@@ -92,3 +92,13 @@ function waitAlive(version: string) {
   }
   throw new Error(`${version} did not come back at ${url}`);
 }
+
+/**
+ * A performance budget. The targets are product targets for real hardware and are enforced as-is locally. CI's
+ * shared runners are slower and noisier, so CI sets LW_PERF_SLACK (see .github/workflows/ci.yml) to scale them:
+ * a real regression still fails, a busy runner doesn't.
+ */
+export function budget(ms: number): number {
+  const k = Number(process.env.LW_PERF_SLACK ?? '1');
+  return ms * (Number.isFinite(k) && k >= 1 ? k : 1);
+}

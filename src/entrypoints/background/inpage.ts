@@ -160,9 +160,9 @@ async function submitted(c: Captured, sender: chrome.runtime.MessageSender): Pro
   if (!d) return null;
   const t = token();
   await setPending(t, { tabId, url, username: c.username, password: c.password, current: c.current, kind: d.kind, itemId: d.itemId, created: Date.now(), state: 'ask' });
-  // A submit that navigates may already have replaced the page by now: tell whatever page the tab shows. (The
-  // next page's "load complete" also asks again; showing is idempotent per token.)
-  if (sender.frameId === 0) void toCs({ tabId, frameId: 0 }, { lw: 'prompt', token: t });
+  // A submit that navigates may already have replaced the page by now: deliver to whatever page the tab shows.
+  // (The next page's "load complete" delivers again; showing is idempotent per token.)
+  if (sender.frameId === 0) void deliverPrompt(tabId, t);
   return answer(t, sender);
 }
 
@@ -459,5 +459,39 @@ export async function pushPrompt(tabId: number) {
   const { pendingSaves } = await mem.get('pendingSaves');
   const mine = Object.entries(pendingSaves ?? {}).filter(([, p]) => p.tabId === tabId && p.state === 'ask' && Date.now() - p.created < MAX_AGE);
   const last = mine.sort((a, b) => b[1].created - a[1].created)[0];
-  if (last) await toCs({ tabId, frameId: 0 }, { lw: 'prompt', token: last[0] });
+  if (last) await deliverPrompt(tabId, last[0]);
+}
+
+/**
+ * Keep offering a save prompt to the tab's top frame until the page there has opened it. One message isn't
+ * enough: the content script runs at document_idle, which Chrome may schedule after the tab reports "complete",
+ * and on a slow machine both the submit-time push and the load-time push can land before the new page is
+ * listening (or on the old page while it unloads). Stops once a page has opened the prompt since this delivery
+ * started (a surface record older than that belongs to a page that's gone, e.g. before a reload of the same URL),
+ * when the prompt is no longer waiting, or after DELIVER_FOR ms.
+ */
+const DELIVER_FOR = 8000;
+/** Running deliveries: token key -> when the latest request for it arrived. */
+const delivering = new Map<string, number>();
+async function deliverPrompt(tabId: number, t: string) {
+  const key = `${tabId}:${t}`;
+  // Already running (e.g. the submit's delivery when the next page finishes loading): a newer request moves the
+  // loop's "since" forward, so a surface opened by the page that's now gone no longer counts as delivered.
+  if (delivering.has(key)) return void delivering.set(key, Date.now());
+  delivering.set(key, Date.now());
+  try {
+    for (;;) {
+      const since = delivering.get(key)!;
+      if (Date.now() > since + DELIVER_FOR) return;
+      const p = (await pendings())[t];
+      if (!p || p.state !== 'ask') return;
+      if (!(await chrome.tabs.get(tabId).catch(() => null))) return;
+      const shown = (await surfaces())[t];
+      if (shown && shown.tabId === tabId && shown.created >= since) return;
+      await toCs({ tabId, frameId: 0 }, { lw: 'prompt', token: t });
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  } finally {
+    delivering.delete(key);
+  }
 }
