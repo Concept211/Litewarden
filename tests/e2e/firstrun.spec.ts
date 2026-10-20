@@ -58,8 +58,9 @@ test('two-step login: wrong password, wrong code, right code; remembered next ti
   await finishFirstRun(p);
   await expect(p.locator('.card')).toHaveCount(1);
   await p.click('button[aria-label="Settings"]');
-  await p.click('text=Log out');
-  await p.click('.sheet .c-ok');
+  await p.click('[data-cat=account]');
+  await p.click('.set button:has-text("Log out")');
+  await p.click('.sheet button:has-text("Log out")');
   await expect(p.locator('#url')).toBeVisible();
   // Signing in again on this browser skips the code (remembered for 30 days).
   await p.fill('#url', serverUrl(VERSION));
@@ -71,8 +72,9 @@ test('two-step login: wrong password, wrong code, right code; remembered next ti
   await p.keyboard.press('Enter');
   await finishFirstRun(p);
   await p.click('button[aria-label="Settings"]');
-  await p.click('text=Log out');
-  await p.click('.sheet .c-ok');
+  await p.click('[data-cat=account]');
+  await p.click('.set button:has-text("Log out")');
+  await p.click('.sheet button:has-text("Log out")');
   await p.close();
   await page.close();
 });

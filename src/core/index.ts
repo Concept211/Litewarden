@@ -9,3 +9,6 @@ export * from './search';
 export * from './totp';
 export * from './urlmatch';
 export * from './vault';
+export * from './edit';
+export * from './generator';
+export * from './notify';

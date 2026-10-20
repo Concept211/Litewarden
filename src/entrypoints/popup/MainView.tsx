@@ -3,13 +3,15 @@
 // Enter fills the selected login, a click fills, the stubs copy. Edit is a separate control.
 import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { CloudOff, Keyboard, KeyRound, Lock, NotebookText, RefreshCw, Search, Settings, Timer, User, X } from 'lucide-preact';
+import { AppWindow, CloudOff, Keyboard, KeyRound, Lock, NotebookText, Pencil, Plus, RefreshCw, Search, Settings, Timer, User, X } from 'lucide-preact';
 import { SearchIndex, type Range, type SearchHit } from '../../core/search';
 import { secondsRemaining, totp } from '../../core/totp';
 import { RemoteError, send, type FillResult } from '../../shared/messages';
 import { mem, type IndexItem } from '../../shared/store';
 import { Keep, Tile, Toast, ago, initIcons, useToast } from '../../ui/bits';
-import type { Boot } from './boot';
+import { HelpRows } from '../../ui/help';
+import { VList } from '../../ui/vlist';
+import { targetTab, type Boot, type Tab } from './boot';
 
 interface Doc {
   id: string;
@@ -57,28 +59,42 @@ function notesSnippet(notes: string, ranges: Range[]): { text: string; ranges: R
   return { text: (start > 0 ? '…' : '') + line, ranges: ranges.map(([a, b]) => [a - start + (start > 0 ? 1 : 0), b - start + (start > 0 ? 1 : 0)] as Range).filter(([a]) => a >= 0 && a < line.length + 1) };
 }
 
-const HELP: Array<[string, Array<[string, string]>]> = [
-  ['Anywhere in Chrome', [['Ctrl Shift L', 'Open Litewarden with search ready']]],
-  [
-    'In the popup',
-    [
-      ['type', 'Search names, usernames, sites, notes'],
-      ['↑ ↓', 'Move'],
-      ['Enter', 'Fill the selected login'],
-      ['Alt U', 'Copy username'],
-      ['Alt P', 'Copy password'],
-      ['Alt T', 'Copy 2FA code'],
-      ['Esc', 'Clear search, then close'],
-      ['?', 'This list'],
-    ],
-  ],
-];
+/** What the new-login form starts from: the site in the tab, if any. */
+export interface NewPrefill {
+  host: string | null;
+  origin: string | null;
+}
 
-export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: () => void; onSettings: () => void }) {
+/** Kept by App while an item or Settings is open, so coming back lands where you were. */
+export interface MainKeep {
+  query: string;
+}
+
+export function Main({
+  boot: b,
+  keep,
+  flashMsg,
+  onLocked,
+  onSettings,
+  onOpen,
+  onNew,
+}: {
+  boot: Boot;
+  keep: MainKeep;
+  flashMsg?: string | null;
+  onLocked: () => void;
+  onSettings: () => void;
+  onOpen: (id: string) => void;
+  onNew: (p: NewPrefill) => void;
+}) {
   const [index, setIndex] = useState<IndexItem[] | null>(null);
   const [count, setCount] = useState(b.count);
   const [site0, setSite0] = useState<IndexItem[] | null>(b.siteItems);
-  const [query, setQuery] = useState('');
+  const [query, setQueryRaw] = useState(keep.query);
+  const setQuery = (q: string) => {
+    keep.query = q;
+    setQueryRaw(q);
+  };
   const [sel, setSel] = useState(0);
   const [moved, setMoved] = useState(false);
   const [help, setHelp] = useState(false);
@@ -91,8 +107,11 @@ export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: 
   const { toast, show, hide } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const secrets = useRef<Record<string, string>>({});
-  const tab = b.tab;
+  const [tab, setTab] = useState<Tab | null>(b.tab);
   const site = tab && /^https?:/i.test(tab.url) ? hostOf(tab.url) : null;
+  const origin = site && tab ? new URL(tab.url).origin : null;
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
 
   // ----- start-up: focus, icons, auto-lock touch, matches when the worker hadn't computed them -----
   useEffect(() => {
@@ -102,16 +121,22 @@ export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: 
     if (site0 == null && tab && site) void send('matchTab', { tabId: tab.id, url: tab.url }).then((r) => setSite0(r.items)).catch(() => setSite0([]));
     else if (!site) setSite0([]);
     performance.mark('lw-interactive');
+    if (flashMsg) show(flashMsg);
     // The full index (search, counts) loads right after the first paint.
     setTimeout(() => void mem.get('index').then((r) => setIndex(r.index ?? [])), 0);
     const onStore = (ch: Record<string, chrome.storage.StorageChange>, area: string) => {
       if (area === 'session' && ch.index?.newValue) {
         setIndex(ch.index.newValue as IndexItem[]);
         setCount((ch.index.newValue as IndexItem[]).length);
+        // The vault changed (sync, a live update, an edit): re-match this page. The worker does the same for the
+        // active tab, but the pop-out's page and a test's target tab aren't always the active one.
+        const t = tabRef.current;
+        if (t && /^https?:/i.test(t.url)) void send('matchTab', { tabId: t.id, url: t.url }).then((r) => tabRef.current?.id === t.id && setSite0(r.items)).catch(() => {});
       }
-      if (area === 'session' && ch.tabMatches?.newValue && tab) {
-        const m = (ch.tabMatches.newValue as Record<string, { url: string; items?: IndexItem[] }>)[tab.id];
-        if (m && m.url === tab.url && m.items) setSite0(m.items);
+      if (area === 'session' && ch.tabMatches?.newValue) {
+        const t = tabRef.current;
+        const m = t && (ch.tabMatches.newValue as Record<string, { url: string; items?: IndexItem[] }>)[t.id];
+        if (t && m && m.url === t.url && m.items) setSite0(m.items);
       }
       if (area === 'session' && ch.session && !ch.session.newValue) onLocked();
       if (area === 'session' && ch.notes?.newValue && notes) setNotes(ch.notes.newValue as Record<string, string>);
@@ -119,6 +144,35 @@ export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: 
     };
     chrome.storage.onChanged.addListener(onStore);
     return () => chrome.storage.onChanged.removeListener(onStore);
+  }, []);
+
+  // The pop-out stays open: follow whichever tab is active in the browser window behind it.
+  useEffect(() => {
+    if (!b.popout) return;
+    let t = 0;
+    const follow = () => {
+      clearTimeout(t);
+      t = window.setTimeout(async () => {
+        const next = await targetTab();
+        const cur = tabRef.current;
+        if (!next || (cur && next.id === cur.id && next.url === cur.url)) return;
+        setTab(next);
+        setSel(0);
+        if (!/^https?:/i.test(next.url)) return setSite0([]);
+        const { tabMatches } = await mem.get('tabMatches');
+        const m = tabMatches?.[next.id];
+        if (m && m.url === next.url) setSite0(m.items);
+        else setSite0(await send('matchTab', { tabId: next.id, url: next.url }).then((r) => r.items).catch(() => []));
+      }, 120);
+    };
+    chrome.tabs.onActivated.addListener(follow);
+    chrome.tabs.onUpdated.addListener(follow);
+    chrome.windows.onFocusChanged.addListener(follow);
+    return () => {
+      chrome.tabs.onActivated.removeListener(follow);
+      chrome.tabs.onUpdated.removeListener(follow);
+      chrome.windows.onFocusChanged.removeListener(follow);
+    };
   }, []);
 
   const matches = site0;
@@ -139,7 +193,9 @@ export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: 
   }, [query]);
   const hits = useMemo(() => (searchIndex && query.trim() ? searchIndex.search(query) : []), [searchIndex, query]);
 
-  const flat: Entry[] = query.trim() ? hits.slice(0, 60).map((h) => ({ item: h.doc.item, hit: h })) : [...siteItems, ...recentItems].map((item) => ({ item }));
+  // Below this site's cards and the recents: every item A to Z (virtualized), so the popup is never a void.
+  const allItems = index ?? [];
+  const flat: Entry[] = query.trim() ? hits.slice(0, 60).map((h) => ({ item: h.doc.item, hit: h })) : [...siteItems, ...recentItems, ...allItems].map((item) => ({ item }));
   const selIdx = Math.min(sel, flat.length - 1);
 
   // ----- live 2FA codes for the visible cards -----
@@ -205,18 +261,35 @@ export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: 
     setConfirm(null);
     if (r.outcome === 'blocked-page') return show("Litewarden can't fill on this page. Browser pages and the Chrome Web Store are off limits.");
     if (r.outcome === 'no-fields') return show('No login form found on this page. Use the copy buttons instead.');
+    let copied = false;
     if (item.hasTotp && b.settings.copyTotpAfterFill) {
       try {
         const secret = secrets.current[item.id] ?? (await send('getSecret', { id: item.id, field: 'totp' })).value;
         if (secret) {
           await navigator.clipboard.writeText(await totp(secret));
           await send('clipboardCopied', {});
+          copied = true;
         }
       } catch {
         // filling worked; the code copy is a bonus
       }
     }
+    if (b.popout) return show(`Filled ${item.username ?? item.name}${copied ? '. 2FA code copied' : ''}`, copied ? b.settings.clipboardSeconds : 0);
     window.close();
+  }
+
+  function open(item: IndexItem) {
+    keep.query = query;
+    onOpen(item.id);
+  }
+
+  async function popOut() {
+    try {
+      await send('popout', {});
+      window.close();
+    } catch (e) {
+      show((e as Error).message);
+    }
   }
 
   async function doSync() {
@@ -239,11 +312,11 @@ export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: 
   // ----- keyboard -----
   // One listener for the popup's life; it reads the latest render through a ref, so a fast second key press
   // (Enter on the confirm sheet) never lands on a stale handler.
-  const live = useRef({ help, confirm, flat, selIdx, query, fill, copy });
-  live.current = { help, confirm, flat, selIdx, query, fill, copy };
+  const live = useRef({ help, confirm, flat, selIdx, query, fill, copy, open });
+  live.current = { help, confirm, flat, selIdx, query, fill, copy, open };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const { help, confirm, flat, selIdx, query, fill, copy } = live.current;
+      const { help, confirm, flat, selIdx, query, fill, copy, open } = live.current;
       if (help && (e.key === 'Escape' || e.key === '?')) {
         e.preventDefault();
         return setHelp(false);
@@ -272,6 +345,12 @@ export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: 
         if (it) void fill(it);
         return;
       }
+      if (e.altKey && /^e$/i.test(e.key)) {
+        e.preventDefault();
+        const it = flat[selIdx]?.item;
+        if (it) open(it);
+        return;
+      }
       if (e.altKey && /^[upt]$/i.test(e.key)) {
         e.preventDefault();
         const it = flat[selIdx]?.item;
@@ -287,7 +366,7 @@ export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: 
         if (query) {
           setQuery('');
           setSel(0);
-        } else window.close();
+        } else if (!b.popout) window.close();
       }
     };
     document.addEventListener('keydown', onKey);
@@ -295,7 +374,8 @@ export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: 
   }, []);
 
   useEffect(() => {
-    if (moved) document.querySelector('.is-sel')?.scrollIntoView({ block: 'nearest' });
+    // Rows in the virtual list scroll themselves into view (VList); the rest are always in the DOM.
+    if (moved && (query.trim() || selIdx < siteItems.length + recentItems.length)) document.querySelector('.is-sel')?.scrollIntoView({ block: 'nearest' });
   }, [selIdx, moved]);
 
   // ----- render -----
@@ -309,6 +389,17 @@ export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: 
           <div class="un">{item.username}</div>
         </div>
         <span class="go">↵ Fill</span>
+        <button
+          class="ib"
+          title="Open and edit (Alt E)"
+          aria-label={`Open ${item.name}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            open(item);
+          }}
+        >
+          <Pencil />
+        </button>
       </div>
       <div class="stubs" onClick={(e) => e.stopPropagation()}>
         <button class={`stub${done === `${item.id}:username` ? ' done' : ''}`} onClick={() => copy(item, 'username')}>
@@ -329,7 +420,7 @@ export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: 
     </div>
   );
 
-  const row = (e: Entry, i: number) => {
+  const row = (e: Entry, i: number, style?: Record<string, string>) => {
     const { item, hit } = e;
     const login = item.type === 1;
     const sub = login ? [item.username, item.hosts[0]].filter(Boolean) : [item.subtitle ?? (item.type === 3 ? 'Card' : item.type === 2 ? 'Note' : 'Identity')];
@@ -337,7 +428,7 @@ export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: 
     const notesOnly = !!(r && r.notes.length && !r.name.length && !r.username.length && !r.url.size && notes?.[item.id]);
     const snip = notesOnly ? notesSnippet(notes![item.id]!, r!.notes) : null;
     return (
-      <div class={`row${isSel(i) ? ' is-sel' : ''}`} data-row data-id={item.id} onClick={() => (setSel(i), void fill(item))}>
+      <div class={`row${isSel(i) ? ' is-sel' : ''}`} data-row data-id={item.id} style={style} onClick={() => (setSel(i), login ? void fill(item) : open(item))}>
         <Tile item={item} />
         <div class="who">
           <div class="nm">
@@ -376,6 +467,17 @@ export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: 
             )}
           </span>
         )}
+        <button
+          class="ib"
+          title="Open and edit (Alt E)"
+          aria-label={`Open ${item.name}`}
+          onClick={(ev) => {
+            ev.stopPropagation();
+            open(item);
+          }}
+        >
+          <Pencil />
+        </button>
       </div>
     );
   };
@@ -386,10 +488,13 @@ export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: 
     body = (
       <div class="empty">
         <h3>Your vault is empty</h3>
-        <p>Logins you save on {server} show up here, with the ones for the current site on top. Add one in the web vault, then press Sync.</p>
-        <a class="btn" href={b.account?.server} target="_blank" rel="noopener">
-          Open the web vault
-        </a>
+        <p>Logins you save on {server} show up here, with the ones for the current site on top.</p>
+        <div class="nm-acts">
+          <button class="btn" onClick={() => onNew({ host: site, origin })}>
+            <Plus />
+            {site ? `Save a login for ${site}` : 'Add a login'}
+          </button>
+        </div>
       </div>
     );
   } else if (query.trim()) {
@@ -401,7 +506,7 @@ export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: 
           </span>
           <span>{hits.length > 60 ? 'top 60' : ''}</span>
         </div>
-        <div class="list">{flat.map(row)}</div>
+        <div class="list">{flat.map((e, i) => row(e, i))}</div>
       </>
     ) : (
       <div class="empty nomatch">
@@ -426,7 +531,11 @@ export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: 
             {matches != null && !siteItems.length && (
               <div class="empty">
                 <h3>Nothing saved for this site</h3>
-                <p>Search the vault and fill from there, or add a login for {site} in the web vault.</p>
+                <p>Save one now with your default username and a new password, or search the vault and fill from there.</p>
+                <button class="btn" onClick={() => onNew({ host: site, origin })}>
+                  <Plus />
+                  Save a login for this site
+                </button>
               </div>
             )}
             {siteItems.map((it, i) => card(it, i))}
@@ -440,11 +549,21 @@ export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: 
             <div class="list">{recentItems.map((item, k) => row({ item }, siteItems.length + k))}</div>
           </>
         )}
-        {!site && !recentItems.length && (
-          <div class="empty">
-            <h3>Search your vault</h3>
-            <p>Type a name, username or site. On a login page, that site's logins show up here on their own.</p>
-          </div>
+        {allItems.length > 0 && (
+          <>
+            <div class="sec">
+              <span>All items</span>
+              <span>{allItems.length.toLocaleString()}</span>
+            </div>
+            <VList
+              count={allItems.length}
+              offset={siteItems.length + recentItems.length}
+              sel={selIdx}
+              moved={moved}
+              scroller="list"
+              render={(k, style) => row({ item: allItems[k]! }, siteItems.length + recentItems.length + k, style)}
+            />
+          </>
         )}
       </>
     );
@@ -474,6 +593,14 @@ export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: 
             </button>
           )}
         </label>
+        <button class="ib" title="New login" aria-label="New login" onClick={() => onNew({ host: site, origin })}>
+          <Plus />
+        </button>
+        {!b.popout && (
+          <button class="ib" title="Pop out (stays open)" aria-label="Pop out" onClick={popOut}>
+            <AppWindow />
+          </button>
+        )}
       </div>
       <div id="list">
         {sync.err && (
@@ -552,21 +679,7 @@ export function Main({ boot: b, onLocked, onSettings }: { boot: Boot; onLocked: 
                 <X />
               </button>
             </div>
-            {HELP.map(([g, rows]) => (
-              <>
-                <div class="h-g">{g}</div>
-                {rows.map(([k, d]) => (
-                  <div class="h-row">
-                    <span class="h-keys">
-                      {k.split(' ').map((x) => (
-                        <kbd>{x}</kbd>
-                      ))}
-                    </span>
-                    <span>{d}</span>
-                  </div>
-                ))}
-              </>
-            ))}
+            <HelpRows />
             <p class="h-foot">Change the Chrome shortcut at chrome://extensions/shortcuts. Press Esc or ? to close.</p>
           </div>
         </div>

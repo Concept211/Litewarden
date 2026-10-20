@@ -4,6 +4,7 @@
 import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { CreditCard, NotebookText, StickyNote } from 'lucide-preact';
+import { serverUrls } from '../core/api';
 import type { IndexItem } from '../shared/store';
 import { mem } from '../shared/store';
 
@@ -39,7 +40,8 @@ async function toDataUrl(r: Response): Promise<string> {
 
 /** Call once per popup open with the cached icons and the account's server. */
 export async function initIcons(server: string) {
-  iconServer = server;
+  // Self-hosted: <server>/icons; Bitwarden cloud: its icons host.
+  iconServer = serverUrls(server).icons;
   icons = (await mem.get('iconCache')).iconCache ?? {};
 }
 
@@ -55,7 +57,7 @@ function remember(domain: string, url: string) {
 function fallbackIcon(): Promise<string> {
   fallback ??= icons.__fallback
     ? Promise.resolve(icons.__fallback)
-    : fetch(`${iconServer}/icons/invalid.invalid/icon.png`, { credentials: 'omit' })
+    : fetch(`${iconServer}/invalid.invalid/icon.png`, { credentials: 'omit' })
         .then((r) => (r.ok ? toDataUrl(r) : ''))
         .then((u) => (remember('__fallback', u), u))
         .catch(() => '');
@@ -68,7 +70,7 @@ function loadIcon(domain: string) {
     domain,
     (async () => {
       try {
-        const r = await fetch(`${iconServer}/icons/${encodeURIComponent(domain)}/icon.png`, { credentials: 'omit' });
+        const r = await fetch(`${iconServer}/${encodeURIComponent(domain)}/icon.png`, { credentials: 'omit' });
         const url = r.ok && /^image\//.test(r.headers.get('content-type') ?? '') ? await toDataUrl(r) : '';
         remember(domain, url && url !== (await fallbackIcon()) ? url : '');
       } catch {

@@ -5,8 +5,8 @@
     <meta charset="utf-8" />
     <title>Litewarden</title>
     <style>
-      html, body { width: 380px; height: 600px; }
-      html.wide, html.wide body { width: auto; height: 100vh; }
+      html, body { width: var(--pw, 380px); height: var(--ph, 600px); }
+      html.wide, html.wide body, html.popout, html.popout body { width: auto; height: 100vh; }
     </style>
   </head>
   <body>

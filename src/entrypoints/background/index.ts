@@ -4,6 +4,7 @@ import { matchesPage } from '../../core';
 import type { Api, Req } from '../../shared/messages';
 import { getSettings, local, mem, type IndexItem, type Settings } from '../../shared/store';
 import { fill } from './fill';
+import { armSyncAlarm, startLive, stopLive } from './live';
 import * as S from './session';
 
 
@@ -38,7 +39,7 @@ const handlers: Handlers = {
     await chrome.alarms.clear('clipclear');
     if (s > 0) await chrome.alarms.create('clipclear', { when: Date.now() + s * 1000 });
   },
-  fill: ({ tabId, id, force, allowFrame }) => fill(tabId, id, force, allowFrame),
+  fill: async ({ tabId, id, force, allowFrame }) => fill(tabId, id, force, allowFrame || !(await getSettings()).askFrames),
   matchTab: ({ tabId, url }) => matchTab(tabId, url),
   setPin: ({ pin }) => S.setPin(pin),
   setSettings: async (patch) => {
@@ -54,9 +55,41 @@ const handlers: Handlers = {
       const { pinWrapped } = await mem.get('pinWrapped');
       await local.set({ pinWrapped: next.pinSurvivesRestart ? (pinWrapped ?? null) : null });
     }
+    if ('liveSync' in patch) await (next.liveSync ? startLive() : stopLive('off'));
+    if ('syncMinutes' in patch) await armSyncAlarm();
     return next;
   },
+  getItem: ({ id }) => S.itemDetail(id),
+  folders: () => S.folders(),
+  saveItem: ({ id, draft }) => S.saveItem(id, draft),
+  trashItem: ({ id }) => S.trashItem(id),
+  liveState: async () => (await mem.get('live')).live ?? { status: 'off', detail: null, lastPush: null },
+  popout: () => openPopout(),
 };
+
+// ---------- pop-out window ----------
+
+async function openPopout(): Promise<{ windowId: number }> {
+  const { popoutId } = await mem.get('popoutId');
+  if (popoutId != null) {
+    try {
+      await chrome.windows.update(popoutId, { focused: true });
+      return { windowId: popoutId };
+    } catch {
+      // closed without us noticing (worker was asleep): open a new one
+    }
+  }
+  const { popoutBounds } = await local.get('popoutBounds');
+  const w = await chrome.windows.create({
+    url: chrome.runtime.getURL('/popup.html?popout=1'),
+    type: 'popup',
+    focused: true,
+    ...(popoutBounds ?? { width: 400, height: 660 }),
+  });
+  if (w?.id == null) throw new Error("Chrome didn't open the window.");
+  await mem.set({ popoutId: w.id });
+  return { windowId: w.id };
+}
 
 function serializeError(err: unknown) {
   const e = err instanceof Error ? err : new Error(String(err));
@@ -107,6 +140,13 @@ export default defineBackground(() => {
   S.setLockListener((unlocked) => {
     void setIcon(unlocked);
     if (!unlocked) void mem.remove('tabMatches');
+    if (unlocked) {
+      void startLive().catch(() => {});
+      void armSyncAlarm().catch(() => {});
+    } else {
+      void stopLive('off');
+      void chrome.alarms.clear('sync');
+    }
   });
   S.setIndexListener(() => void matchActiveTabs());
 
@@ -125,6 +165,21 @@ export default defineBackground(() => {
   chrome.alarms.onAlarm.addListener((a) => {
     if (a.name === 'autolock') void S.lock();
     if (a.name === 'clipclear') void clearClipboard();
+    if (a.name === 'sync') {
+      void S.syncNow(false).catch(() => {});
+      // The live connection may have died with a sleeping worker: bring it back.
+      void startLive().catch(() => {});
+    }
+  });
+
+  chrome.windows.onBoundsChanged?.addListener(async (w) => {
+    const { popoutId } = await mem.get('popoutId');
+    if (w.id == null || w.id !== popoutId || w.state !== 'normal') return;
+    await local.set({ popoutBounds: { left: w.left!, top: w.top!, width: w.width!, height: w.height! } });
+  });
+  chrome.windows.onRemoved.addListener(async (id) => {
+    const { popoutId } = await mem.get('popoutId');
+    if (id === popoutId) await mem.set({ popoutId: null });
   });
 
   chrome.tabs.onActivated.addListener(({ tabId }) => {
@@ -148,4 +203,6 @@ export default defineBackground(() => {
   // On every worker start (install, browser start, wake after being killed) make the icon match the state.
   void S.state().then((s) => setIcon(s.status === 'unlocked')).catch(() => {});
   void S.armAutoLock().catch(() => {});
+  // A woken worker (Chrome stops idle ones) reconnects live updates if the vault is still unlocked.
+  void startLive().catch(() => {});
 });

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Typed messages between extension pages (popup, offscreen) and the service worker.
-import type { ServerInfo } from '../core';
+import type { Draft, FullItem, ServerInfo } from '../core';
 import type { Settings } from './store';
 
 export type Status = 'new' | 'locked' | 'unlocked';
@@ -48,6 +48,30 @@ export interface Api {
   matchTab: [{ tabId: number; url: string }, { ids: string[]; items: import('./store').IndexItem[] }];
   setPin: [{ pin: string | null }, void];
   setSettings: [Partial<Settings>, Settings];
+  getItem: [{ id: string }, ItemDetail];
+  folders: [void, Folder[]];
+  saveItem: [{ id: string | null; draft: Draft }, { id: string }];
+  trashItem: [{ id: string }, void];
+  popout: [{ tabId?: number }, { windowId: number }];
+  liveState: [void, import('./store').LiveState];
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+}
+
+/** The full item plus what the item view shows around it. */
+export interface ItemDetail {
+  item: FullItem;
+  folderName: string | null;
+  revisionDate: string | null;
+  creationDate: string | null;
+  /** False for organization items the user can only view. */
+  canEdit: boolean;
+  /** Item is in an organization (shown as a note in the editor). */
+  orgName: string | null;
+  passwordHistoryCount: number;
 }
 
 export type Req = { [K in keyof Api]: { type: K; data: Api[K][0] } }[keyof Api];

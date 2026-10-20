@@ -47,7 +47,8 @@ test('first run: server check, sign in, decrypt progress, then the site logins',
 test('settings: turn on PIN unlock', async ({ popup }) => {
   const p = await popup();
   await p.click('button[aria-label="Settings"]');
-  await p.locator('.set', { hasText: 'PIN unlock' }).locator('.sw').click();
+  await p.click('[data-cat=security]');
+  await p.locator('.set', { hasText: 'Unlock with a PIN' }).locator('.sw').click();
   await expect(p.locator('input[aria-label="New PIN digit 1"]')).toBeFocused();
   await p.keyboard.type('135790');
   await expect(p.locator('.sheet')).toContainText('Type it once more');
@@ -274,6 +275,7 @@ test('server down: unlock still works, sync says so in plain words', async ({ po
   try {
     let p = await popup(page);
     await p.click('button[aria-label="Lock"]');
+    await expect(p.locator('input[aria-label="PIN digit 1"]')).toBeFocused();
     await p.keyboard.type('135790');
     await expect(p.locator('#q')).toBeVisible({ timeout: 15_000 });
     await expect(p.locator('.card')).toHaveCount(2);
@@ -325,6 +327,7 @@ test('dark theme screenshots', async ({ popup, corpus }) => {
   await shot(p, 'settings-dark', 1);
   await p.click('button[aria-label="Back"]');
   await p.click('button[aria-label="Lock"]');
+  await expect(p.locator('input[aria-label="PIN digit 1"]')).toBeFocused();
   await shot(p, 'unlock-pin-dark');
   await p.keyboard.type('135790');
   await expect(p.locator('#q')).toBeVisible({ timeout: 15_000 });

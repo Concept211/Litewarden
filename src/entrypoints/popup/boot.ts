@@ -2,7 +2,7 @@
 // Popup start-up. Reads everything it needs straight from storage (no service-worker round trip) so the
 // list is on screen fast; the worker only gets a "touch" afterwards to push the auto-lock deadline.
 import { send } from '../../shared/messages';
-import { DEFAULT_SETTINGS, local, mem, type Account, type IndexItem, type Lockout, type Settings } from '../../shared/store';
+import { POPUP_SIZES, local, mem, withDefaults, type Account, type IndexItem, type Lockout, type Settings } from '../../shared/store';
 
 export interface Tab {
   id: number;
@@ -24,13 +24,25 @@ export interface Boot {
   lastSync: number | null;
   lastSyncError: string | null;
   failures: number;
+  /** Opened as the pop-out window: it stays open and follows the active tab of the browser window behind it. */
+  popout: boolean;
 }
 
-/** The page the popup acts on: ?tabId= (tests, pop-out), else the active tab of the window it opened over. */
-async function targetTab(): Promise<Tab | null> {
+export const isPopout = () => new URLSearchParams(location.search).has('popout');
+
+/**
+ * The page the popup acts on: ?tabId= (tests), the active tab of the last focused browser window (pop-out), else
+ * the active tab of the window the popup opened over.
+ */
+export async function targetTab(): Promise<Tab | null> {
   const q = new URLSearchParams(location.search).get('tabId');
   try {
-    const t = q ? await chrome.tabs.get(Number(q)) : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
+    let t: chrome.tabs.Tab | undefined;
+    if (q) t = await chrome.tabs.get(Number(q));
+    else if (isPopout()) {
+      const win = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
+      t = (await chrome.tabs.query({ active: true, windowId: win.id }))[0];
+    } else t = (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
     return t?.id != null ? { id: t.id, url: t.url ?? '' } : null;
   } catch {
     return null;
@@ -44,7 +56,7 @@ export async function boot(): Promise<Boot> {
     mem.get('session', 'indexCount', 'recentItems', 'tabMatches', 'pinWrapped', 'lockout', 'failures'),
     targetTab(),
   ]);
-  const settings = { ...DEFAULT_SETTINGS, ...l.settings };
+  const settings = withDefaults(l.settings);
   const expired = !!m.session?.lockAt && m.session.lockAt < Date.now();
   if (expired) void send('lock');
   const unlocked = !!m.session && !expired;
@@ -62,10 +74,22 @@ export async function boot(): Promise<Boot> {
     lastSync: l.lastSync ?? null,
     lastSyncError: l.lastSyncError ?? null,
     failures: m.failures?.length ?? 0,
+    popout: isPopout(),
   };
 }
 
 export function applyTheme(theme: Settings['theme']) {
   const dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+}
+
+/** Theme, popup size and density, all live (Settings and every open popup or pop-out follow at once). */
+export function applyLook(s: Settings) {
+  applyTheme(s.theme);
+  const html = document.documentElement;
+  const size = POPUP_SIZES[s.popupSize] ?? POPUP_SIZES.standard;
+  html.style.setProperty('--pw', `${size.w}px`);
+  html.style.setProperty('--ph', `${size.h}px`);
+  html.dataset.density = s.density;
+  html.classList.toggle('popout', isPopout());
 }

@@ -71,6 +71,59 @@ export function parsePrelogin(d: Record<string, unknown>): Kdf {
   };
 }
 
+/**
+ * Where each service lives. A self-hosted server serves everything under one base URL; Bitwarden's cloud splits
+ * them across hosts. Litewarden's code uses self-hosted style paths ("/api/...", "/identity/...") everywhere and
+ * `resolve()` maps them, so nothing else needs to know which kind of server it is.
+ */
+export interface ServerUrls {
+  base: string;
+  api: string;
+  identity: string;
+  icons: string;
+  notifications: string;
+  webVault: string;
+  cloud: 'US' | 'EU' | null;
+}
+
+const CLOUD = {
+  US: { api: 'https://api.bitwarden.com', identity: 'https://identity.bitwarden.com', icons: 'https://icons.bitwarden.net', notifications: 'https://notifications.bitwarden.com', webVault: 'https://vault.bitwarden.com' },
+  EU: { api: 'https://api.bitwarden.eu', identity: 'https://identity.bitwarden.eu', icons: 'https://icons.bitwarden.eu', notifications: 'https://notifications.bitwarden.eu', webVault: 'https://vault.bitwarden.eu' },
+} as const;
+
+/** Which cloud a web-vault address belongs to ("vault.bitwarden.com" or plain "bitwarden.com"), else null. */
+export function cloudRegion(base: string): 'US' | 'EU' | null {
+  const h = new URL(base).hostname.toLowerCase();
+  if (h === 'bitwarden.com' || h === 'vault.bitwarden.com') return 'US';
+  if (h === 'bitwarden.eu' || h === 'vault.bitwarden.eu') return 'EU';
+  return null;
+}
+
+export function serverUrls(input: string): ServerUrls {
+  const base = normalizeServerUrl(input);
+  const cloud = cloudRegion(base);
+  if (cloud) return { base: CLOUD[cloud].webVault, ...CLOUD[cloud], cloud };
+  return { base, api: base + '/api', identity: base + '/identity', icons: base + '/icons', notifications: base + '/notifications', webVault: base, cloud: null };
+}
+
+/** Map a self-hosted style path to its full URL on this server. */
+export function resolveUrl(u: ServerUrls, path: string): string {
+  for (const [prefix, root] of [
+    ['/api', u.api],
+    ['/identity', u.identity],
+    ['/icons', u.icons],
+    ['/notifications', u.notifications],
+  ] as const) {
+    if (path === prefix || path.startsWith(prefix + '/') || path.startsWith(prefix + '?')) return root + path.slice(prefix.length);
+  }
+  return u.base + path;
+}
+
+/** The notifications hub WebSocket URL (ws:// for http servers). */
+export function hubUrl(u: ServerUrls, accessToken: string): string {
+  return resolveUrl(u, '/notifications/hub').replace(/^http/i, 'ws') + '?access_token=' + encodeURIComponent(accessToken);
+}
+
 const PRELOGIN_PATHS = ['/identity/accounts/prelogin/password', '/identity/accounts/prelogin', '/api/accounts/prelogin'];
 
 export interface ApiOptions {
@@ -84,6 +137,7 @@ export interface ApiOptions {
 
 export class Api {
   readonly base: string;
+  readonly urls: ServerUrls;
   readonly deviceId: string;
   readonly clientVersion: string;
   tokens: Tokens | null;
@@ -91,7 +145,8 @@ export class Api {
   private readonly fetchImpl: typeof fetch;
 
   constructor(base: string, opts: ApiOptions = {}) {
-    this.base = normalizeServerUrl(base);
+    this.urls = serverUrls(base);
+    this.base = this.urls.base;
     this.deviceId = opts.deviceId ?? globalThis.crypto.randomUUID();
     this.clientVersion = opts.clientVersion ?? '2026.9.0';
     this.tokens = opts.tokens ?? null;
@@ -127,7 +182,7 @@ export class Api {
     }
     let res: Response;
     try {
-      res = await this.fetchImpl(this.base + path, { method, headers: h, body, credentials: 'omit', cache: 'no-store' });
+      res = await this.fetchImpl(resolveUrl(this.urls, path), { method, headers: h, body, credentials: 'omit', cache: 'no-store' });
     } catch (err) {
       throw new ServerUnreachable(this.base, err);
     }
@@ -238,6 +293,38 @@ export class Api {
   sync(): Promise<SyncResponse> {
     return this.req<SyncResponse>('GET', '/api/sync?excludeDomains=true');
   }
+
+  createCipher(body: Record<string, unknown>): Promise<Cipher> {
+    return this.req<Cipher>('POST', '/api/ciphers', { json: body });
+  }
+
+  updateCipher(id: string, body: Record<string, unknown>): Promise<Cipher> {
+    return this.req<Cipher>('PUT', `/api/ciphers/${encodeURIComponent(id)}`, { json: body });
+  }
+
+  /** Move to the trash (soft delete); restorable from the web vault. */
+  async trashCipher(id: string): Promise<void> {
+    await this.req('PUT', `/api/ciphers/${encodeURIComponent(id)}/delete`);
+  }
+
+  /** Seconds until the access token expires (from its JWT exp), or 0 if unknown/expired. */
+  tokenSecondsLeft(now = Date.now()): number {
+    const t = this.tokens?.access_token;
+    if (!t) return 0;
+    try {
+      const payload = JSON.parse(atob(t.split('.')[1]!.replace(/-/g, '+').replace(/_/g, '/'))) as { exp?: number };
+      return payload.exp ? Math.max(0, Math.floor(payload.exp - now / 1000)) : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /** A fresh access token (refreshing first if it expires within a minute), e.g. for the notifications hub. */
+  async freshAccessToken(): Promise<string> {
+    if (this.tokenSecondsLeft() < 60) await this.refresh();
+    if (!this.tokens?.access_token) throw new ApiError(401, null, 'Getting a session token');
+    return this.tokens.access_token;
+  }
 }
 
 // ---------- server payload shapes (only the fields Litewarden reads) ----------
@@ -275,11 +362,14 @@ export interface Cipher {
   favorite?: boolean;
   reprompt?: number;
   revisionDate?: string;
+  creationDate?: string;
   deletedDate?: string | null;
-  login?: { username: string | null; password: string | null; totp: string | null; uris: CipherUri[] | null } | null;
+  login?: { username: string | null; password: string | null; totp: string | null; uris: CipherUri[] | null; [k: string]: unknown } | null;
   card?: Record<string, string | null> | null;
   identity?: Record<string, string | null> | null;
   fields?: Array<{ name: string | null; value: string | null; type: number }> | null;
+  /** Everything else the server sends (password history, passkeys, attachments...), passed through on edit. */
+  [k: string]: unknown;
 }
 
 export interface SyncResponse {

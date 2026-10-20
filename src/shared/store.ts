@@ -5,6 +5,7 @@
 //  - chrome.storage.session (memory, cleared when the browser closes) holds the unlocked session: the user key,
 //    org keys and the decrypted list index the popup reads directly on open.
 import type { Kdf, ServerInfo, SyncResponse, Tokens } from '../core';
+import { DEFAULT_GEN, type GenOptions } from '../core/generator';
 import type { ListItem } from '../core/vault';
 
 export interface Account {
@@ -32,6 +33,18 @@ export interface Settings {
   /** Seconds before a copied secret is cleared from the clipboard. 0 = never. */
   clipboardSeconds: number;
   theme: 'system' | 'light' | 'dark';
+  /** Ask before filling a login form that comes from another site inside the page (cross-origin frame). */
+  askFrames: boolean;
+  /** Prefilled into new logins. Empty = the account email. */
+  defaultUsername: string;
+  /** Generator choices, remembered between uses. */
+  gen: GenOptions;
+  popupSize: 'standard' | 'wide' | 'compact';
+  density: 'roomy' | 'compact';
+  /** Keep a live connection to the server's notifications hub so changes arrive within seconds. */
+  liveSync: boolean;
+  /** Background sync interval in minutes (also the fallback when live updates aren't available). 0 = off. */
+  syncMinutes: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -41,6 +54,20 @@ export const DEFAULT_SETTINGS: Settings = {
   copyTotpAfterFill: true,
   clipboardSeconds: 30,
   theme: 'system',
+  askFrames: true,
+  defaultUsername: '',
+  gen: DEFAULT_GEN,
+  popupSize: 'standard',
+  density: 'roomy',
+  liveSync: true,
+  syncMinutes: 30,
+};
+
+/** Popup sizes in CSS px (Chrome caps popups at 800 x 600). */
+export const POPUP_SIZES: Record<Settings['popupSize'], { w: number; h: number; label: string }> = {
+  standard: { w: 380, h: 600, label: 'Standard' },
+  wide: { w: 480, h: 600, label: 'Wide' },
+  compact: { w: 340, h: 520, label: 'Compact' },
 };
 
 /** The decrypted list entry the popup shows: list stage plus the favicon domain and display hosts. */
@@ -94,6 +121,16 @@ export interface LocalStore {
   pinWrapped?: string | null;
   /** Unlocked session mirrored to disk only when lockOnClose is off. */
   persistedSession?: Session | null;
+  /** Where the pop-out window was last (restored on the next pop-out). */
+  popoutBounds?: { left: number; top: number; width: number; height: number } | null;
+}
+
+/** State of the live connection to the notifications hub, shown in Settings > Sync. */
+export interface LiveState {
+  status: 'off' | 'connecting' | 'connected' | 'unavailable' | 'error';
+  /** When the last push arrived (ms), if any. */
+  lastPush: number | null;
+  detail: string | null;
 }
 
 /** chrome.storage.session shape */
@@ -114,6 +151,9 @@ export interface SessionStore {
   lockout?: Lockout;
   /** Decrypt failures from the last unlock/sync, shown to the user. */
   failures?: Array<{ id: string; message: string }>;
+  live?: LiveState;
+  /** Window id of the open pop-out, so a second click focuses it instead of opening another. */
+  popoutId?: number | null;
 }
 
 export const local = {
@@ -128,7 +168,9 @@ export const mem = {
   remove: (...keys: Array<keyof SessionStore>) => chrome.storage.session.remove(keys),
 };
 
+export const withDefaults = (s?: Partial<Settings>): Settings => ({ ...DEFAULT_SETTINGS, ...s, gen: { ...DEFAULT_GEN, ...s?.gen } });
+
 export async function getSettings(): Promise<Settings> {
   const { settings } = await local.get('settings');
-  return { ...DEFAULT_SETTINGS, ...settings };
+  return withDefaults(settings);
 }

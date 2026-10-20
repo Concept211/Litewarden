@@ -260,3 +260,53 @@ html.is-menu,html.is-menu body{background:transparent!important}
 
 /* main popup extras */
 .un.nt{display:flex;align-items:center;gap:4px;font-size:11.5px}.un.nt svg.lucide{width:12px;height:12px;flex:none}.row:has(.nt){height:auto;min-height:42px;padding-top:5px;padding-bottom:5px}.nm-acts{display:flex;flex-wrap:wrap;gap:6px}.sec .q{color:var(--muted);font-weight:500}
+
+/* ===== M2b part 2: item view and editor, settings categories, all-items list, density ===== */
+.ib.on{background:var(--accent-tint);color:var(--accent-text)}
+svg.lucide.dim{color:var(--muted);flex:none;margin-right:8px;opacity:.6}
+.hdr .btn{height:30px;padding:0 13px;font-size:12.5px}
+.code-big{font-family:var(--mono);font-size:20px;letter-spacing:.04em}
+.kv .secs{font-family:var(--mono);font-size:11.5px;color:var(--muted);width:20px;text-align:right}
+.kv .ring{width:16px;height:16px;flex:none;-webkit-mask:radial-gradient(circle,transparent 4.5px,#000 5px);mask:radial-gradient(circle,transparent 4.5px,#000 5px)}
+.kv .k .pill{margin-left:6px;vertical-align:1px}
+.kv .k .pw{white-space:normal;word-break:break-all}
+.notes-text{white-space:pre-wrap!important;word-break:break-word;line-height:1.45}
+.meta{font-size:11.5px;color:var(--muted);margin:2px 4px 0;line-height:1.5}
+.body>.meta{margin-top:6px}
+.dock{padding:8px 12px 10px;border-top:1px solid var(--line);flex:none;background:var(--ground)}
+.uri{display:flex;align-items:center;gap:6px;padding:8px 6px 8px 10px}
+.uri .inp{flex:1;height:34px;min-width:0}.uri .sel{height:34px;max-width:112px}
+.uri.muted{font-size:12px;padding:10px 12px}
+.btn.ghost.add{margin-top:4px}
+.gen{background:var(--raised);border-radius:12px;padding:10px;margin-top:8px}
+.gen .pv{font-family:var(--mono);font-size:14px;word-break:break-all;background:var(--surface);border-radius:8px;padding:9px 10px;border:1.5px solid var(--line);line-height:1.4}
+.gen .r{display:flex;align-items:center;gap:10px;margin-top:9px;font-size:12.5px}
+.gen .r>label:not(.sw),.gen .r>span:first-child{flex:1}
+.gen input[type=range]{flex:2;accent-color:var(--accent)}
+.gen .r .n{font-family:var(--mono);width:22px;text-align:right;flex:none}
+.gen .acts{display:flex;gap:6px;margin-top:10px}.gen .acts .btn{height:32px;flex:1}
+.sel.full{width:100%;height:40px;border-radius:10px;padding:0 8px;font-size:14px;font-weight:500}
+.danger-link{color:var(--low);font-weight:700;display:flex;align-items:center;gap:6px;justify-content:center;width:100%;height:38px;border-radius:999px}
+.danger-link:hover{background:var(--warn)}
+button.link{padding:0;font-size:inherit}
+/* settings */
+.about{font-size:11.5px;color:var(--muted);text-align:center;line-height:1.5;margin:14px 8px 4px}
+.set .btn{height:30px;padding:0 12px;font-size:12.5px;flex:none}
+.cat .st-t span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.set.stack{align-items:flex-start}
+.set.stack .si{margin-top:2px}
+.inp.sm{height:34px;margin-top:8px}
+.group.pad{padding:6px 12px 10px}
+.set:focus-visible{outline-offset:-2px}
+/* all items (virtual list) */
+.vlist{position:relative;padding:0}
+/* density */
+[data-density=compact] .row{height:36px}
+[data-density=compact] .row .tile{width:22px;height:22px;font-size:11px}
+[data-density=compact] .row .tile img{width:14px;height:14px}
+[data-density=compact] .row .un{font-size:11.5px}
+[data-density=compact] .c-top{padding:6px 6px 5px 10px}
+[data-density=compact] .stubs{padding:5px 8px 6px}
+[data-density=compact] .stub{height:26px}
+[data-density=compact] .card{margin-bottom:6px}
+.c-top .ib{width:30px;height:30px;flex:none}

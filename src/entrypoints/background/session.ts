@@ -3,6 +3,7 @@
 // list index the popup reads. Keys stay in chrome.storage.session (memory) so a killed service worker can resume.
 import {
   Api,
+  ApiError,
   CipherType,
   DecryptError,
   LitewardenError,
@@ -13,6 +14,9 @@ import {
   b64encode,
   decryptItem,
   decryptListItem,
+  encryptDraft,
+  serverMessage,
+  validateDraft,
   iconDomain,
   loadKeys,
   normalizeServerUrl,
@@ -20,6 +24,7 @@ import {
   unlockWithPassword,
   webCrypto as C,
   type Cipher,
+  type Draft,
   type FullItem,
   type Keys,
   type LoginResponse,
@@ -27,7 +32,7 @@ import {
   type SyncResponse,
   type Tokens,
 } from '../../core';
-import type { Progress, StateInfo } from '../../shared/messages';
+import type { Folder, ItemDetail, Progress, StateInfo } from '../../shared/messages';
 import { getSettings, local, mem, type Account, type IndexItem, type Session } from '../../shared/store';
 
 export class UserError extends LitewardenError {
@@ -47,7 +52,7 @@ const PIN_TRIES = 5;
 // ---------- small helpers ----------
 
 let apiCache: Api | null = null;
-async function api(): Promise<Api> {
+export async function api(): Promise<Api> {
   const { account, tokens } = await local.get('account', 'tokens');
   if (!account) throw new UserError('Not signed in.');
   if (!apiCache || apiCache.base !== account.server) {
@@ -76,7 +81,7 @@ export async function sessionKeys(): Promise<Keys> {
 }
 
 let vaultCache: SyncResponse | null = null;
-async function vault(): Promise<SyncResponse> {
+export async function vault(): Promise<SyncResponse> {
   if (vaultCache) return vaultCache;
   const { vault: v } = await local.get('vault');
   if (!v) throw new UserError('No vault on this device yet. Sync first.');
@@ -466,6 +471,140 @@ async function refreshRecentItems(index?: IndexItem[]) {
   if (!m.index) return;
   const byId = new Map(m.index.map((i) => [i.id, i]));
   await mem.set({ recentItems: (recent ?? []).map((id) => byId.get(id)).filter((x): x is IndexItem => !!x).slice(0, 8) });
+}
+
+// ---------- item view, edit, new, trash ----------
+
+let foldersCache: { rev: SyncResponse; list: Folder[] } | null = null;
+export async function folders(): Promise<Folder[]> {
+  const [keys, v] = await Promise.all([sessionKeys(), vault()]);
+  if (foldersCache?.rev === v) return foldersCache.list;
+  const list: Folder[] = [];
+  for (const f of v.folders ?? []) {
+    const name = await C.decryptString(f.name, keys.userKey).catch(() => null);
+    if (name != null) list.push({ id: f.id, name });
+  }
+  list.sort((a, b) => a.name.localeCompare(b.name));
+  foldersCache = { rev: v, list };
+  return list;
+}
+
+export async function itemDetail(id: string): Promise<ItemDetail> {
+  const [keys, v] = await Promise.all([sessionKeys(), vault()]);
+  const c = v.ciphers.find((x) => x.id === id && !x.deletedDate);
+  if (!c) throw new UserError('That item is no longer in the vault. Sync and try again.');
+  const item = await decryptItem(C, c, keys);
+  const folder = c.folderId ? (await folders()).find((f) => f.id === c.folderId) : null;
+  const org = c.organizationId ? v.profile.organizations.find((o) => o.id === c.organizationId) : null;
+  return {
+    item,
+    folderName: folder?.name ?? null,
+    revisionDate: c.revisionDate ?? null,
+    creationDate: c.creationDate ?? null,
+    // Organization items carry the server's verdict; personal items are always editable.
+    canEdit: c.organizationId ? c.edit !== false : true,
+    orgName: org?.name ?? null,
+    passwordHistoryCount: Array.isArray(c.passwordHistory) ? c.passwordHistory.length : 0,
+  };
+}
+
+/** Plain words for a failed write. The editor stays open with the user's changes either way. */
+function writeError(err: unknown, server: string, verb: string): Error {
+  const host = server.replace(/^https?:\/\//, '');
+  if (err instanceof ServerUnreachable) return new UserError(`Can't reach ${host}, so nothing was ${verb}. Your changes are still here; try again when the server is back.`);
+  if (err instanceof ApiError) {
+    const msg = serverMessage(err.body).replace(/\.+$/, '');
+    if (/out of date|revision/i.test(msg)) return new UserError('This item changed on another device after you opened it. Nothing was saved. Close the editor, sync, then make the change again.');
+    if (err.status === 401 || err.status === 403) return new UserError(`${host} said you're not allowed to change this item.${msg ? ` (${msg})` : ''}`);
+    if (err.status === 429) return new UserError('The server is limiting requests right now. Wait a minute, then save again.');
+    return new UserError(`${host} didn't accept it${msg ? `: ${msg}` : ` (HTTP ${err.status})`}. Nothing was ${verb}.`);
+  }
+  return err instanceof Error ? err : new Error(String(err));
+}
+
+export async function saveItem(id: string | null, draft: Draft): Promise<{ id: string }> {
+  const bad = validateDraft(draft);
+  if (bad) throw new UserError(bad);
+  const [keys, v, { account }] = await Promise.all([sessionKeys(), vault(), local.get('account')]);
+  if (!account) throw new UserError('Not signed in.');
+  const original = id ? (v.ciphers.find((x) => x.id === id && !x.deletedDate) ?? null) : null;
+  if (id && !original) throw new UserError('That item is no longer in the vault. Sync and try again.');
+  if (original?.organizationId && original.edit === false) throw new UserError("You can view this organization item but not change it.");
+  const body = await encryptDraft(C, draft, keys, { original, encryptedFor: account.userId || v.profile.id });
+  const a = await api();
+  let saved: Cipher;
+  try {
+    saved = id ? await a.updateCipher(id, body) : await a.createCipher(body);
+  } catch (err) {
+    throw writeError(err, account.server, 'saved');
+  }
+  await upsertLocal(saved);
+  return { id: saved.id };
+}
+
+export async function trashItem(id: string): Promise<void> {
+  const { account } = await local.get('account');
+  if (!account) throw new UserError('Not signed in.');
+  try {
+    await (await api()).trashCipher(id);
+  } catch (err) {
+    throw writeError(err, account.server, 'deleted');
+  }
+  await removeLocal(id);
+}
+
+/**
+ * A live push about one item: fetch just that item (or drop it) instead of a full sync. Throws when the item can't
+ * be fetched, so the caller can fall back to a full sync.
+ */
+export async function applyCipherPush(id: string, removed: boolean): Promise<void> {
+  if (!(await mem.get('session')).session) return;
+  if (removed) await removeLocal(id);
+  else await upsertLocal(await (await api()).req<Cipher>('GET', `/api/ciphers/${encodeURIComponent(id)}`));
+  // The vault on this device now matches the server as of this moment.
+  await local.set({ lastSync: Date.now(), lastSyncError: null });
+}
+
+/** Put one changed cipher into the local vault and the decrypted index without redoing the whole vault. */
+async function upsertLocal(c: Cipher) {
+  const v = await vault();
+  const i = v.ciphers.findIndex((x) => x.id === c.id);
+  if (i >= 0) v.ciphers[i] = c;
+  else v.ciphers.push(c);
+  vaultCache = v;
+  const keys = await sessionKeys();
+  const { index, notes } = await mem.get('index', 'notes');
+  const next = (index ?? []).filter((x) => x.id !== c.id);
+  if (!c.deletedDate) {
+    const li = await decryptListItem(C, c, keys);
+    next.push({ ...li, domain: li.type === CipherType.Login ? iconDomain(li.uris) : null, hosts: hostsOf(li.uris) });
+  }
+  next.sort((x, y) => x.name.localeCompare(y.name));
+  const n = { ...(notes ?? {}) };
+  delete n[c.id];
+  const note = await decryptItemNotes(c, keys).catch(() => null);
+  if (note && !c.deletedDate) n[c.id] = note;
+  await mem.set({ index: next, indexCount: next.length, notes: n, tabMatches: {} });
+  await refreshRecentItems(next);
+  onIndexChange?.();
+  // The popup updates from the index above; the encrypted copy on disk (megabytes) is written last.
+  await local.set({ vault: v });
+}
+
+async function removeLocal(id: string) {
+  const v = await vault();
+  v.ciphers = v.ciphers.filter((x) => x.id !== id);
+  vaultCache = v;
+  const { index, notes } = await mem.get('index', 'notes');
+  const next = (index ?? []).filter((x) => x.id !== id);
+  const n = { ...(notes ?? {}) };
+  delete n[id];
+  const { recent } = await local.get('recent');
+  await local.set({ recent: (recent ?? []).filter((x) => x !== id) });
+  await mem.set({ index: next, indexCount: next.length, notes: n, tabMatches: {} });
+  await refreshRecentItems(next);
+  onIndexChange?.();
+  await local.set({ vault: v });
 }
 
 export { TwoFactorRequired };
