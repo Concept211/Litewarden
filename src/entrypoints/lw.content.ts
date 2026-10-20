@@ -145,15 +145,21 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
   const put = (el: HTMLElement, r: Rect) => Object.assign(el.style, { left: `${Math.round(r.x)}px`, top: `${Math.round(r.y)}px`, width: `${Math.ceil(r.w)}px`, height: `${Math.ceil(r.h)}px` });
 
   // ---------- activation (first login field seen) ----------
+  let submitHooked = false;
   function activate(): Promise<void> {
     activating ??= (async () => {
+      // Submit capture first: it doesn't need the worker's answer below, and a login submitted during that round
+      // trip (fast hands, a browser-filled form) would otherwise get no save prompt.
+      if (!submitHooked) {
+        submitHooked = true;
+        document.addEventListener('submit', (e) => onSubmit(e.target as Element), true);
+        document.addEventListener('click', onClick, true);
+      }
       conf = await cs('cs:hello', { top: window === window.top });
       mount();
       sync();
       addEventListener('scroll', onScroll, { capture: true, passive: true });
       addEventListener('resize', onResize, { passive: true });
-      document.addEventListener('submit', (e) => onSubmit(e.target as Element), true);
-      document.addEventListener('click', onClick, true);
       document.addEventListener('keydown', onKey, true);
       document.addEventListener('focusin', onFocus, true);
       document.addEventListener('pointerdown', onPointer, true);

@@ -179,7 +179,10 @@ export default defineBackground(() => {
 
   chrome.alarms.onAlarm.addListener((a) => {
     if (a.name === 'autolock') void S.lock();
-    if (a.name === 'clipclear') void clearClipboard();
+    // A clear that couldn't be confirmed tries again shortly: a secret must not stay on the clipboard.
+    if (a.name === 'clipclear') void clearClipboard().then((ok) => {
+      if (!ok) void chrome.alarms.create('clipclear', { when: Date.now() + 5000 });
+    });
     if (a.name === 'sync') {
       void S.syncNow(false).catch(() => {});
       // The live connection may have died with a sleeping worker: bring it back.

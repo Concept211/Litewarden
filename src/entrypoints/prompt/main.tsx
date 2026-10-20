@@ -47,17 +47,25 @@ function Prompt() {
 
   useAutoSize(token, !!d);
 
-  // A saved / never confirmation goes away by itself after a few seconds.
+  // A saved / never confirmation goes away by itself after a few seconds, unless the user starts something
+  // (Undo): act() cancels it at once, so a slow server can't let the timer close the card mid-Undo.
+  const dismiss = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (d?.state !== 'saved' && d?.state !== 'never') return;
     const h = setTimeout(() => void send('promptAct', { token, act: 'notnow' }).catch(() => {}), 8000);
-    return () => clearTimeout(h);
+    dismiss.current = h;
+    return () => {
+      clearTimeout(h);
+      if (dismiss.current === h) dismiss.current = null;
+    };
   }, [d?.state]);
 
   async function act(a: Act, ev: { isTrusted: boolean; type: string }) {
     if (busy || !can(ev)) return;
     // Opening the popup is fire and forget: the card updates by itself once the vault is unlocked.
     if (a === 'unlock') return void send('promptAct', { token, act: 'unlock' }).catch(() => {});
+    if (dismiss.current) clearTimeout(dismiss.current);
+    dismiss.current = null;
     setBusy(a);
     try {
       const r = await send('promptAct', { token, act: a, username: user, password: pw, folderId: folder || null });

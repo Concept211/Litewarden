@@ -192,9 +192,10 @@ test('copy: password stub copies and the clipboard clears after 30 s; 2FA code c
       return [await totp('JBSWY3DPEHPK3PXP'), await totp('JBSWY3DPEHPK3PXP', Date.now() - 2000)].includes(got);
     })
     .toBe(true);
-  // Clipboard clear: the alarm fires 30 s after the last copy.
-  await page.waitForTimeout(33_000);
-  expect(await clipboard(ctx, extId)).toBe('');
+  // Clipboard clear: the alarm fires 30 s after the last copy. Chrome doesn't promise alarms to the second, so
+  // after 30 s allow a few more for it to land.
+  await page.waitForTimeout(30_000);
+  await expect.poll(() => clipboard(ctx, extId), { timeout: 15_000 }).toBe('');
   await p.close();
   // Fill copies the 2FA code (setting on by default). Bob was used last, so his card is first now: click Alice.
   await fillFrom(popup, page, 'Corpus · Alice');

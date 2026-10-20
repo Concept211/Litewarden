@@ -172,6 +172,7 @@ test('save prompt: a new login, after the form navigates; it lands on the server
   await expect.poll(() => gone(p, 'prompt')).toBe(true);
   // the same login again: nothing new, no prompt
   await p.goto(SAVE('shop', 'login-nav.html'));
+  await expect.poll(async () => (await icons(p)).length).toBe(2); // ready, as a user would see it
   await submitLogin(p, NEW_USER, 'Shop-Pa55-2026');
   await p.waitForURL(/welcome\.html/);
   await p.waitForTimeout(1500);
@@ -226,6 +227,7 @@ test('update prompt: a changed password updates the server; Undo puts the old on
 
 test('never for this site: no more prompts there, listed in Settings, removable', async ({ ctx, popup }) => {
   const p = await page(ctx, SAVE('never', 'login-nav.html'));
+  await expect.poll(async () => (await icons(p)).length).toBe(2); // ready, as a user would see it
   await submitLogin(p, `never-${RUN}`, 'Never-Pa55');
   await p.waitForURL(/welcome\.html/);
   const f = await surface(p, 'prompt');
@@ -233,6 +235,7 @@ test('never for this site: no more prompts there, listed in Settings, removable'
   await f.locator('.never').click();
   await expect(f.locator('.conf')).toContainText("Won't ask on never.save-lw.test");
   await p.goto(SAVE('never', 'login-nav.html'));
+  await expect.poll(async () => (await icons(p)).length).toBe(2); // ready, as a user would see it
   await submitLogin(p, `never2-${RUN}`, 'Never-Pa55-2');
   await p.waitForURL(/welcome\.html/);
   await p.waitForTimeout(1500);
@@ -501,6 +504,7 @@ test('login form in a same-origin frame: menu in the frame, fill there', async (
 
 test('narrow, short window: the save prompt becomes the slim bar and still covers nothing', async ({ ctx }) => {
   const p = await page(ctx, SAVE('bar', 'login-nav.html'), 400, 260);
+  await expect.poll(async () => (await icons(p)).length).toBe(2); // ready, as a user would see it
   await submitLogin(p, `bar-${RUN}`, 'Bar-Pa55');
   await p.waitForURL(/welcome\.html/);
   const f = await surface(p, 'prompt');
@@ -533,6 +537,7 @@ test('dark theme: menu, prompt and teach panel follow the system', async ({ ctx,
   await shot(p, 'inpage-teach-dark', 2);
   await p.keyboard.press('Escape');
   await p.goto(SAVE('dark', 'login-nav.html'));
+  await expect.poll(async () => (await icons(p)).length).toBe(2); // ready, as a user would see it
   await submitLogin(p, `dark-${RUN}`, 'Dark-Pa55');
   await p.waitForURL(/welcome\.html/);
   const f = await surface(p, 'prompt');
