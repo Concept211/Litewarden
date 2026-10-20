@@ -241,6 +241,8 @@ test('lock and unlock: PIN (wrong, then right), master password (wrong, then rig
   await shot(p, 'unlock-pin-light');
   await p.keyboard.type('000000');
   await expect(p.locator('.field.err .f-msg')).toContainText('Wrong PIN');
+  // The boxes clear and take the focus back right after the error shows: type once they have it, as a person would.
+  await expect(p.locator('input[aria-label="PIN digit 1"]')).toBeFocused();
   await p.keyboard.type('135790');
   await expect(p.locator('#q')).toBeVisible({ timeout: 15_000 });
   await expect(p.locator('.card')).toHaveCount(2);
