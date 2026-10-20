@@ -169,7 +169,7 @@ test('fill: a login for another site asks first; a page with no form says so', a
   await page.close();
 });
 
-test('copy: password stub copies and the clipboard clears after 30 s; 2FA code copies; fill copies the code', async ({ popup, corpus, ctx, extId }) => {
+test('copy: password stub copies and the clipboard clears after 30 s; 2FA code copies; fill copies the code', async ({ popup, corpus, ctx, extId, sw }) => {
   const page = await corpus('stacked.html');
   const p = await popup(page);
   await p.locator('.card', { hasText: 'Corpus · Alice' }).locator('.stub', { hasText: 'Password' }).click();
@@ -194,8 +194,18 @@ test('copy: password stub copies and the clipboard clears after 30 s; 2FA code c
     .toBe(true);
   // Clipboard clear: the alarm fires 30 s after the last copy. Chrome doesn't promise alarms to the second, so
   // after 30 s allow a few more for it to land.
+  const copiedAt = Date.now();
   await page.waitForTimeout(30_000);
-  await expect.poll(() => clipboard(ctx, extId), { timeout: 15_000 }).toBe('');
+  try {
+    await expect.poll(() => clipboard(ctx, extId), { timeout: 15_000 }).toBe('');
+  } catch (e) {
+    // Evidence for an intermittent CI failure: is the clear alarm still pending (late) or gone (fired, clear lost)?
+    const w = await sw();
+    const alarms = await w.evaluate(() => chrome.alarms.getAll());
+    const offscreen = await w.evaluate(() => chrome.runtime.getContexts?.({ contextTypes: ['OFFSCREEN_DOCUMENT' as chrome.runtime.ContextType] }).then((c) => c.length)).catch(() => 'n/a');
+    console.log(`clipboard not cleared ${Date.now() - copiedAt} ms after the copy; alarms: ${JSON.stringify(alarms.map((a) => ({ name: a.name, inMs: Math.round(a.scheduledTime - Date.now()) })))}; offscreen docs: ${offscreen}`);
+    throw e;
+  }
   await p.close();
   // Fill copies the 2FA code (setting on by default). Bob was used last, so his card is first now: click Alice.
   await fillFrom(popup, page, 'Corpus · Alice');
