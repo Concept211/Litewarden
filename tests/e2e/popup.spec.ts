@@ -60,6 +60,21 @@ test('settings: turn on PIN unlock', async ({ popup }) => {
   await p.close();
 });
 
+test('settings: About shows the beta version and Report a bug opens the issue form', async ({ popup, ctx }) => {
+  const p = await popup();
+  watchErrors(p, errors);
+  await p.click('button[aria-label="Settings"]');
+  await expect(p.locator('[data-cat=about]')).toContainText(/Version \d+\.\d+\.\d+ beta, GPLv3/);
+  await p.click('[data-cat=about]');
+  await expect(p.locator('.body')).toContainText(/Litewarden \d+\.\d+\.\d+ beta/);
+  const [tab] = await Promise.all([ctx.waitForEvent('page'), p.locator('.set', { hasText: 'Report a bug' }).click()]);
+  // Signed out, GitHub shows its sign-in page first and returns to the form after.
+  await expect.poll(() => decodeURIComponent(tab.url())).toContain('github.com/Concept211/Litewarden/issues/new/choose');
+  await shot(p, 'settings-about');
+  await tab.close();
+  await p.close();
+});
+
 const FILLS: Array<[string, (pg: Page) => Promise<unknown>, unknown]> = [
   ['stacked.html', (pg) => pg.evaluate(() => [(document.getElementById('u') as HTMLInputElement).value, (document.getElementById('p') as HTMLInputElement).value]), ['alice@corpus.test', 'alice-Pa55-word']],
   [

@@ -5,6 +5,7 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import {
   ArrowLeft,
+  Bug,
   BellOff,
   Crosshair,
   EyeOff,
@@ -203,7 +204,9 @@ export function SettingsView({ boot: b, onBack, onLoggedOut }: { boot: Boot; onB
 
   const hostName = b.account?.server.replace(/^https?:\/\//, '') ?? '';
   const ver = b.account?.serverInfo.version ? `${b.account.serverInfo.name} ${b.account.serverInfo.version}` : (b.account?.serverInfo.name ?? '');
-  const version = chrome.runtime.getManifest().version;
+  const { version, version_name } = chrome.runtime.getManifest();
+  // "0.1.0-beta" reads as "0.1.0 beta".
+  const shownVersion = (version_name ?? version).replace('-', ' ');
   const liveWord = !s.liveSync ? 'Live updates off' : live?.status === 'connected' ? 'Live' : live?.status === 'connecting' ? 'Connecting' : 'Timer only';
 
   const CATS: Array<[Exclude<Page, 'home' | 'shortcuts'>, string, ComponentChildren, string]> = [
@@ -213,7 +216,7 @@ export function SettingsView({ boot: b, onBack, onLoggedOut }: { boot: Boot; onB
     ['appearance', 'Appearance', <SunMoon />, `${s.theme === 'system' ? 'System' : s.theme === 'dark' ? 'Dark' : 'Light'} theme, ${POPUP_SIZES[s.popupSize].label.toLowerCase()} size, ${s.density}`],
     ['sync', 'Sync', <RefreshCw />, `${ago(lastSync)}. ${liveWord}`],
     ['account', 'Account', <UserRound />, `${b.account?.email ?? ''} on ${hostName}`],
-    ['about', 'About', <Info />, `Version ${version}, GPLv3`],
+    ['about', 'About', <Info />, `Version ${shownVersion}, GPLv3`],
   ];
   const SUBTITLE: Partial<Record<Page, string>> = { shortcuts: 'All shortcuts', iconsites: 'Sites without the icon', neversites: 'Never asks to save', rules: 'Site rules' };
   const title = page === 'home' ? 'Settings' : (SUBTITLE[page] ?? CATS.find(([k]) => k === page)![1]);
@@ -480,12 +483,17 @@ export function SettingsView({ boot: b, onBack, onLoggedOut }: { boot: Boot; onB
     body = (
       <>
         <div class="group">
-          <Row icon={<Info />} title={`Litewarden ${version}`} desc="What changed in this version" onClick={() => void chrome.tabs.create({ url: `${SOURCE_URL}/releases` })}>
+          <Row icon={<Info />} title={`Litewarden ${shownVersion}`} desc="What changed in this version" onClick={() => void chrome.tabs.create({ url: `${SOURCE_URL}/releases` })}>
             <span class="chev">
               <ExternalLink />
             </span>
           </Row>
-          <Row icon={<CodeXml />} title="Free and open source" desc="GPLv3. Read the code or report a bug on GitHub." onClick={() => void chrome.tabs.create({ url: SOURCE_URL })}>
+          <Row icon={<Bug />} title="Report a bug" desc="Litewarden is in beta. Tell us what broke on GitHub." onClick={() => void chrome.tabs.create({ url: `${SOURCE_URL}/issues/new/choose` })}>
+            <span class="chev">
+              <ExternalLink />
+            </span>
+          </Row>
+          <Row icon={<CodeXml />} title="Free and open source" desc="GPLv3. Read the code on GitHub." onClick={() => void chrome.tabs.create({ url: SOURCE_URL })}>
             <span class="chev">
               <ExternalLink />
             </span>

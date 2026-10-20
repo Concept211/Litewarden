@@ -10,6 +10,9 @@ description: Free, open-source Chrome extension for self-hosted Vaultwarden. Ope
 Litewarden is a free, open-source extension for Chrome, Brave and Edge, for people who run their own
 [Vaultwarden](https://github.com/dani-garcia/vaultwarden) server. It also works with Bitwarden servers.
 
+**Beta:** Litewarden is new, so expect some bugs. If something breaks, please
+[report it on GitHub](https://github.com/Concept211/Litewarden/issues/new/choose).
+
 ![Litewarden's popup next to its in-page menu on a sign-in form](img/hero.png)
 
 - **Fast to open.** The popup is ready in about 100 ms, even with thousands of items.

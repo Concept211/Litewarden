@@ -9,6 +9,7 @@
   <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-1252A3"></a>
   <img alt="Manifest V3" src="https://img.shields.io/badge/Chrome-Manifest%20V3-1252A3">
   <img alt="Vaultwarden 1.35 and later" src="https://img.shields.io/badge/Vaultwarden-1.35%2B-1252A3">
+  <a href="https://github.com/Concept211/Litewarden/issues"><img alt="Status: beta" src="https://img.shields.io/badge/status-beta-D97706"></a>
 </p>
 
 <p align="center">
@@ -21,6 +22,12 @@ Chromium browsers. It also works with Bitwarden servers.
 
 It opens on the logins for the site you're on, fills with one key, and keeps its in-page menu away from the
 page's own fields and buttons. Your vault stays end-to-end encrypted on your own server.
+
+> [!NOTE]
+> **Litewarden is in beta.** Expect some bugs. If something breaks, please
+> [report it on GitHub](https://github.com/Concept211/Litewarden/issues/new/choose) with your browser, your
+> Vaultwarden version and the site it happened on. Found a security problem? Please
+> [report it privately](https://github.com/Concept211/Litewarden/security/advisories/new) instead.
 
 Not affiliated with Bitwarden, Inc. or the Vaultwarden project.
 
@@ -135,7 +142,8 @@ Change the two Chrome-wide shortcuts at `chrome://extensions/shortcuts`.
   low to be safe.
 
 **There has been no paid security audit.** [THREAT_MODEL.md](THREAT_MODEL.md) explains what Litewarden protects,
-against whom, and where the limits are. Reviews and reports are very welcome. The
+against whom, and where the limits are. Reviews are very welcome; please send security problems through
+[private reporting](https://github.com/Concept211/Litewarden/security/advisories/new). The
 [privacy policy](https://concept211.github.io/Litewarden/privacy) is one page.
 
 ## FAQ

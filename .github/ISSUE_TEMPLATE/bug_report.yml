@@ -1,0 +1,46 @@
+name: Bug report
+description: Something in Litewarden broke or behaved oddly.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing the beta. Never paste passwords, 2FA secrets or your server's admin token here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+  - type: input
+    id: site
+    attributes:
+      label: Site
+      description: The page it happened on, if it's about filling or saving (for example, https://example.com/login).
+  - type: input
+    id: version
+    attributes:
+      label: Litewarden version
+      description: Settings > About.
+      placeholder: 0.1.0-beta
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: Chrome 141, Brave 1.83, Edge 141
+    validations:
+      required: true
+  - type: input
+    id: server
+    attributes:
+      label: Server
+      description: Vaultwarden version, or Bitwarden cloud (US or EU).
+      placeholder: Vaultwarden 1.37.4
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screenshots or errors help. To get errors, open chrome://extensions, turn on Developer mode, and click "Errors" on Litewarden.
