@@ -64,6 +64,31 @@ setInterval(render,250);
 <label for="c">Current password</label><div class="f"><input id="c" type="password" autocomplete="current-password"></div>
 <label for="n1">New password</label><div class="f"><input id="n1" type="password" autocomplete="new-password"></div>
 <label for="n2">Repeat new password</label><div class="f"><input id="n2" type="password" autocomplete="new-password"></div><button type="submit">Change password</button></form>'''),
+    'edge.html': dict(t='Login at the right edge', h='Right-aligned portal', s='<style>main{place-items:start end;padding-right:8px}</style>', b='''<form onsubmit="event.preventDefault();out.textContent='submitted'">
+<label for="u">Email</label><div class="f"><input id="u" type="email" autocomplete="username"></div>
+<label for="p">Password</label><div class="f"><input id="p" type="password" autocomplete="current-password">''' + EYE + '''</div>
+<button type="submit">Sign in</button><pre id="out"></pre></form>'''),
+    'modal.html': dict(t='Modal login', h='Shop with a sign-in dialog', s='<style>.back{position:fixed;inset:0;background:rgb(0 0 0/.45);display:grid;place-items:center}.dlg{background:#fff;border-radius:8px;padding:22px;width:320px}.dlg form{width:auto;border:0;padding:0}</style>', b='''<div class="card"><p>Products behind the dialog.</p></div><div class="back"><div class="dlg" role="dialog" aria-label="Sign in"><form onsubmit="event.preventDefault();out.textContent='submitted'">
+<label for="u">Username</label><div class="f"><input id="u" autocomplete="username"></div>
+<label for="p">Password</label><div class="f"><input id="p" type="password" autocomplete="current-password">''' + EYE + '''</div>
+<label style="display:flex;gap:6px;align-items:center"><input type="checkbox"> Keep me signed in</label><br>
+<button type="submit">Sign in</button><pre id="out"></pre></form></div></div>'''),
+    'spa-fetch.html': dict(t='SPA login over fetch', h='App that signs in with fetch', b='''<div id="root" class="card"><div><label>Email</label><div class="f"><input id="u" type="email" autocomplete="email"></div>
+<label>Password</label><div class="f"><input id="p" type="password"></div><button type="button" id="go" class="go">Sign in</button></div></div>''', j='''<script>
+// No <form>, no submit event: a click handler "posts" with fetch, then the app swaps the view and the URL.
+go.onclick=async()=>{await fetch('none.html',{method:'GET'});history.pushState({},'','/app/home');root.innerHTML='<h2>Welcome back</h2><p>Signed in.</p>';};
+</script><style>.go{width:100%;height:40px;border:0;background:#0c4a6e;color:#fff;font-weight:bold;border-radius:3px}</style>'''),
+    'login-nav.html': dict(t='Login that navigates', h='Classic portal', b='''<form action="welcome.html" method="post">
+<label for="u">Username</label><div class="f"><input id="u" name="username" autocomplete="username"></div>
+<label for="p">Password</label><div class="f"><input id="p" name="password" type="password" autocomplete="current-password"></div>
+<button type="submit">Sign in</button></form>'''),
+    'welcome.html': dict(t='Welcome', h='Classic portal', b='<div class="card"><h2>Welcome</h2><p>You are signed in.</p></div>'),
+    'weird.html': dict(t='Fields detection can not read', h='Members area', b='''<form onsubmit="event.preventDefault();out.textContent='submitted'">
+<label for="mcode">Member search code</label><div class="f"><input id="mcode" name="search_code" type="text"></div>
+<label for="sec">Secret</label><div class="f"><input id="sec" name="pin_code_x" type="text" style="-webkit-text-security:disc"></div>
+<label for="otp">Token</label><div class="f"><input id="otp" name="token" type="text"></div>
+<button type="submit">Enter</button><pre id="out"></pre></form>'''),
+    'article.html': dict(t='Long article, no login', h='News', b='<div class="card" style="width:640px">' + ''.join(f'<p>Paragraph {i}: <a href="#a{i}">link</a> <span>some</span> <em>words</em> <b>here</b>.</p>' for i in range(1200)) + '<input type="search" placeholder="Search"></div>'),
     'none.html': dict(t='No form here', h='Article', b='<div class="card"><p>Just text. <input type="search" placeholder="Search"></p></div>'),
 }
 

@@ -11,6 +11,7 @@ const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 
 export function serve(port = 8411) {
   const s = http.createServer((req, res) => {
     const u = new URL(req.url ?? '/', 'http://x');
+    if (u.pathname === '/favicon.ico') return res.writeHead(204).end();
     const f = path.join(dir, path.normalize(u.pathname === '/' ? '/stacked.html' : u.pathname));
     if (!f.startsWith(dir) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) return res.writeHead(404).end('not found');
     res.writeHead(200, { 'content-type': types[path.extname(f)] ?? 'application/octet-stream', 'cache-control': 'no-store' });

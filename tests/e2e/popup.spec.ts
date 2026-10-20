@@ -162,7 +162,9 @@ test('fill: a login for another site asks first; a page with no form says so', a
   const p2 = await popup(page);
   await p2.waitForSelector('.card');
   await p2.keyboard.press('Enter');
-  await expect(p2.locator('#toast')).toContainText('No login form found');
+  // No form: the popup offers to teach the site instead of failing quietly.
+  await expect(p2.locator('#confirm')).toContainText('No login form found');
+  await expect(p2.locator('#confirm .c-ok')).toHaveText('Teach this site');
   await p2.close();
   await page.close();
 });

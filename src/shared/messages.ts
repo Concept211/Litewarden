@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Typed messages between extension pages (popup, offscreen) and the service worker.
 import type { Draft, FullItem, ServerInfo } from '../core';
-import type { Settings } from './store';
+import type { Captured } from './fields';
+import type { SiteRule } from './rules';
+import type { IndexItem, PendingSave, Settings, TeachState } from './store';
 
 export type Status = 'new' | 'locked' | 'unlocked';
 
@@ -54,7 +56,78 @@ export interface Api {
   trashItem: [{ id: string }, void];
   popout: [{ tabId?: number }, { windowId: number }];
   liveState: [void, import('./store').LiveState];
+  // ----- in-page surfaces (menu, save prompt, teach panel): extension pages framed into a site -----
+  menuData: [{ token: string }, MenuData];
+  menuFill: [{ token: string; id: string; force?: boolean }, FillResult];
+  /** Menu / prompt / panel tells its content script something (natural size, close, start teaching, hide here). */
+  surfaceAct: [{ token: string; act: 'size' | 'close' | 'teach' | 'hide'; w?: number; h?: number }, void];
+  promptData: [{ token: string }, PromptData];
+  promptAct: [{ token: string; act: 'save' | 'notnow' | 'never' | 'undo' | 'unlock'; username?: string; password?: string; folderId?: string | null }, PromptData];
+  teachData: [{ token: string }, { site: string; state: TeachState }];
+  teachAct: [{ token: string; act: 'back' | 'save' | 'cancel' | 'undo' | 'done' }, void];
+  /** From the popup: start "teach this site" on the page. */
+  startTeach: [{ tabId: number }, { ok: boolean }];
+  openPopup: [void, void];
+  siteRules: [void, Record<string, SiteRule>];
+  removeRule: [{ host: string }, void];
 }
+
+export interface MenuData {
+  status: Status;
+  site: string;
+  items: IndexItem[];
+  /** id -> TOTP secret, for the live codes. */
+  totp: Record<string, string>;
+  server: string | null;
+  theme: Settings['theme'];
+}
+
+export interface PromptData {
+  kind: PendingSave['kind'];
+  state: PendingSave['state'];
+  site: string;
+  username: string;
+  password: string;
+  /** Update: the login being changed. */
+  itemName: string | null;
+  folders: Folder[];
+  theme: Settings['theme'];
+  /** Set when the last action failed. */
+  error?: string;
+}
+
+/** Content script -> worker. Kept tiny: the page only ever learns what it shows. */
+export interface CsApi {
+  'cs:hello': [{ top: boolean }, CsHello];
+  /** A new surface. Prompts pass the pending-save token they were given, so the prompt frame finds its data. */
+  'cs:open': [{ kind: 'menu' | 'prompt' | 'teach'; token?: string }, { token: string }];
+  'cs:submitted': [Captured, { token: string } | null];
+  'cs:userStep': [{ username: string }, void];
+  'cs:teachState': [{ token: string; state: TeachState }, void];
+  'cs:saveRule': [{ rule: SiteRule }, void];
+  'cs:removeRule': [void, void];
+  'cs:closed': [{ token: string }, void];
+}
+
+export interface CsHello {
+  icon: boolean;
+  menuOnFocus: boolean;
+  locked: boolean;
+  rule: SiteRule | null;
+  /** A save prompt waiting for this tab (after the page changed). */
+  prompt: string | null;
+  theme: Settings['theme'];
+}
+
+/** Worker -> content script (chrome.tabs.sendMessage). */
+export type ToCs =
+  | { lw: 'size'; token: string; w?: number; h: number }
+  | { lw: 'close'; token: string }
+  | { lw: 'open-menu' }
+  | { lw: 'teach' }
+  | { lw: 'teach-act'; token: string; act: 'back' | 'save' | 'cancel' | 'undo' | 'done' }
+  | { lw: 'refresh' }
+  | { lw: 'prompt'; token: string };
 
 export interface Folder {
   id: string;

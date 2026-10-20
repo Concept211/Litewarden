@@ -98,7 +98,7 @@ export function Main({
   const [sel, setSel] = useState(0);
   const [moved, setMoved] = useState(false);
   const [help, setHelp] = useState(false);
-  const [confirm, setConfirm] = useState<{ item: IndexItem; kind: 'site' | 'frame'; origin?: string } | null>(null);
+  const [confirm, setConfirm] = useState<{ item: IndexItem; kind: 'site' | 'frame' | 'nofields'; origin?: string } | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [codes, setCodes] = useState<Record<string, string>>({});
   const [secs, setSecs] = useState(secondsRemaining());
@@ -260,7 +260,7 @@ export function Main({
     if (r.outcome === 'confirm-frame') return setConfirm({ item, kind: 'frame', origin: r.frameOrigin! });
     setConfirm(null);
     if (r.outcome === 'blocked-page') return show("Litewarden can't fill on this page. Browser pages and the Chrome Web Store are off limits.");
-    if (r.outcome === 'no-fields') return show('No login form found on this page. Use the copy buttons instead.');
+    if (r.outcome === 'no-fields') return setConfirm({ item, kind: 'nofields' });
     let copied = false;
     if (item.hasTotp && b.settings.copyTotpAfterFill) {
       try {
@@ -312,6 +312,20 @@ export function Main({
   // ----- keyboard -----
   // One listener for the popup's life; it reads the latest render through a ref, so a fast second key press
   // (Enter on the confirm sheet) never lands on a stale handler.
+  // "Teach this site": the page shows a panel and the user points at the fields once.
+  async function teach() {
+    setConfirm(null);
+    if (!tab) return;
+    const r = await send('startTeach', { tabId: tab.id }).catch(() => ({ ok: false }));
+    if (!r.ok) return show("Litewarden can't reach this page. Reload it and try again.");
+    if (b.popout) return show('Click the login fields on the page.');
+    window.close();
+  }
+  function confirmOk(c: { item: IndexItem; kind: 'site' | 'frame' | 'nofields' }) {
+    if (c.kind === 'nofields') return teach();
+    return fill(c.item, c.kind === 'site' ? { force: true } : { force: true, allowFrame: true });
+  }
+
   const live = useRef({ help, confirm, flat, selIdx, query, fill, copy, open });
   live.current = { help, confirm, flat, selIdx, query, fill, copy, open };
   useEffect(() => {
@@ -324,7 +338,7 @@ export function Main({
       if (confirm) {
         if (e.key === 'Enter') {
           e.preventDefault();
-          return void fill(confirm.item, confirm.kind === 'site' ? { force: true } : { force: true, allowFrame: true });
+          return void confirmOk(confirm);
         }
         if (e.key === 'Escape') {
           e.preventDefault();
@@ -650,7 +664,11 @@ export function Main({
       {confirm && (
         <div id="confirm" class="show" role="dialog">
           <p>
-            {confirm.kind === 'site' ? (
+            {confirm.kind === 'nofields' ? (
+              <>
+                No login form found on this page. Point at the fields once and Litewarden fills them from then on.
+              </>
+            ) : confirm.kind === 'site' ? (
               <>
                 Fill a <b>{confirm.item.hosts[0] ?? 'non-web'}</b> login on <b>{site}</b>? The sites don't match.
               </>
@@ -664,8 +682,8 @@ export function Main({
             <button class="c-cancel" onClick={() => setConfirm(null)}>
               Cancel
             </button>
-            <button class="c-ok" onClick={() => void fill(confirm.item, confirm.kind === 'site' ? { force: true } : { force: true, allowFrame: true })}>
-              Fill anyway
+            <button class="c-ok" onClick={() => void confirmOk(confirm)}>
+              {confirm.kind === 'nofields' ? 'Teach this site' : 'Fill anyway'}
             </button>
           </div>
         </div>

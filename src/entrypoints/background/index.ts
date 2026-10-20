@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Service worker: message router, auto-lock and clipboard alarms, per-tab login matching, toolbar icon.
 import { matchesPage } from '../../core';
-import type { Api, Req } from '../../shared/messages';
+import type { Api, CsApi, Req } from '../../shared/messages';
 import { getSettings, local, mem, type IndexItem, type Settings } from '../../shared/store';
+import { clearClipboard } from './clipboard';
 import { fill } from './fill';
+import { csHandlers, forgetTab, inpageHandlers, onUnlocked, openMenuCommand, pushPrompt, refreshAll } from './inpage';
 import { armSyncAlarm, startLive, stopLive } from './live';
 import * as S from './session';
 
@@ -57,6 +59,8 @@ const handlers: Handlers = {
     }
     if ('liveSync' in patch) await (next.liveSync ? startLive() : stopLive('off'));
     if ('syncMinutes' in patch) await armSyncAlarm();
+    // Content scripts follow these (field icons, focus menu, save prompts).
+    if (['fieldIcon', 'iconOffSites', 'menuOnFocus', 'savePrompt', 'neverSaveSites', 'theme'].some((k) => k in patch)) await refreshAll();
     return next;
   },
   getItem: ({ id }) => S.itemDetail(id),
@@ -65,6 +69,7 @@ const handlers: Handlers = {
   trashItem: ({ id }) => S.trashItem(id),
   liveState: async () => (await mem.get('live')).live ?? { status: 'off', detail: null, lastPush: null },
   popout: () => openPopout(),
+  ...inpageHandlers,
 };
 
 // ---------- pop-out window ----------
@@ -127,20 +132,13 @@ async function setIcon(unlocked: boolean) {
   await chrome.action.setTitle({ title: unlocked ? 'Litewarden' : 'Litewarden (locked)' });
 }
 
-async function clearClipboard() {
-  const has = await chrome.offscreen.hasDocument?.().catch(() => false);
-  if (!has) {
-    await chrome.offscreen.createDocument({ url: '/offscreen.html', reasons: [chrome.offscreen.Reason.CLIPBOARD], justification: 'Clear a copied password after the timeout' });
-  }
-  await chrome.runtime.sendMessage({ target: 'offscreen', type: 'clear' }).catch(() => {});
-  await chrome.offscreen.closeDocument().catch(() => {});
-}
-
 export default defineBackground(() => {
   S.setLockListener((unlocked) => {
     void setIcon(unlocked);
     if (!unlocked) void mem.remove('tabMatches');
+    void refreshAll().catch(() => {});
     if (unlocked) {
+      void onUnlocked().catch(() => {});
       void startLive().catch(() => {});
       void armSyncAlarm().catch(() => {});
     } else {
@@ -151,15 +149,31 @@ export default defineBackground(() => {
   S.setIndexListener(() => void matchActiveTabs());
 
   chrome.runtime.onMessage.addListener((msg: Req & { target?: string; event?: string }, sender, reply) => {
-    if (msg.target || msg.event || !(msg.type in handlers)) return false;
-    // Only our own extension pages talk to the worker; content scripts never do.
-    if (sender.id !== chrome.runtime.id || (sender.url && !sender.url.startsWith(chrome.runtime.getURL('')))) return false;
+    if (!msg || msg.target || msg.event || !(msg.type in handlers)) return false;
+    // Only our own extension pages (popup, offscreen, and the menu / prompt / panel frames, which may be served
+    // from a per-session dynamic id) use these. Content scripts have their own small channel below.
+    if (sender.id !== chrome.runtime.id || !/^chrome-extension:\/\//.test(sender.url ?? '')) return false;
     const h = handlers[msg.type] as (d: unknown, s: chrome.runtime.MessageSender) => unknown;
     Promise.resolve()
       .then(() => h(msg.data, sender))
       .then((data) => reply({ ok: true, data }))
       .catch((err) => reply({ ok: false, error: serializeError(err) }));
     return true;
+  });
+
+  // Content scripts: a short, fixed list of requests, always tied to the tab and frame they come from.
+  chrome.runtime.onMessage.addListener((msg: { cs?: keyof CsApi; data?: unknown }, sender, reply) => {
+    if (!msg || typeof msg.cs !== 'string' || !(msg.cs in csHandlers)) return false;
+    if (sender.id !== chrome.runtime.id || sender.tab?.id == null || sender.frameId == null || !/^https?:\/\//i.test(sender.url ?? '')) return false;
+    const h = csHandlers[msg.cs] as (d: unknown, s: chrome.runtime.MessageSender) => Promise<unknown>;
+    h(msg.data, sender)
+      .then((data) => reply({ ok: true, data }))
+      .catch((err) => reply({ ok: false, error: serializeError(err) }));
+    return true;
+  });
+
+  chrome.commands.onCommand.addListener((cmd) => {
+    if (cmd === 'open-menu') void openMenuCommand();
   });
 
   chrome.alarms.onAlarm.addListener((a) => {
@@ -190,7 +204,9 @@ export default defineBackground(() => {
   });
   chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
     if (info.url || info.status === 'complete') if (tab.active && tab.url) void matchTab(tabId, tab.url).catch(() => {});
+    if (info.status === 'complete') void pushPrompt(tabId).catch(() => {});
   });
+  chrome.tabs.onRemoved.addListener((tabId) => void forgetTab(tabId).catch(() => {}));
   chrome.tabs.onRemoved.addListener(async (tabId) => {
     const { tabMatches } = await mem.get('tabMatches');
     if (tabMatches?.[tabId]) {

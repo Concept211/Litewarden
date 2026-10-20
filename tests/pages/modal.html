@@ -1,0 +1,6 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Modal login</title><link rel="stylesheet" href="_base.css"><style>.back{position:fixed;inset:0;background:rgb(0 0 0/.45);display:grid;place-items:center}.dlg{background:#fff;border-radius:8px;padding:22px;width:320px}.dlg form{width:auto;border:0;padding:0}</style></head><body>
+<header>Shop with a sign-in dialog</header><main><div class="card"><p>Products behind the dialog.</p></div><div class="back"><div class="dlg" role="dialog" aria-label="Sign in"><form onsubmit="event.preventDefault();out.textContent='submitted'">
+<label for="u">Username</label><div class="f"><input id="u" autocomplete="username"></div>
+<label for="p">Password</label><div class="f"><input id="p" type="password" autocomplete="current-password"><button type="button" class="eye" aria-label="Show password" onclick="p.type=p.type==='password'?'text':'password'">o</button></div>
+<label style="display:flex;gap:6px;align-items:center"><input type="checkbox"> Keep me signed in</label><br>
+<button type="submit">Sign in</button><pre id="out"></pre></form></div></div></main></body></html>

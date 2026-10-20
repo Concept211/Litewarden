@@ -1,0 +1,5 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Login at the right edge</title><link rel="stylesheet" href="_base.css"><style>main{place-items:start end;padding-right:8px}</style></head><body>
+<header>Right-aligned portal</header><main><form onsubmit="event.preventDefault();out.textContent='submitted'">
+<label for="u">Email</label><div class="f"><input id="u" type="email" autocomplete="username"></div>
+<label for="p">Password</label><div class="f"><input id="p" type="password" autocomplete="current-password"><button type="button" class="eye" aria-label="Show password" onclick="p.type=p.type==='password'?'text':'password'">o</button></div>
+<button type="submit">Sign in</button><pre id="out"></pre></form></main></body></html>

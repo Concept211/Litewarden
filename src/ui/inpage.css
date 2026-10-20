@@ -1,0 +1,63 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* In-page surfaces (menu, save prompt, teach panel). The frame on the page is sized to these. */
+html.is-menu,html.is-menu body{background:transparent!important;height:auto;min-height:0;overflow:hidden}
+html.is-menu .app{height:auto;overflow:visible}
+.menu{height:auto;max-height:236px}
+.menu #mlist{max-height:174px;padding-bottom:4px}
+.m-row .who{flex:1;min-width:0;line-height:1.25}
+.m-row .nm{font-weight:700;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m-row .un{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m-row .code{font-family:var(--mono);font-size:12.5px;flex:none}
+.m-msg{padding:4px 12px 10px;font-size:12.5px;color:var(--muted);line-height:1.45}
+.m-msg b{color:var(--ink);display:block;font-size:13px;margin-bottom:2px}
+.m-msg .btn{margin-top:8px;height:30px;padding:0 12px}
+.m-confirm{margin:0 8px 8px;padding:8px 10px;border-radius:10px;background:var(--accent-tint);font-size:12.5px;display:flex;align-items:center;gap:8px}
+.m-confirm span{flex:1}.m-confirm .btn{height:28px;padding:0 10px;flex:none}
+.blocked{padding:6px 12px;font-size:11.5px;color:var(--warn-ink);background:var(--warn)}
+.prompt{height:auto}
+.p-sub{color:var(--muted);font-size:12px;font-weight:500;display:block;margin-top:1px}
+.p-head .x{margin-left:auto;width:28px;height:28px}
+.p-text{font-size:12.5px;color:var(--muted);margin:0;line-height:1.45}
+.p-err{margin:8px 0 0;font-size:12px;color:var(--low)}
+[data-theme=dark] .p-err{color:var(--warn-ink)}
+.diff{display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.diff div{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:9px;background:var(--raised)}
+.diff span.mono{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.diff small{color:var(--muted);font-weight:600;width:42px}
+.diff .ib{width:26px;height:26px}
+.sel.full{width:100%;height:36px;border-radius:10px}
+.bar,.conf{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--menu-edge);border-radius:14px}
+.bar{height:56px;padding:0 8px 0 12px}
+.bar .keep,.tbar .keep{width:16px;height:16px;flex:none}
+.bar .t,.conf .t,.tbar .t{flex:1;min-width:0}
+.bar .t b,.tbar .t b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .t span,.tbar .t span{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.bar .btn,.conf .btn,.tbar .btn{height:30px;padding:0 12px;flex:none}
+.bar .ib,.tbar .ib,.conf .ib{width:30px;height:30px;flex:none}
+.conf{padding:11px 8px 11px 12px}
+.ok-dot{width:26px;height:26px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;flex:none}
+.ok-dot.off{background:var(--raised);color:var(--ink)}
+.ok-dot svg.lucide{width:15px;height:15px}
+.conf .t{font-size:13px}.conf .t b{display:block}.conf .t span{color:var(--muted);font-size:12px}
+/* teach panel */
+.tbar{display:flex;align-items:center;gap:10px;height:58px;padding:0 8px 0 12px;background:var(--surface);border:1px solid var(--menu-edge);border-radius:14px}
+.dots{display:flex;gap:4px;flex:none}.dots i{width:7px;height:7px;border-radius:50%;background:var(--line)}.dots i.on{background:var(--accent)}
+.panel{height:100vh;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--menu-edge);border-radius:14px;overflow:hidden}
+.panel .p-head{padding:12px 10px 8px 12px}
+.panel .p-body{flex:1;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:0 10px 10px}
+.role{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;border:1.5px solid var(--line)}
+.role .n{width:24px;height:24px;border-radius:50%;background:var(--raised);display:grid;place-items:center;font-weight:800;font-size:12px;flex:none}
+.role .n svg.lucide{width:14px;height:14px}
+.role b{display:block;font-size:13px}.role span{font-size:12px;color:var(--muted)}
+.role.cur{border-color:var(--accent);background:var(--accent-tint)}
+.role.cur .n{background:var(--accent);color:var(--accent-ink)}
+.role.ok .n{background:var(--ok);color:#fff}
+[data-theme=dark] .role.ok .n{color:#0e1a2b}
+.role .mono{font-size:11.5px}
+.panel .p-acts .btn{flex:1}
+.saved{display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--surface);border:1px solid var(--menu-edge);border-radius:14px;height:100vh}
+.saved .h{display:flex;align-items:center;gap:9px}
+.map{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:12.5px;padding:8px 10px;border-radius:10px;background:var(--raised)}
+.map .mono{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.saved p{margin:0;font-size:12px;color:var(--muted);line-height:1.45}
+.saved .acts{display:flex;gap:6px;justify-content:flex-end;margin-top:auto}.saved .acts .btn{height:30px;padding:0 12px}

@@ -5,6 +5,13 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import {
   ArrowLeft,
+  BellOff,
+  Crosshair,
+  EyeOff,
+  MousePointerClick,
+  Save,
+  TextCursorInput,
+  X,
   ChevronRight,
   ClipboardX,
   Clock,
@@ -31,6 +38,7 @@ import {
   UserRound,
 } from 'lucide-preact';
 import { RemoteError, send } from '../../shared/messages';
+import type { SiteRule } from '../../shared/rules';
 import { POPUP_SIZES, type LiveState, type Settings } from '../../shared/store';
 import { Busy, CodeBoxes, ago } from '../../ui/bits';
 import { HelpRows } from '../../ui/help';
@@ -38,7 +46,8 @@ import type { Boot } from './boot';
 
 export const SOURCE_URL = 'https://github.com/Concept211/litewarden';
 
-type Page = 'home' | 'autofill' | 'security' | 'keyboard' | 'shortcuts' | 'appearance' | 'sync' | 'account' | 'about';
+type Page = 'home' | 'autofill' | 'security' | 'keyboard' | 'shortcuts' | 'appearance' | 'sync' | 'account' | 'about' | 'iconsites' | 'neversites' | 'rules';
+const SUB: Partial<Record<Page, Page>> = { shortcuts: 'keyboard', iconsites: 'autofill', neversites: 'autofill', rules: 'autofill' };
 
 function Row({ icon, title, desc, children, onClick }: { icon: ComponentChildren; title: string; desc: ComponentChildren; children?: ComponentChildren; onClick?: () => void }) {
   return (
@@ -103,6 +112,8 @@ export function SettingsView({ boot: b, onBack, onLoggedOut }: { boot: Boot; onB
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [defUser, setDefUser] = useState(b.settings.defaultUsername);
+  const [rules, setRules] = useState<Record<string, SiteRule> | null>(null);
+  useEffect(() => void send('siteRules').then(setRules).catch(() => setRules({})), [page === 'rules' || page === 'autofill']);
 
   const toast = (msg: string) => {
     setSaved(msg);
@@ -145,7 +156,7 @@ export function SettingsView({ boot: b, onBack, onLoggedOut }: { boot: Boot; onB
         at.current = { page, sheet: null };
         return setSheet(null);
       }
-      if (page === 'shortcuts') return up('keyboard');
+      if (SUB[page]) return up(SUB[page]!);
       if (page !== 'home') return up('home');
       onBack();
     };
@@ -195,7 +206,7 @@ export function SettingsView({ boot: b, onBack, onLoggedOut }: { boot: Boot; onB
   const liveWord = !s.liveSync ? 'Live updates off' : live?.status === 'connected' ? 'Live' : live?.status === 'connecting' ? 'Connecting' : 'Timer only';
 
   const CATS: Array<[Exclude<Page, 'home' | 'shortcuts'>, string, ComponentChildren, string]> = [
-    ['autofill', 'Autofill', <PencilLine />, `2FA copy ${s.copyTotpAfterFill ? 'on' : 'off'}, embedded forms ${s.askFrames ? 'ask first' : 'fill'}`],
+    ['autofill', 'Autofill', <PencilLine />, `Field icon ${s.fieldIcon ? 'on' : 'off'}, save prompts ${s.savePrompt ? 'on' : 'off'}, 2FA copy ${s.copyTotpAfterFill ? 'on' : 'off'}`],
     ['security', 'Security', <ShieldCheck />, `Locks after ${mins(s.lockMinutes)}${s.lockOnClose ? ' and on close' : ''}, PIN ${pinOn ? 'on' : 'off'}`],
     ['keyboard', 'Keyboard', <Keyboard />, 'Shortcuts and how to change them'],
     ['appearance', 'Appearance', <SunMoon />, `${s.theme === 'system' ? 'System' : s.theme === 'dark' ? 'Dark' : 'Light'} theme, ${POPUP_SIZES[s.popupSize].label.toLowerCase()} size, ${s.density}`],
@@ -203,7 +214,10 @@ export function SettingsView({ boot: b, onBack, onLoggedOut }: { boot: Boot; onB
     ['account', 'Account', <UserRound />, `${b.account?.email ?? ''} on ${hostName}`],
     ['about', 'About', <Info />, `Version ${version}, GPLv3`],
   ];
-  const title = page === 'home' ? 'Settings' : page === 'shortcuts' ? 'All shortcuts' : CATS.find(([k]) => k === page)![1];
+  const SUBTITLE: Partial<Record<Page, string>> = { shortcuts: 'All shortcuts', iconsites: 'Sites without the icon', neversites: 'Never asks to save', rules: 'Site rules' };
+  const title = page === 'home' ? 'Settings' : (SUBTITLE[page] ?? CATS.find(([k]) => k === page)![1]);
+  const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
+  const ruleCount = Object.keys(rules ?? {}).length;
   const NOTE = <p class="about">Works with Vaultwarden and Bitwarden servers. Not affiliated with Bitwarden, Inc. or the Vaultwarden project.</p>;
 
   let body: ComponentChildren;
@@ -227,9 +241,72 @@ export function SettingsView({ boot: b, onBack, onLoggedOut }: { boot: Boot; onB
         {NOTE}
       </>
     );
+  else if (page === 'iconsites' || page === 'neversites') {
+    const key = page === 'iconsites' ? 'iconOffSites' : 'neverSaveSites';
+    const list = s[key];
+    body = list.length ? (
+      <div class="group" data-list={key}>
+        {list.map((h) => (
+          <Row icon={<Globe />} title={h} desc={page === 'iconsites' ? 'No icon in its login fields' : 'Litewarden never offers to save here'}>
+            <button class="ib" aria-label={`Remove ${h}`} title="Remove" onClick={() => void save({ [key]: list.filter((x) => x !== h) } as Partial<Settings>, 'Removed')}>
+              <X />
+            </button>
+          </Row>
+        ))}
+      </div>
+    ) : (
+      <p class="about">{page === 'iconsites' ? 'Every site shows the icon. Use "Hide here" in the in-page menu to turn it off for one site.' : 'No sites. "Never for this site" on a save prompt adds one here.'}</p>
+    );
+  } else if (page === 'rules')
+    body = ruleCount ? (
+      <div class="group" data-list="rules">
+        {Object.entries(rules!).map(([h, r]) => (
+          <Row icon={<Crosshair />} title={h} desc={[r.username && `username ${r.username.label}`, r.password && `password ${r.password.label}`, r.totp && `2FA ${r.totp.label}`].filter(Boolean).join(', ')}>
+            <button
+              class="ib"
+              aria-label={`Remove the rule for ${h}`}
+              title="Remove"
+              onClick={async () => {
+                await send('removeRule', { host: h });
+                setRules(await send('siteRules'));
+                toast('Rule removed');
+              }}
+            >
+              <X />
+            </button>
+          </Row>
+        ))}
+      </div>
+    ) : (
+      <p class="about">No rules yet. When Litewarden can't find a site's login fields, "Teach this site" lets you point at them once.</p>
+    );
   else if (page === 'autofill')
     body = (
       <div class="group">
+        <Row icon={<TextCursorInput />} title="Icon in login fields" desc="Click it to open the menu. Turn off to use only Alt+Shift+L and the toolbar button.">
+          <Switch on={s.fieldIcon} label="Icon in login fields" onChange={(v) => void save({ fieldIcon: v }, v ? 'Turned on' : 'Turned off')} />
+        </Row>
+        <Row icon={<EyeOff />} title="Sites without the icon" desc={s.iconOffSites.length ? `${n(s.iconOffSites.length, 'site', 'sites')}. Remove one to bring the icon back there.` : 'None. "Hide here" in the menu adds a site.'} onClick={() => setPage('iconsites')}>
+          <span class="chev">
+            <ChevronRight />
+          </span>
+        </Row>
+        <Row icon={<MousePointerClick />} title="Open the menu when a field gets focus" desc="Off: the menu opens only from the icon or Alt+Shift+L.">
+          <Switch on={s.menuOnFocus} label="Open the menu when a field gets focus" onChange={(v) => void save({ menuOnFocus: v }, v ? 'Turned on' : 'Turned off')} />
+        </Row>
+        <Row icon={<Save />} title="Offer to save logins" desc="After you sign in with a new login or a changed password.">
+          <Switch on={s.savePrompt} label="Offer to save logins" onChange={(v) => void save({ savePrompt: v }, v ? 'Turned on' : 'Turned off')} />
+        </Row>
+        <Row icon={<BellOff />} title="Sites that never ask to save" desc={s.neverSaveSites.length ? n(s.neverSaveSites.length, 'site', 'sites') : 'None'} onClick={() => setPage('neversites')}>
+          <span class="chev">
+            <ChevronRight />
+          </span>
+        </Row>
+        <Row icon={<Crosshair />} title="Site rules" desc={ruleCount ? `${n(ruleCount, 'site', 'sites')} taught by hand: ${Object.keys(rules!).slice(0, 2).join(', ')}${ruleCount > 2 ? '…' : ''}` : 'None. Taught with "Teach this site".'} onClick={() => setPage('rules')}>
+          <span class="chev">
+            <ChevronRight />
+          </span>
+        </Row>
         <Row icon={<Timer />} title="Copy the 2FA code after filling" desc="Ready to paste on the next page. Cleared with the clipboard.">
           <Switch on={s.copyTotpAfterFill} label="Copy the 2FA code after filling" onChange={(v) => void save({ copyTotpAfterFill: v }, v ? 'Turned on' : 'Turned off')} />
         </Row>
@@ -417,7 +494,7 @@ export function SettingsView({ boot: b, onBack, onLoggedOut }: { boot: Boot; onB
   return (
     <div class="scr settings">
       <div class="hdr">
-        <button class="ib" aria-label="Back" title="Back (Esc)" onClick={() => (page === 'home' ? onBack() : setPage(page === 'shortcuts' ? 'keyboard' : 'home'))}>
+        <button class="ib" aria-label="Back" title="Back (Esc)" onClick={() => (page === 'home' ? onBack() : setPage(SUB[page] ?? 'home'))}>
           <ArrowLeft />
         </button>
         <h1>{title}</h1>

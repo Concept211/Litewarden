@@ -7,6 +7,7 @@
 import type { Kdf, ServerInfo, SyncResponse, Tokens } from '../core';
 import { DEFAULT_GEN, type GenOptions } from '../core/generator';
 import type { ListItem } from '../core/vault';
+import type { SiteRule } from './rules';
 
 export interface Account {
   server: string;
@@ -45,6 +46,16 @@ export interface Settings {
   liveSync: boolean;
   /** Background sync interval in minutes (also the fallback when live updates aren't available). 0 = off. */
   syncMinutes: number;
+  /** Show the Litewarden icon inside login fields on web pages. */
+  fieldIcon: boolean;
+  /** Hostnames where the field icon is turned off. */
+  iconOffSites: string[];
+  /** Open the in-page menu when a login field gets focus. Off: only the icon or Alt+Shift+L open it. */
+  menuOnFocus: boolean;
+  /** Offer to save new logins and changed passwords after a form is submitted. */
+  savePrompt: boolean;
+  /** Hostnames where Litewarden never offers to save. */
+  neverSaveSites: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -61,6 +72,11 @@ export const DEFAULT_SETTINGS: Settings = {
   density: 'roomy',
   liveSync: true,
   syncMinutes: 30,
+  fieldIcon: true,
+  iconOffSites: [],
+  menuOnFocus: false,
+  savePrompt: true,
+  neverSaveSites: [],
 };
 
 /** Popup sizes in CSS px (Chrome caps popups at 800 x 600). */
@@ -123,6 +139,45 @@ export interface LocalStore {
   persistedSession?: Session | null;
   /** Where the pop-out window was last (restored on the next pop-out). */
   popoutBounds?: { left: number; top: number; width: number; height: number } | null;
+  /** "Teach this site" rules, by hostname. Stay on this device. */
+  siteRules?: Record<string, SiteRule>;
+}
+
+/** One Litewarden surface drawn on a page (menu, save prompt, teach panel), known by a random token. */
+export interface Surface {
+  kind: 'menu' | 'prompt' | 'teach';
+  tabId: number;
+  /** Frame that holds the field (and our iframe). */
+  frameId: number;
+  /** URL of that frame. */
+  url: string;
+  created: number;
+  /** Teach panel: the steps so far, as the content script reports them. */
+  teach?: TeachState;
+}
+
+export interface TeachState {
+  step: 1 | 2 | 3 | 4;
+  username: string | null;
+  password: string | null;
+  totp: string | null;
+}
+
+/** A submitted login waiting for the user's answer in the save prompt. Memory only. */
+export interface PendingSave {
+  tabId: number;
+  url: string;
+  username: string;
+  password: string;
+  /** Old password from a change-password form. */
+  current: string | null;
+  kind: 'save' | 'update' | 'locked';
+  /** Existing login to update. */
+  itemId: string | null;
+  created: number;
+  /** After Save: what Undo restores. */
+  undo?: { id: string; oldPassword: string | null } | null;
+  state: 'ask' | 'saved' | 'never';
 }
 
 /** State of the live connection to the notifications hub, shown in Settings > Sync. */
@@ -154,6 +209,12 @@ export interface SessionStore {
   live?: LiveState;
   /** Window id of the open pop-out, so a second click focuses it instead of opening another. */
   popoutId?: number | null;
+  /** In-page surfaces by token. */
+  surfaces?: Record<string, Surface>;
+  /** Save prompts waiting for an answer, by token. */
+  pendingSaves?: Record<string, PendingSave>;
+  /** Two-step logins: the username typed on page 1, by tab, for the password page. */
+  stepUser?: Record<string, { host: string; username: string; at: number }>;
 }
 
 export const local = {
