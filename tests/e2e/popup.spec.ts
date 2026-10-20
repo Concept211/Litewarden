@@ -259,6 +259,24 @@ test('lock and unlock: PIN (wrong, then right), master password (wrong, then rig
   await page.close();
 });
 
+test('Lock right as the popup opens stays locked: nothing writes the session or index back', async ({ popup, corpus, sw }) => {
+  // Regression: the popup's start-up "touch" read the session, awaited, then wrote it back; a Lock in between was
+  // undone (CI, 1.36.0). Background syncs and live pushes had the same shape.
+  const page = await corpus('stacked.html');
+  for (let i = 0; i < 8; i++) {
+    const p = await popup(page);
+    await p.locator('button[aria-label="Lock"]').click();
+    await expect(p.locator('input[aria-label="PIN digit 1"]')).toBeFocused();
+    await p.waitForTimeout(400);
+    const left = await (await sw()).evaluate(() => chrome.storage.session.get(['session', 'index', 'notes', 'recentItems', 'tabMatches']));
+    expect(Object.keys(left).filter((k) => left[k] != null && !(typeof left[k] === 'object' && !Array.isArray(left[k]) && Object.keys(left[k]).length === 0)), `round ${i + 1}: left after lock`).toEqual([]);
+    await p.keyboard.type('135790');
+    await expect(p.locator('#q')).toBeVisible({ timeout: 15_000 });
+    await p.close();
+  }
+  await page.close();
+});
+
 test('a killed service worker resumes the session without asking again', async ({ corpus, ctx, sw }) => {
   const page = await corpus('stacked.html');
   const before = await sw();

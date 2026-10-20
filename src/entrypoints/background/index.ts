@@ -104,6 +104,7 @@ function serializeError(err: unknown) {
 // ---------- per-tab matching ----------
 
 async function matchTab(tabId: number, url: string): Promise<{ ids: string[]; items: IndexItem[] }> {
+  const e = S.epoch();
   const [{ index, tabMatches }, { recent }] = await Promise.all([mem.get('index', 'tabMatches'), local.get('recent')]);
   if (!index || !/^https?:\/\//i.test(url)) return { ids: [], items: [] };
   const rank = new Map((recent ?? []).map((id, i) => [id, i]));
@@ -111,7 +112,7 @@ async function matchTab(tabId: number, url: string): Promise<{ ids: string[]; it
     .filter((it: IndexItem) => it.uris.length && matchesPage(it.uris, url))
     .sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999) || a.name.localeCompare(b.name));
   const m = { url, ids: found.map((it) => it.id), items: found.slice(0, 20) };
-  await mem.set({ tabMatches: { ...(tabMatches ?? {}), [tabId]: m } });
+  await S.writeIfUnlocked(e, { tabMatches: { ...(tabMatches ?? {}), [tabId]: m } });
   return m;
 }
 
@@ -208,10 +209,11 @@ export default defineBackground(() => {
   });
   chrome.tabs.onRemoved.addListener((tabId) => void forgetTab(tabId).catch(() => {}));
   chrome.tabs.onRemoved.addListener(async (tabId) => {
+    const e = S.epoch();
     const { tabMatches } = await mem.get('tabMatches');
     if (tabMatches?.[tabId]) {
       delete tabMatches[tabId];
-      await mem.set({ tabMatches });
+      await S.writeIfUnlocked(e, { tabMatches });
     }
   });
 

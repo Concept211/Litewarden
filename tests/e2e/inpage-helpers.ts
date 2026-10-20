@@ -6,7 +6,7 @@ import type { Frame, Page } from '@playwright/test';
 import { webCrypto as C } from '../../src/core/crypto';
 import { decryptItem } from '../../src/core/vault';
 import { serverUrl } from '../../scripts/testserver/env';
-import { loginAccount } from '../../scripts/testserver/seed';
+import { buildCipher, loginAccount } from '../../scripts/testserver/seed';
 import { e2eCreds } from './accounts';
 import { VERSION } from './helpers';
 
@@ -147,4 +147,30 @@ export async function contentCost(p: Page): Promise<{ init: number; scan: number
 export async function tabIdOf(sw: () => Promise<import('@playwright/test').Worker>, p: Page): Promise<number> {
   const url = p.url();
   return (await sw()).evaluate(async (u) => (await chrome.tabs.query({})).filter((t) => t.url === u).sort((a, b) => b.id! - a.id!)[0]!.id!, url);
+}
+
+/**
+ * keyboard.press with a deadline. A press that never completes (the browser never acknowledged the key) used to
+ * show up as a bare 2-minute test timeout; this fails fast and says where the focus and our frames were.
+ */
+export async function pressOrExplain(p: Page, key: string, ms = 15_000) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const stalled = new Promise<'stalled'>((r) => (timer = setTimeout(() => r('stalled'), ms)));
+  const done = await Promise.race([p.keyboard.press(key).then(() => 'ok' as const), stalled]);
+  clearTimeout(timer);
+  if (done === 'ok') return;
+  const frames = p.frames().map((f) => f.url().replace(/^chrome-extension:\/\/[^/]+/, 'ext:').split('#')[0]);
+  const active = await p.evaluate(() => `${document.activeElement?.tagName}#${document.activeElement?.id}`).catch((e) => `unknown (${e})`);
+  throw new Error(`${key} press never finished after ${ms} ms. Page focus: ${active}. Frames: ${frames.join(', ')}`);
+}
+
+/** Create logins straight on the test server (as another device would). */
+export async function createLogins(items: Array<{ name: string; username: string; password: string; uri: string }>) {
+  const c = e2eCreds();
+  const { api, userKey } = await loginAccount(serverUrl(VERSION), { ...c.main, kdf: { kdf: 0, kdfIterations: 600000, kdfMemory: null, kdfParallelism: null } });
+  const userId = (await api.sync()).profile.id;
+  for (const it of items) {
+    const body = await buildCipher({ type: 1, name: it.name, login: { username: it.username, password: it.password, totp: null, uris: [{ uri: it.uri, match: null }] } } as never, userKey, { encryptedFor: userId });
+    await api.createCipher(body as Record<string, unknown>);
+  }
 }

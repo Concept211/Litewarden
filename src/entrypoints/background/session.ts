@@ -33,7 +33,7 @@ import {
   type Tokens,
 } from '../../core';
 import type { Folder, ItemDetail, Progress, StateInfo } from '../../shared/messages';
-import { getSettings, local, mem, type Account, type IndexItem, type Session } from '../../shared/store';
+import { getSettings, local, mem, type Account, type IndexItem, type Session, type SessionStore } from '../../shared/store';
 
 export class UserError extends LitewardenError {
   override name = 'UserError';
@@ -207,6 +207,7 @@ async function startSession(userKey: SymKey, orgKeys: Record<string, string> = {
     unlockedAt: now,
     lockAt: settings.lockMinutes ? now + settings.lockMinutes * 60_000 : null,
   };
+  lockEpoch++;
   await mem.set({ session, lockout: { pwFails: 0, pwUntil: 0, pinFails: 0 } });
   if (!settings.lockOnClose) await local.set({ persistedSession: session });
   await armAutoLock();
@@ -287,10 +288,26 @@ export async function unlockPin(pin: string) {
   return { status: 'ok' as const };
 }
 
+/**
+ * Lock always wins. lock() bumps this synchronously, before its first await. Anything that reads the session or
+ * decrypted data and then awaits (touch, sync, live pushes, tab matching) captures epoch() before its first await
+ * and writes session or decrypted data only through writeIfUnlocked: a write that started before a lock would
+ * otherwise put back what the lock just removed (seen on CI: Lock clicked while the popup's touch was in flight).
+ * chrome.storage applies writes in call order, so a write issued before lock() runs is removed by it.
+ */
+let lockEpoch = 0;
+export const epoch = () => lockEpoch;
+export async function writeIfUnlocked(e: number, data: Partial<SessionStore>): Promise<boolean> {
+  if (e !== lockEpoch) return false;
+  await mem.set(data);
+  return true;
+}
+
 export let onLockChange: ((unlocked: boolean) => void) | null = null;
 export const setLockListener = (fn: (unlocked: boolean) => void) => (onLockChange = fn);
 
 export async function lock() {
+  lockEpoch++;
   keysCache = null;
   await mem.remove('session', 'index', 'indexCount', 'recentItems', 'notes', 'tabMatches', 'failures');
   await local.set({ persistedSession: null });
@@ -309,12 +326,12 @@ export async function logout() {
 
 /** Push the auto-lock deadline out (called on every popup action). */
 export async function touch() {
+  const e = epoch();
   const { session } = await mem.get('session');
   if (!session) return;
   const settings = await getSettings();
   session.lockAt = settings.lockMinutes ? Date.now() + settings.lockMinutes * 60_000 : null;
-  await mem.set({ session });
-  await armAutoLock();
+  if (await writeIfUnlocked(e, { session })) await armAutoLock();
 }
 
 export async function armAutoLock() {
@@ -376,6 +393,7 @@ async function rebuildFromLocal() {
 
 /** Decrypt the list stage for every item in chunks (progress for the first-run screen), then notes for search. */
 async function buildIndex(data: SyncResponse, report: boolean) {
+  const e = epoch();
   const { session } = await mem.get('session');
   if (!session) return;
   const base = await sessionKeys();
@@ -384,7 +402,7 @@ async function buildIndex(data: SyncResponse, report: boolean) {
   const orgKeys: Record<string, string> = {};
   for (const [id, k] of keys.orgKeys) orgKeys[id] = b64encode(k.raw);
   session.orgKeys = orgKeys;
-  await mem.set({ session });
+  if (!(await writeIfUnlocked(e, { session }))) return;
   keysCache = { at: session.unlockedAt, keys };
 
   const live = data.ciphers.filter((c) => !c.deletedDate);
@@ -406,14 +424,14 @@ async function buildIndex(data: SyncResponse, report: boolean) {
     if (report) broadcast({ phase: 'decrypt', done: Math.min(live.length, i + CHUNK), total: live.length });
   }
   items.sort((x, y) => x.name.localeCompare(y.name));
-  await mem.set({ index: items, indexCount: items.length, failures, tabMatches: {} });
-  await refreshRecentItems(items);
+  if (!(await writeIfUnlocked(e, { index: items, indexCount: items.length, failures, tabMatches: {} }))) return;
+  await refreshRecentItems(items, e);
   if (report) broadcast({ phase: 'done', done: items.length, total: live.length });
   onIndexChange?.();
-  void buildNotes(live, keys);
+  void buildNotes(live, keys, e);
 }
 
-async function buildNotes(live: Cipher[], keys: Keys) {
+async function buildNotes(live: Cipher[], keys: Keys, e: number) {
   const notes: Record<string, string> = {};
   await Promise.all(
     live
@@ -427,7 +445,7 @@ async function buildNotes(live: Cipher[], keys: Keys) {
         }
       }),
   );
-  if ((await mem.get('session')).session) await mem.set({ notes });
+  await writeIfUnlocked(e, { notes });
 }
 
 async function decryptItemNotes(c: Cipher, keys: Keys) {
@@ -466,11 +484,11 @@ export async function recordUse(id: string) {
 }
 
 /** Keep the few most recently used items in the session, so the popup's first paint never reads the full index. */
-async function refreshRecentItems(index?: IndexItem[]) {
+async function refreshRecentItems(index?: IndexItem[], e = epoch()) {
   const [{ recent }, m] = await Promise.all([local.get('recent'), index ? Promise.resolve({ index }) : mem.get('index')]);
   if (!m.index) return;
   const byId = new Map(m.index.map((i) => [i.id, i]));
-  await mem.set({ recentItems: (recent ?? []).map((id) => byId.get(id)).filter((x): x is IndexItem => !!x).slice(0, 8) });
+  await writeIfUnlocked(e, { recentItems: (recent ?? []).map((id) => byId.get(id)).filter((x): x is IndexItem => !!x).slice(0, 8) });
 }
 
 // ---------- item view, edit, new, trash ----------
@@ -567,6 +585,7 @@ export async function applyCipherPush(id: string, removed: boolean): Promise<voi
 
 /** Put one changed cipher into the local vault and the decrypted index without redoing the whole vault. */
 async function upsertLocal(c: Cipher) {
+  const e = epoch();
   const v = await vault();
   const i = v.ciphers.findIndex((x) => x.id === c.id);
   if (i >= 0) v.ciphers[i] = c;
@@ -584,14 +603,14 @@ async function upsertLocal(c: Cipher) {
   delete n[c.id];
   const note = await decryptItemNotes(c, keys).catch(() => null);
   if (note && !c.deletedDate) n[c.id] = note;
-  await mem.set({ index: next, indexCount: next.length, notes: n, tabMatches: {} });
-  await refreshRecentItems(next);
+  if (await writeIfUnlocked(e, { index: next, indexCount: next.length, notes: n, tabMatches: {} })) await refreshRecentItems(next, e);
   onIndexChange?.();
   // The popup updates from the index above; the encrypted copy on disk (megabytes) is written last.
   await local.set({ vault: v });
 }
 
 async function removeLocal(id: string) {
+  const e = epoch();
   const v = await vault();
   v.ciphers = v.ciphers.filter((x) => x.id !== id);
   vaultCache = v;
@@ -601,8 +620,7 @@ async function removeLocal(id: string) {
   delete n[id];
   const { recent } = await local.get('recent');
   await local.set({ recent: (recent ?? []).filter((x) => x !== id) });
-  await mem.set({ index: next, indexCount: next.length, notes: n, tabMatches: {} });
-  await refreshRecentItems(next);
+  if (await writeIfUnlocked(e, { index: next, indexCount: next.length, notes: n, tabMatches: {} })) await refreshRecentItems(next, e);
   onIndexChange?.();
   await local.set({ vault: v });
 }

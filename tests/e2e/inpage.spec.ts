@@ -6,7 +6,7 @@ import type { Page } from '@playwright/test';
 import { CORPUS_PORT, e2eCreds } from './accounts';
 import { expect, test } from './fixtures';
 import { finishFirstRun, shot, signIn, signOut, watchErrors, budget } from './helpers';
-import { clickIcon, contentCost, frameBox, gone, icons, overlaps, protectedBoxes, serverLogins, surface, tabIdOf } from './inpage-helpers';
+import { clickIcon, contentCost, frameBox, gone, icons, overlaps, protectedBoxes, serverLogins, surface, tabIdOf, pressOrExplain, createLogins } from './inpage-helpers';
 
 // Independent tests: each opens its own page. Sign-in happens per worker in beforeAll, so after a failure
 // Playwright's fresh worker signs in again and the rest of the file still runs (serial mode would skip it).
@@ -70,7 +70,7 @@ test('field icons: in the username and password fields, clear of the eye button'
   // focusing a field opens nothing
   await p.click('#u');
   await p.waitForTimeout(600);
-  expect(await gone(p, 'menu')).toBe(true);
+  await expect.poll(() => gone(p, 'menu')).toBe(true);
   await shot(p, 'inpage-icons-light', 2);
   await p.close();
 });
@@ -175,7 +175,29 @@ test('save prompt: a new login, after the form navigates; it lands on the server
   await submitLogin(p, NEW_USER, 'Shop-Pa55-2026');
   await p.waitForURL(/welcome\.html/);
   await p.waitForTimeout(1500);
-  expect(await gone(p, 'prompt')).toBe(true);
+  await expect.poll(() => gone(p, 'prompt')).toBe(true);
+  await p.close();
+});
+
+test('a site with many saved logins: submitting one that exists gives no prompt', async ({ ctx, popup }) => {
+  // Regression: the save check only looked at the first 40 logins for the site (by name), so an existing login
+  // further down the list got a "Save login" prompt.
+  const host = `many${RUN}`.toLowerCase();
+  const url = SAVE(host, 'login-nav.html');
+  await createLogins([
+    ...Array.from({ length: 45 }, (_, i) => ({ name: `A many ${String(i).padStart(2, '0')}`, username: `filler-${i}`, password: `F-${i}`, uri: url })),
+    { name: 'Zz the one', username: `zz-${RUN}`, password: 'Zz-Pa55', uri: url },
+  ]);
+  const s = await popup();
+  await s.click('button[aria-label="Sync now"]');
+  await expect(s.locator('#toast')).toContainText('Vault synced', { timeout: 20_000 });
+  await s.close();
+  const p = await page(ctx, url);
+  await expect.poll(async () => (await icons(p)).length).toBe(2);
+  await submitLogin(p, `zz-${RUN}`, 'Zz-Pa55');
+  await p.waitForURL(/welcome\.html/);
+  await p.waitForTimeout(2500);
+  expect(await gone(p, 'prompt'), 'no prompt for a login that is already saved').toBe(true);
   await p.close();
 });
 
@@ -214,7 +236,7 @@ test('never for this site: no more prompts there, listed in Settings, removable'
   await submitLogin(p, `never2-${RUN}`, 'Never-Pa55-2');
   await p.waitForURL(/welcome\.html/);
   await p.waitForTimeout(1500);
-  expect(await gone(p, 'prompt')).toBe(true);
+  await expect.poll(() => gone(p, 'prompt')).toBe(true);
   expect((await serverLogins('never.save-lw.test')).length).toBe(0);
   // Settings > Autofill > Sites that never ask to save
   const s = await popup(p);
@@ -374,7 +396,7 @@ test('hide here: the icon goes away on that site; Settings brings it back', asyn
   await p.waitForTimeout(400);
   await m.locator('.m-foot button', { hasText: 'Hide here' }).click();
   await expect.poll(async () => (await icons(p)).length).toBe(0);
-  expect(await gone(p, 'menu')).toBe(true);
+  await expect.poll(() => gone(p, 'menu')).toBe(true);
   const s = await popup(p);
   watchErrors(s, errors);
   await s.click('button[aria-label="Settings"]');
@@ -444,7 +466,7 @@ for (const [file, scope] of [
         await expect(m.locator('.m-row').first()).toBeVisible();
         await p.waitForTimeout(300);
         await assertCoversNothing(p, await frameBox(m), scope);
-        await p.keyboard.press('Escape');
+        await pressOrExplain(p, 'Escape');
         await expect.poll(() => gone(p, 'menu')).toBe(true);
       }
       if (width === 420) await shot(p, `inpage-${file.replace('.html', '')}-420`, 1);

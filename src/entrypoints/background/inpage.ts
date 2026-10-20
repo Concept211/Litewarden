@@ -122,19 +122,21 @@ async function decide(url: string, c: Captured, settings: Settings): Promise<Pic
   if (!settings.savePrompt || settings.neverSaveSites.includes(host)) return null;
   if (!(await mem.get('session')).session) return { kind: 'locked', itemId: null };
   const { index } = await mem.get('index');
-  const matches = (index ?? []).filter((it) => it.type === 1 && it.uris.length && matchesPage(it.uris, url)).slice(0, 40);
-  const full: FullItem[] = [];
-  for (const m of matches) {
-    const it = await S.fullItem(m.id).catch(() => null);
-    if (it?.login) full.push(it);
-  }
+  const matches = (index ?? []).filter((it) => it.type === 1 && it.uris.length && matchesPage(it.uris, url));
+  // Narrow by username with the index (no decryption), then decrypt only those candidates. No cap: a site can have
+  // many saved logins, and checking only the first few by name made an existing login look new.
   const user = c.username.toLowerCase();
-  const sameUser = user ? full.filter((f) => (f.login!.username ?? '').toLowerCase() === user) : [];
+  const sameUserIds = user ? matches.filter((it) => (it.username ?? '').toLowerCase() === user).map((it) => it.id) : [];
+  const decrypt = async (ids: string[]) => (await Promise.all(ids.map((id) => S.fullItem(id).catch(() => null)))).filter((it): it is FullItem => !!it?.login);
+  const sameUser = await decrypt(sameUserIds);
   // Nothing new: this exact login is already saved.
-  if ((user ? sameUser : full).some((f) => f.login!.password === c.password)) return null;
+  if (sameUser.some((f) => f.login!.password === c.password)) return null;
   if (sameUser[0]) return { kind: 'update', itemId: sameUser[0].id };
-  if (c.current) {
-    const old = full.find((f) => f.login!.password === c.current);
+  // No username on the form (password-only page), or a change-password form: compare passwords across the site.
+  if (!user || c.current) {
+    const all = await decrypt(matches.map((it) => it.id));
+    if (!user && all.some((f) => f.login!.password === c.password)) return null;
+    const old = c.current ? all.find((f) => f.login!.password === c.current) : undefined;
     if (old) return { kind: 'update', itemId: old.id };
   }
   return { kind: 'save', itemId: null };

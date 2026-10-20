@@ -128,15 +128,19 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
   }
   /**
    * Remove one of our frames. If it has the keyboard focus (Esc pressed inside it), give the focus back to the page
-   * first: to `back` (the field the menu belongs to) or the page itself. Removing a focused frame mid-keypress leaves
-   * the key's release aimed at a frame that no longer exists, and the user's cursor nowhere.
+   * first: to `back` (the field the menu belongs to) or the page itself, so the user's cursor isn't left nowhere.
+   * The frame is hidden and moved off screen at once but removed a moment later: the frame runs in its own process
+   * and the browser moves focus out of it asynchronously, so the release of the key that closed it can still be on
+   * its way there. Destroying the frame under that event can strand it (seen as a key press that never finished
+   * on slow CI machines).
    */
   function drop(fr: HTMLIFrameElement, back: HTMLElement | null) {
     if (host && document.activeElement === host) {
       if (back?.isConnected) back.focus({ preventScroll: true });
       else window.focus();
     }
-    fr.remove();
+    Object.assign(fr.style, { visibility: 'hidden', pointerEvents: 'none', left: '-9999px' });
+    setTimeout(() => fr.remove(), 300);
   }
   const put = (el: HTMLElement, r: Rect) => Object.assign(el.style, { left: `${Math.round(r.x)}px`, top: `${Math.round(r.y)}px`, width: `${Math.ceil(r.w)}px`, height: `${Math.ceil(r.h)}px` });
 
