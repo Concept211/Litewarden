@@ -5,7 +5,7 @@
 <h1 align="center">Fast, lightweight password manager extension for Vaultwarden</h1>
 
 <p align="center">
-  <a href="https://github.com/Concept211/litewarden/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Concept211/litewarden/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/Concept211/Litewarden/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Concept211/Litewarden/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-1252A3"></a>
   <img alt="Manifest V3" src="https://img.shields.io/badge/Chrome-Manifest%20V3-1252A3">
   <img alt="Vaultwarden 1.35 and later" src="https://img.shields.io/badge/Vaultwarden-1.35%2B-1252A3">
@@ -95,7 +95,7 @@ Litewarden isn't listed in the Chrome Web Store yet. Until it is, build it from 
 later.
 
 ```sh
-git clone https://github.com/Concept211/litewarden.git
+git clone https://github.com/Concept211/Litewarden.git
 cd litewarden
 npm ci
 npm run build
@@ -136,7 +136,7 @@ Change the two Chrome-wide shortcuts at `chrome://extensions/shortcuts`.
 
 **There has been no paid security audit.** [THREAT_MODEL.md](THREAT_MODEL.md) explains what Litewarden protects,
 against whom, and where the limits are. Reviews and reports are very welcome. The
-[privacy policy](https://concept211.github.io/litewarden/privacy) is one page.
+[privacy policy](https://concept211.github.io/Litewarden/privacy) is one page.
 
 ## FAQ
 

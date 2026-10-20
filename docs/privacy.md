@@ -62,7 +62,7 @@ control.
 ## Contact
 
 Questions or security reports: open an issue at
-[github.com/Concept211/litewarden](https://github.com/Concept211/litewarden/issues), or use the contact form at
+[github.com/Concept211/Litewarden](https://github.com/Concept211/Litewarden/issues), or use the contact form at
 [concept211.com](https://concept211.com).
 
 Litewarden is open source under the GPL-3.0 license. You can read every line of what it does in the repository.

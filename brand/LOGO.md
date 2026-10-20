@@ -2,7 +2,7 @@
 
 The mark is **Keep**: a castle tower whose battlements are a key's teeth and whose base is the key's bow.
 Chosen 2026-10-19 from three shortlisted marks.
-Wordmark: "lite" in Hanken Grotesk Light next to "warden" in Hanken Grotesk ExtraBold (SIL OFL, outlined, no live text).
+Wordmark: "Lite" in Hanken Grotesk Light next to "warden" in Hanken Grotesk ExtraBold (SIL OFL, outlined, no live text).
 
 ## Files
 

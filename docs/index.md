@@ -3,7 +3,7 @@ title: Litewarden, a fast password manager extension for Vaultwarden
 description: Free, open-source Chrome extension for self-hosted Vaultwarden. Opens in about 100 ms, fills with one key, 2FA codes built in. Also works with Bitwarden servers.
 ---
 
-<p align="center"><img src="https://raw.githubusercontent.com/Concept211/litewarden/main/brand/readme/banner.svg" width="320" alt="Litewarden"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/Concept211/Litewarden/main/brand/readme/banner.svg" width="320" alt="Litewarden"></p>
 
 # A fast, lightweight password manager for Vaultwarden
 
@@ -19,7 +19,7 @@ Litewarden is a free, open-source extension for Chrome, Brave and Edge, for peop
 - **2FA codes built in**, PIN unlock, save and update prompts, live sync and a full keyboard workflow.
 - **Private.** End-to-end encrypted, no telemetry, and it talks only to your own server.
 
-[See it on GitHub](https://github.com/Concept211/litewarden) · [Privacy policy](privacy)
+[See it on GitHub](https://github.com/Concept211/Litewarden) · [Privacy policy](privacy)
 
 Made by [Concept211](https://concept211.com). Also from us: [Gnuke](https://getgnuke.com) cleans the junk out of
 your Gmail in one click.

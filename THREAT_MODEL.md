@@ -4,7 +4,7 @@ Litewarden is a browser extension that keeps a copy of your Vaultwarden vault an
 document says what it protects, who it protects against, what it does today, and what it doesn't cover.
 
 **There has been no paid security audit.** Everything here is our own analysis. If you find a mistake or a way
-around any of it, please open an issue at https://github.com/Concept211/litewarden/issues (or, for something serious, contact the maintainer privately first). Review
+around any of it, please open an issue at https://github.com/Concept211/Litewarden/issues (or, for something serious, contact the maintainer privately first). Review
 is very welcome.
 
 File references point at the source as of version 0.1.0.
@@ -232,6 +232,6 @@ planned for the first public release.
 
 ## Reporting a problem
 
-Please open an issue at https://github.com/Concept211/litewarden/issues, or for anything that could put users at risk, contact the
+Please open an issue at https://github.com/Concept211/Litewarden/issues, or for anything that could put users at risk, contact the
 maintainer privately first and give a reasonable time to fix it before publishing. Litewarden is not affiliated with
 Bitwarden, Inc. or the Vaultwarden project; problems in the server belong with Vaultwarden.

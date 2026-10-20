@@ -45,7 +45,7 @@ import { Busy, CodeBoxes, ago } from '../../ui/bits';
 import { HelpRows } from '../../ui/help';
 import type { Boot } from './boot';
 
-export const SOURCE_URL = 'https://github.com/Concept211/litewarden';
+export const SOURCE_URL = 'https://github.com/Concept211/Litewarden';
 
 type Page = 'home' | 'autofill' | 'security' | 'keyboard' | 'shortcuts' | 'appearance' | 'sync' | 'account' | 'about' | 'iconsites' | 'neversites' | 'rules';
 const SUB: Partial<Record<Page, Page>> = { shortcuts: 'keyboard', iconsites: 'autofill', neversites: 'autofill', rules: 'autofill' };
