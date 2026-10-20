@@ -38,11 +38,19 @@ async function toDataUrl(r: Response): Promise<string> {
   });
 }
 
+let markReady: () => void;
+// Tiles can mount before initIcons has the server and the cache; their loads wait for this.
+const ready = new Promise<void>((r) => (markReady = r));
+
 /** Call once per popup open with the cached icons and the account's server. */
 export async function initIcons(server: string) {
   // Self-hosted: <server>/icons; Bitwarden cloud: its icons host.
   iconServer = serverUrls(server).icons;
-  icons = (await mem.get('iconCache')).iconCache ?? {};
+  const cached = (await mem.get('iconCache')).iconCache ?? {};
+  // Keep anything fetched while the cache was being read.
+  icons = { ...cached, ...icons };
+  listeners.forEach((l) => l());
+  markReady();
 }
 
 let saveTimer = 0;
@@ -65,11 +73,13 @@ function fallbackIcon(): Promise<string> {
 }
 
 function loadIcon(domain: string) {
-  if (domain in icons || inflight.has(domain) || !iconServer) return;
+  if (domain in icons || inflight.has(domain)) return;
   inflight.set(
     domain,
     (async () => {
       try {
+        await ready;
+        if (domain in icons || !iconServer) return;
         const r = await fetch(`${iconServer}/${encodeURIComponent(domain)}/icon.png`, { credentials: 'omit' });
         const url = r.ok && /^image\//.test(r.headers.get('content-type') ?? '') ? await toDataUrl(r) : '';
         remember(domain, url && url !== (await fallbackIcon()) ? url : '');
