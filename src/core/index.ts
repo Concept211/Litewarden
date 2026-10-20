@@ -12,3 +12,4 @@ export * from './vault';
 export * from './edit';
 export * from './generator';
 export * from './notify';
+export * from './kdf';

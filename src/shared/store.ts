@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // What Litewarden keeps where. Two rules:
 //  - chrome.storage.local (disk) only ever holds encrypted vault data, tokens, settings and the account's
-//    public facts. Never a key, a password or a decrypted name.
+//    public facts. Never a key, a password or a decrypted name. The one exception, the session mirror for
+//    "lock when the browser closes: off", is sealed (vaultkey.ts).
 //  - chrome.storage.session (memory, cleared when the browser closes) holds the unlocked session: the user key,
 //    org keys and the decrypted list index the popup reads directly on open.
 import type { Kdf, ServerInfo, SyncResponse, Tokens } from '../core';
 import { DEFAULT_GEN, type GenOptions } from '../core/generator';
 import type { ListItem } from '../core/vault';
 import type { SiteRule } from './rules';
+import type { Sealed } from './vaultkey';
 
 export interface Account {
   server: string;
@@ -136,7 +138,9 @@ export interface LocalStore {
   /** PIN-wrapped user key when pinSurvivesRestart is on. */
   pinWrapped?: string | null;
   /** Unlocked session mirrored to disk only when lockOnClose is off. */
-  persistedSession?: Session | null;
+  persistedSession?: Sealed | Session | null;
+  /** KDF warning dismissed for exactly these settings (see kdfSignature). A change in settings brings it back. */
+  kdfDismissed?: string | null;
   /** Where the pop-out window was last (restored on the next pop-out). */
   popoutBounds?: { left: number; top: number; width: number; height: number } | null;
   /** "Teach this site" rules, by hostname. Stay on this device. */
@@ -204,6 +208,8 @@ export interface SessionStore {
   /** PIN-wrapped user key (default: lives until the browser closes). */
   pinWrapped?: string | null;
   lockout?: Lockout;
+  /** SHA-256 (hex) of the last secret Litewarden put on the clipboard, so the timed clear skips a newer copy. */
+  clipHash?: string;
   /** Decrypt failures from the last unlock/sync, shown to the user. */
   failures?: Array<{ id: string; message: string }>;
   live?: LiveState;
@@ -234,4 +240,15 @@ export const withDefaults = (s?: Partial<Settings>): Settings => ({ ...DEFAULT_S
 export async function getSettings(): Promise<Settings> {
   const { settings } = await local.get('settings');
   return withDefaults(settings);
+}
+
+/**
+ * Keep content scripts out of our storage. session already defaults to trusted contexts only; local defaults to
+ * "everyone", so set it. Runs at the top of every service-worker start (the setting doesn't survive a restart).
+ * The code never opens an area back up to content scripts (tests/unit/store-access.test.ts checks).
+ */
+export async function fenceStorage(): Promise<void> {
+  for (const a of [chrome.storage.local, chrome.storage.session, chrome.storage.sync]) {
+    await a?.setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' }).catch(() => {});
+  }
 }

@@ -32,6 +32,7 @@ import {
   RotateCcw,
   Rows3,
   Scaling,
+  ShieldAlert,
   ShieldCheck,
   SunMoon,
   Timer,
@@ -465,6 +466,9 @@ export function SettingsView({ boot: b, onBack, onLoggedOut }: { boot: Boot; onB
             Log out
           </button>
         </Row>
+        {b.kdfWeak.length > 0 && (
+          <Row icon={<ShieldAlert />} title="Weak encryption settings" desc={`${b.kdfWeak.join('. ')}. Raise them in the web vault under Account security. Your master password stays the same.`} />
+        )}
         <Row icon={<Globe />} title="Open the web vault" desc="For things Litewarden doesn't do yet: attachments, sharing, two-step setup." onClick={() => void chrome.tabs.create({ url: b.account?.server ?? '' })}>
           <span class="chev">
             <ExternalLink />

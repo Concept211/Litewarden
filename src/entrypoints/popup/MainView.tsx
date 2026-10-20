@@ -3,11 +3,13 @@
 // Enter fills the selected login, a click fills, the stubs copy. Edit is a separate control.
 import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { AppWindow, CloudOff, Keyboard, KeyRound, Lock, NotebookText, Pencil, Plus, RefreshCw, Search, Settings, Timer, User, X } from 'lucide-preact';
+import { AppWindow, CloudOff, ShieldAlert, Keyboard, KeyRound, Lock, NotebookText, Pencil, Plus, RefreshCw, Search, Settings, Timer, User, X } from 'lucide-preact';
 import { SearchIndex, type Range, type SearchHit } from '../../core/search';
 import { secondsRemaining, totp } from '../../core/totp';
 import { RemoteError, send, type FillResult } from '../../shared/messages';
-import { mem, type IndexItem } from '../../shared/store';
+import { clipHash } from '../../shared/cliphash';
+import { kdfSignature } from '../../core/kdf';
+import { local, mem, type IndexItem } from '../../shared/store';
 import { Keep, Tile, Toast, ago, initIcons, useToast } from '../../ui/bits';
 import { HelpRows } from '../../ui/help';
 import { VList } from '../../ui/vlist';
@@ -102,6 +104,7 @@ export function Main({
   const [done, setDone] = useState<string | null>(null);
   const [codes, setCodes] = useState<Record<string, string>>({});
   const [secs, setSecs] = useState(secondsRemaining());
+  const [kdfHidden, setKdfHidden] = useState(b.kdfDismissed);
   const [sync, setSync] = useState({ at: b.lastSync, err: b.lastSyncError, busy: false });
   const [notes, setNotes] = useState<Record<string, string> | null>(null);
   const { toast, show, hide } = useToast();
@@ -239,7 +242,7 @@ export function Main({
       await navigator.clipboard.writeText(value);
       flash(`${item.id}:${field}`);
       if (field === 'username') return show('Username copied');
-      await send('clipboardCopied', {});
+      await send('clipboardCopied', { hash: await clipHash(value) });
       const s = b.settings.clipboardSeconds;
       show(field === 'password' ? 'Password copied' : `Code ${value.slice(0, 3)} ${value.slice(3)} copied`, s);
     } catch (e) {
@@ -266,8 +269,9 @@ export function Main({
       try {
         const secret = secrets.current[item.id] ?? (await send('getSecret', { id: item.id, field: 'totp' })).value;
         if (secret) {
-          await navigator.clipboard.writeText(await totp(secret));
-          await send('clipboardCopied', {});
+          const code = await totp(secret);
+          await navigator.clipboard.writeText(code);
+          await send('clipboardCopied', { hash: await clipHash(code) });
           copied = true;
         }
       } catch {
@@ -626,6 +630,24 @@ export function Main({
             </div>
             <button class="btn" onClick={doSync}>
               Retry
+            </button>
+          </div>
+        )}
+        {b.kdfWeak.length > 0 && !kdfHidden && (
+          <div class="warn" id="kdf-warn" role="status">
+            <ShieldAlert />
+            <div>
+              <b>Weak encryption settings</b>
+              <p>{b.kdfWeak[0]}. Raise them in the web vault under Account security. Your master password stays the same.</p>
+            </div>
+            <button
+              class="btn"
+              onClick={() => {
+                setKdfHidden(true);
+                if (b.account) void local.set({ kdfDismissed: kdfSignature(b.account.kdf) });
+              }}
+            >
+              Dismiss
             </button>
           </div>
         )}

@@ -12,6 +12,7 @@ import { secondsRemaining, totp } from '../../core/totp';
 import { iconDomain, parseLoose } from '../../core/uri';
 import { validateDraft } from '../../core/edit';
 import { RemoteError, send, type Folder, type ItemDetail } from '../../shared/messages';
+import { clipHash } from '../../shared/cliphash';
 import { mem, type IndexItem } from '../../shared/store';
 import { Busy, Tile, Toast, useToast } from '../../ui/bits';
 import type { Boot } from './boot';
@@ -175,7 +176,7 @@ export function ItemView({
     if (!value) return show(`Nothing to copy: the ${what.toLowerCase()} is empty.`);
     await navigator.clipboard.writeText(value);
     if (!sensitive) return show(`${what} copied`);
-    await send('clipboardCopied', {});
+    await send('clipboardCopied', { hash: await clipHash(value) });
     show(`${what} copied`, b.settings.clipboardSeconds);
   }
 

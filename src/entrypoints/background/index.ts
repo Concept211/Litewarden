@@ -2,8 +2,8 @@
 // Service worker: message router, auto-lock and clipboard alarms, per-tab login matching, toolbar icon.
 import { matchesPage } from '../../core';
 import type { Api, CsApi, Req } from '../../shared/messages';
-import { getSettings, local, mem, type IndexItem, type Settings } from '../../shared/store';
-import { clearClipboard } from './clipboard';
+import { fenceStorage, getSettings, local, mem, type IndexItem, type Settings } from '../../shared/store';
+import { clearClipboard, rememberCopy } from './clipboard';
 import { fill } from './fill';
 import { csHandlers, forgetTab, inpageHandlers, onUnlocked, openMenuCommand, pushPrompt, refreshAll } from './inpage';
 import { armSyncAlarm, startLive, stopLive } from './live';
@@ -36,7 +36,8 @@ const handlers: Handlers = {
     }
     return out;
   },
-  clipboardCopied: async ({ seconds }) => {
+  clipboardCopied: async ({ seconds, hash }) => {
+    if (hash) await rememberCopy(hash);
     const s = seconds ?? (await getSettings()).clipboardSeconds;
     await chrome.alarms.clear('clipclear');
     if (s > 0) await chrome.alarms.create('clipclear', { when: Date.now() + s * 1000 });
@@ -51,7 +52,7 @@ const handlers: Handlers = {
     if ('lockMinutes' in patch) await S.touch();
     if ('lockOnClose' in patch) {
       const { session } = await mem.get('session');
-      await local.set({ persistedSession: next.lockOnClose ? null : (session ?? null) });
+      await S.persistSession(next.lockOnClose ? null : (session ?? null));
     }
     if ('pinSurvivesRestart' in patch) {
       const { pinWrapped } = await mem.get('pinWrapped');
@@ -134,6 +135,7 @@ async function setIcon(unlocked: boolean) {
 }
 
 export default defineBackground(() => {
+  void fenceStorage();
   S.setLockListener((unlocked) => {
     void setIcon(unlocked);
     if (!unlocked) void mem.remove('tabMatches');

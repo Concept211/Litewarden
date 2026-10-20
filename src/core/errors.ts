@@ -75,3 +75,14 @@ export function serverMessage(body: unknown): string {
   }
   return '';
 }
+
+/** The server's key settings are below the floor Bitwarden itself enforces. Raised before the password is used. */
+export class WeakKdf extends LitewardenError {
+  override name = 'WeakKdf';
+  constructor(detail: string) {
+    super(
+      `This server reports weak encryption settings (${detail}), so Litewarden stopped before sending your password. ` +
+        'Your master password is safe. Check the address, and if it is right, raise the settings in the web vault under Account security.',
+    );
+  }
+}

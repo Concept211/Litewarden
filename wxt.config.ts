@@ -8,8 +8,9 @@ export default defineConfig({
     description: 'A fast, lightweight password manager for Vaultwarden servers.',
     // Every permission is justified in the Chrome Web Store listing:
     // storage/unlimitedStorage: the encrypted vault copy; alarms: auto-lock and clipboard clearing;
-    // scripting: fill a form when you ask; offscreen + clipboardWrite: clear a copied password after 30 s.
-    permissions: ['storage', 'unlimitedStorage', 'alarms', 'scripting', 'offscreen', 'clipboardWrite'],
+    // scripting: fill a form when you ask; offscreen + clipboardWrite: clear a copied password after 30 s;
+    // clipboardRead: before that clear, check the clipboard still holds our copy (never clear a newer one).
+    permissions: ['storage', 'unlimitedStorage', 'alarms', 'scripting', 'offscreen', 'clipboardWrite', 'clipboardRead'],
     // Fill on any site you choose, and talk to your own server (whatever its address is).
     host_permissions: ['<all_urls>'],
     action: { default_title: 'Litewarden' },

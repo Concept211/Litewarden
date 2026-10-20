@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Popup start-up. Reads everything it needs straight from storage (no service-worker round trip) so the
 // list is on screen fast; the worker only gets a "touch" afterwards to push the auto-lock deadline.
+import { checkKdf, kdfSignature } from '../../core/kdf';
 import { send } from '../../shared/messages';
 import { POPUP_SIZES, local, mem, withDefaults, type Account, type IndexItem, type Lockout, type Settings } from '../../shared/store';
 
@@ -24,6 +25,10 @@ export interface Boot {
   lastSync: number | null;
   lastSyncError: string | null;
   failures: number;
+  /** Why the account's key settings are weak (empty when fine). */
+  kdfWeak: string[];
+  /** The user dismissed the notice on the main screen for these settings. */
+  kdfDismissed: boolean;
   /** Opened as the pop-out window: it stays open and follows the active tab of the browser window behind it. */
   popout: boolean;
 }
@@ -51,7 +56,7 @@ export async function targetTab(): Promise<Tab | null> {
 
 export async function boot(): Promise<Boot> {
   const [l, m, tab] = await Promise.all([
-    local.get('account', 'settings', 'lastSync', 'lastSyncError', 'pinWrapped'),
+    local.get('account', 'settings', 'lastSync', 'lastSyncError', 'pinWrapped', 'kdfDismissed'),
     // Small keys only: the full index (megabytes for a big vault) is read after the first paint.
     mem.get('session', 'indexCount', 'recentItems', 'tabMatches', 'pinWrapped', 'lockout', 'failures'),
     targetTab(),
@@ -74,6 +79,8 @@ export async function boot(): Promise<Boot> {
     lastSync: l.lastSync ?? null,
     lastSyncError: l.lastSyncError ?? null,
     failures: m.failures?.length ?? 0,
+    kdfWeak: l.account ? checkKdf(l.account.kdf).reasons : [],
+    kdfDismissed: !!l.account && l.kdfDismissed === kdfSignature(l.account.kdf),
     popout: isPopout(),
   };
 }

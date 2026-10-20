@@ -75,7 +75,7 @@ a.btn{text-decoration:none}
 .empty{background:var(--surface);border-radius:var(--r-card);border:1.5px solid var(--line);padding:14px;margin-bottom:10px}
 .empty h3{margin:0 0 4px;font-size:15px}.empty p{margin:0 0 12px;color:var(--muted)}
 .warn{background:var(--warn);color:var(--warn-ink);border-radius:12px;padding:9px 11px;margin-bottom:8px;display:flex;gap:9px}
-.warn b{display:block}.warn p{margin:2px 0 0}.warn .btn{margin-left:auto;flex:none;height:26px;padding:0 11px;background:var(--warn-ink);color:var(--warn)}
+.warn svg.lucide{flex:none;width:18px;height:18px;margin-top:1px}.warn b{display:block}.warn p{margin:2px 0 0}.warn .btn{margin-left:auto;flex:none;height:26px;padding:0 11px;background:var(--warn-ink);color:var(--warn)}
 .foot{display:flex;align-items:center;gap:0;height:40px;padding:0 4px 0 10px;border-top:1px solid var(--line)}
 .brand{display:flex;align-items:center;gap:6px;font-weight:700;font-size:12px;margin-right:10px}
 .brand .keep{width:14px;height:14px}

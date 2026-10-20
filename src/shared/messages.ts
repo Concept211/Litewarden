@@ -45,7 +45,7 @@ export interface Api {
   touch: [void, void];
   getSecret: [{ id: string; field: 'username' | 'password' | 'totp' }, { value: string | null }];
   getTotpSecrets: [{ ids: string[] }, Record<string, string>];
-  clipboardCopied: [{ seconds?: number }, void];
+  clipboardCopied: [{ seconds?: number; hash?: string }, void];
   fill: [{ tabId: number; id: string; force?: boolean; allowFrame?: boolean }, FillResult];
   matchTab: [{ tabId: number; url: string }, { ids: string[]; items: import('./store').IndexItem[] }];
   setPin: [{ pin: string | null }, void];

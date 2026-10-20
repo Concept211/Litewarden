@@ -9,9 +9,11 @@ import {
   LitewardenError,
   ServerUnreachable,
   TwoFactorRequired,
+  WeakKdf,
   WrongPassword,
   b64decode,
   b64encode,
+  checkKdf,
   decryptItem,
   decryptListItem,
   encryptDraft,
@@ -33,6 +35,7 @@ import {
   type Tokens,
 } from '../../core';
 import type { Folder, ItemDetail, Progress, StateInfo } from '../../shared/messages';
+import { dropKey, seal, unseal, type Sealed } from '../../shared/vaultkey';
 import { getSettings, local, mem, type Account, type IndexItem, type Session, type SessionStore } from '../../shared/store';
 
 export class UserError extends LitewardenError {
@@ -145,6 +148,9 @@ export async function login(p: { server: string; email: string; password: string
     throw new UserError(`This server runs Vaultwarden ${serverInfo.version}. Litewarden needs 1.35.0 or later. Update Vaultwarden, then try again.`);
   }
   const kdf = await a.prelogin(email);
+  // Below Bitwarden's own hard floor: stop before the password is used for anything.
+  const floor = checkKdf(kdf);
+  if (floor.level === 'refuse') throw new WeakKdf(floor.reasons.join(', '));
   const masterKey = await C.deriveMasterKey(p.password, email, kdf);
   const hash = await C.masterPasswordHash(masterKey, p.password);
   let tf = p.twoFactor ? { provider: p.twoFactor.provider, token: p.twoFactor.token.replace(/\s/g, ''), remember: p.twoFactor.remember } : undefined;
@@ -193,6 +199,7 @@ async function wipeLocalVault() {
   vaultCache = null;
   keysCache = null;
   await local.remove('vault', 'lastSync', 'recent', 'pinWrapped', 'persistedSession', 'tokens');
+  await dropKey();
   await mem.remove('session', 'index', 'indexCount', 'recentItems', 'notes', 'tabMatches', 'iconCache', 'pinWrapped', 'failures');
 }
 
@@ -209,7 +216,7 @@ async function startSession(userKey: SymKey, orgKeys: Record<string, string> = {
   };
   lockEpoch++;
   await mem.set({ session, lockout: { pwFails: 0, pwUntil: 0, pinFails: 0 } });
-  if (!settings.lockOnClose) await local.set({ persistedSession: session });
+  if (!settings.lockOnClose) await persistSession(session);
   await armAutoLock();
   onLockChange?.(true);
 }
@@ -217,6 +224,8 @@ async function startSession(userKey: SymKey, orgKeys: Record<string, string> = {
 export async function unlockPassword(password: string) {
   const [{ account }, { lockout }] = await Promise.all([local.get('account'), mem.get('lockout')]);
   if (!account) throw new UserError('Not signed in.');
+  const floor = checkKdf(account.kdf);
+  if (floor.level === 'refuse') throw new WeakKdf(floor.reasons.join(', '));
   const lo = lockout ?? { pwFails: 0, pwUntil: 0, pinFails: 0 };
   if (lo.pwUntil > Date.now()) throw new LockedOut('Too many tries. Wait a minute, then try again.', { cause: lo.pwUntil });
   let userKey: SymKey;
@@ -306,11 +315,24 @@ export async function writeIfUnlocked(e: number, data: Partial<SessionStore>): P
 export let onLockChange: ((unlocked: boolean) => void) | null = null;
 export const setLockListener = (fn: (unlocked: boolean) => void) => (onLockChange = fn);
 
+/**
+ * Mirror the session to disk (or remove the mirror). What lands in storage.local is sealed under a key content
+ * scripts can't reach (see vaultkey.ts), never the raw user key.
+ */
+export async function persistSession(session: Session | null): Promise<void> {
+  if (!session) {
+    await local.set({ persistedSession: null });
+    await dropKey();
+    return;
+  }
+  await local.set({ persistedSession: await seal(session) });
+}
+
 export async function lock() {
   lockEpoch++;
   keysCache = null;
   await mem.remove('session', 'index', 'indexCount', 'recentItems', 'notes', 'tabMatches', 'failures');
-  await local.set({ persistedSession: null });
+  await persistSession(null);
   await chrome.alarms.clear('autolock');
   onLockChange?.(false);
 }
@@ -340,12 +362,23 @@ export async function armAutoLock() {
   if (session?.lockAt) await chrome.alarms.create('autolock', { when: session.lockAt });
 }
 
+/** Read the disk mirror. An unsealed one from an older build is accepted once and sealed on the spot. */
+async function openPersisted(p: Sealed | Session | null | undefined): Promise<Session | null> {
+  if (!p) return null;
+  if ('userKey' in p) {
+    await persistSession(p);
+    return p;
+  }
+  return unseal(p);
+}
+
 /** Browser start: restore a session mirrored to disk (only when "lock when the browser closes" is off). */
 export async function restoreOnStartup() {
   const [{ persistedSession, pinWrapped }, settings] = await Promise.all([local.get('persistedSession', 'pinWrapped'), getSettings()]);
   if (pinWrapped && settings.pinSurvivesRestart) await mem.set({ pinWrapped });
-  if (persistedSession && !settings.lockOnClose) {
-    await mem.set({ session: persistedSession });
+  const restored = settings.lockOnClose ? null : await openPersisted(persistedSession);
+  if (restored) {
+    await mem.set({ session: restored });
     await rebuildFromLocal().catch(() => {});
     onLockChange?.(true);
   }

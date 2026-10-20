@@ -20,8 +20,37 @@ File references point at the source as of version 0.1.0.
 | Access and refresh tokens | `chrome.storage.local` (`tokens`) | Let the extension talk to your server without your password. |
 | PIN-wrapped user key | `chrome.storage.session` by default; `chrome.storage.local` only if "Keep the PIN after a restart" is on | Wrapped with a key derived from the PIN through your account's KDF (`pinKey` in `src/entrypoints/background/session.ts`). |
 | Two-step "remember this browser" token, device id | `chrome.storage.local` | Same as any Bitwarden-compatible client. |
-| Clipboard contents | The system clipboard | Cleared after 30 seconds by default (`src/entrypoints/background/clipboard.ts`). |
+| Clipboard contents | The system clipboard | Cleared after 30 seconds by default, but only if it still holds what Litewarden copied (`src/entrypoints/background/clipboard.ts`, `src/entrypoints/offscreen/main.ts`). A SHA-256 of the copied text is kept in `chrome.storage.session` until then. |
+| Unlocked session mirror (user key, org keys) | `chrome.storage.local` (`persistedSession`), only if "Lock when the browser closes" is off | AES-GCM sealed under a non-extractable key in IndexedDB, dropped on every lock (`src/shared/vaultkey.ts`). Never the raw key. |
+| Weak-settings notice dismissal | `chrome.storage.local` (`kdfDismissed`) | The KDF settings the user dismissed the notice for. No secret. |
 | "Teach this site" rules | `chrome.storage.local` (`siteRules`) | CSS selectors for a site's fields. No secrets. |
+
+## What is stored where, and who can read it
+
+"Content script" means code running in a web page's tab on Litewarden's behalf. If a page broke into that world (a
+browser bug), it would have the content script's abilities. "Profile reader" means malware or a person with the
+browser's files on disk; that is out of scope (see below) and listed only for completeness.
+
+| Data | Where | Form on disk | Extension pages and worker | Content scripts | Profile reader |
+|---|---|---|---|---|---|
+| Account, settings, site rules, sync times | `storage.local` | Plain | Yes | **No**: `local` is set to trusted contexts only (`fenceStorage` in `src/shared/store.ts`) | Yes |
+| Encrypted vault, tokens | `storage.local` | Vault: the server's ciphertext. Tokens: plain | Yes | **No** (same fence). Even without the fence they would get ciphertext and tokens that can fetch ciphertext, not decrypt it | Yes (tokens can fetch the encrypted vault from your server) |
+| PIN-wrapped user key (if "Keep the PIN after a restart") | `storage.local` | Encrypted by a key derived from the PIN through the account KDF | Yes | **No** (fence); and it is ciphertext anyway | Yes, then guesses the PIN offline |
+| Session mirror (if "Lock when the browser closes" is off) | `storage.local` | AES-GCM under a non-extractable WebCrypto key held in IndexedDB | Yes | **No**: fenced, and IndexedDB belongs to the extension's origin, so even a content script that got past the fence reads only ciphertext | Yes: the key is in the same profile |
+| User key, org keys, decrypted index, PIN-wrapped key (default) | `storage.session` (memory) | Not on disk | Yes | **No**: session storage is trusted contexts only by default, and we set it explicitly | Only by reading browser memory |
+| Clipboard hash | `storage.session` | Not on disk | Yes | No | Only by reading browser memory |
+| Master password | Popup memory while typing | Never stored | n/a | n/a | n/a |
+
+How the fence works and what we checked: `chrome.storage.StorageArea.setAccessLevel` exists on every storage area
+since Chrome 102, not only on `session`. The service worker calls it with `TRUSTED_CONTEXTS` on `local`, `session`
+and `sync` at the top of every start (`fenceStorage`, because the setting does not survive a worker restart). Nothing
+in the source sets any area to `TRUSTED_AND_UNTRUSTED_CONTEXTS` (a unit test greps for it). An e2e test reads
+storage from inside the content-script world of a real page over the DevTools protocol: it is refused ("Access to
+storage is not allowed from this context"), and the same read succeeds when the area is deliberately opened up, so
+the refusal is the fence and not a broken probe. The content scripts themselves never use `chrome.storage`. The
+fence has one gap: between a worker start and its first `setAccessLevel` call, `local` is at its default. The call
+is the first statement the worker runs, and content scripts have no storage code, so only a page that had already
+broken into the content-script world could use that window.
 
 ## Trust boundaries
 
@@ -72,13 +101,13 @@ Residual risk:
   point of filling. XSS on that site can read them from the form afterward.
 - The save prompt sees what you typed into a login form (that's how it offers to save). A hostile page could fake a
   "login form" to get a prompt shown; it still can't save without you.
-- Content scripts can technically read `chrome.storage.local`. Chrome doesn't offer a way to fence that area off from
-  content scripts (it does for `chrome.storage.session`, which content scripts can't read). Litewarden's content
-  scripts never read storage; they only use the message list above. But if a page found a way to run code inside
-  the content script's world (a browser bug), it could read what's in `chrome.storage.local`: the encrypted vault,
-  the tokens, and, only if you turned those settings on, the persisted session or the disk copy of the PIN-wrapped
-  key. Planned: move secrets that must persist into an encrypted form keyed by something content scripts can't
-  reach, and keep the defaults (memory only).
+- `chrome.storage.local` is readable from content scripts by default. Litewarden closes that: the service worker
+  sets `local` (and `session`) to trusted contexts only (see "What is stored where"), and its content scripts never
+  read storage anyway; they only use the message list above. As a second layer, the one secret that can sit in
+  `local` without your PIN protecting it, the mirror of the unlocked session when "Lock when the browser closes" is
+  off, is AES-GCM sealed under a non-extractable key in IndexedDB. A page that somehow got past the fence would read
+  the encrypted vault, the tokens and sealed or PIN-encrypted blobs, none of which opens without your PIN or master
+  password. Builds before this change wrote that mirror unsealed; the new build seals it the first time it sees one.
 
 ### Clickjacking
 
@@ -114,8 +143,10 @@ the extension files. What Litewarden does to limit the damage:
   `chrome.storage.session`, which Chrome keeps in memory and drops when the browser closes.
 - **Two settings trade that for convenience, and both are off by default:**
   - "Lock when the browser closes" off: the unlocked session (user key) is mirrored to `chrome.storage.local` so it
-    survives a restart (`persistedSession`). Anyone who can read your browser profile can then decrypt the vault
-    copy. The setting says so.
+    survives a restart (`persistedSession`), sealed under a non-extractable key in IndexedDB. The key sits in the same
+    profile, so anyone who can read your browser profile can still decrypt the vault copy; the sealing keeps it from
+    page-side code, not from profile access. The setting says so. Every lock and log out deletes the key, so a copy
+    of the sealed blob made earlier is useless afterward.
   - "Keep the PIN after a restart" on: the PIN-wrapped user key is written to disk. A 6-digit PIN has a million
     combinations; the wrap uses your account's KDF (for example PBKDF2 at 600,000 iterations), so trying them all
     offline is slow but very possible for a determined attacker with the file. Treat this as "convenient", not
@@ -135,18 +166,34 @@ the extension files. What Litewarden does to limit the damage:
 - Passwords are masked until you press reveal. Copied secrets are cleared from the clipboard after 30 seconds by
   default.
 
-Residual risk: the clipboard clear writes an empty clipboard when the timer fires, even if you copied something
-else in the meantime (that copy is lost). Clipboard history tools (Windows clipboard history, clipboard managers)
-may keep their own copy; Litewarden can't clear those.
+The clipboard clear checks before it clears. When Litewarden copies a password or code it keeps a SHA-256 of the
+text (in `chrome.storage.session`, not the text). When the timer fires, the offscreen document pastes the current
+clipboard into a hidden textarea (`document.execCommand('paste')`, allowed by the `clipboardRead` permission; the
+asynchronous `navigator.clipboard.readText()` needs a focused page and an offscreen document can't have focus),
+hashes it, and clears only on a match. Anything you copied since, including Litewarden's own username copy, is left
+alone. The text read for the comparison lives in a local variable and the textarea for the length of the check and is
+then dropped.
+
+Residual risk: if the clipboard can't be read in the offscreen document (the permission was removed, or Chrome
+refuses the paste), the clear falls back to the old behavior and wipes the clipboard anyway, because a secret left
+on the clipboard is worse than a lost copy. `clipboardRead` is one more permission than before and shows in Chrome's
+permission list as reading data you copy and paste; Litewarden uses it only for this comparison and never sends the
+clipboard anywhere. Clipboard history tools (Windows clipboard history, clipboard managers) may keep their own copy;
+Litewarden can't clear those.
 
 ### A compromised server or a man in the middle
 
 - Vault contents are end-to-end encrypted. The server only ever sees ciphertext, your email, and the login hash
   derived from your master password (not the password itself). A compromised server can't read your passwords
   directly.
-- A malicious server could serve weak KDF settings at prelogin to make the hash easier to crack. Litewarden uses
-  what the server reports, as the official clients do. Planned: refuse KDF settings below a floor (PBKDF2 under
-  600,000 iterations, Argon2id under the Bitwarden minimums) and warn.
+- A malicious server could serve weak KDF settings at prelogin to make the hash easier to crack. Litewarden checks
+  them (`checkKdf` in `src/core/kdf.ts`) before it uses the master password for anything. PBKDF2 under 5,000
+  rounds, or Argon2id with missing or zero settings, is refused with a plain error and nothing is sent: no password
+  and no hash. PBKDF2 under 600,000 rounds, or Argon2id under 16 MiB of memory, 2 rounds or 1 lane (Bitwarden's
+  recommended minimums), signs in but shows a dismissible warning on the main screen after unlock and a permanent
+  row in Settings > Account, saying the account's encryption settings are weak and can be raised in the web vault.
+  The notice comes back if the settings change. This is a floor, not a guarantee: a server can still choose settings
+  that are merely above it.
 - A malicious server could send crafted ciphertext. Decryption checks the HMAC before decrypting (encrypt-then-MAC,
   `src/core/crypto/webcrypto.ts`), and item decrypt failures are isolated per item and shown, not fatal.
 - Unknown key formats (EncString type 7, V2 account keys) are detected and reported in plain words instead of being
@@ -179,7 +226,7 @@ planned for the first public release.
 - A compromised browser or operating system.
 - Other extensions with access to the same pages.
 - Physical attacks on an unlocked, unattended computer beyond the auto-lock.
-- Weak master passwords and weak KDF settings chosen on the server.
+- Weak master passwords. Weak KDF settings chosen on the server are warned about above the hard floor, not blocked.
 - Phishing sites with a lookalike domain: Litewarden won't fill a login there (the domain doesn't match), but it
   can't stop you from typing your password by hand.
 
