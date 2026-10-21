@@ -12,7 +12,7 @@ export default defineConfig({
     // storage/unlimitedStorage: the encrypted vault copy; alarms: auto-lock and clipboard clearing;
     // scripting: fill a form when you ask; offscreen + clipboardWrite: clear a copied password after 30 s;
     // clipboardRead: before that clear, check the clipboard still holds our copy (never clear a newer one).
-    permissions: ['storage', 'unlimitedStorage', 'alarms', 'scripting', 'offscreen', 'clipboardWrite', 'clipboardRead'],
+    permissions: ['storage', 'unlimitedStorage', 'alarms', 'scripting', 'offscreen', 'clipboardWrite', 'clipboardRead', 'contextMenus'],
     // Fill on any site you choose, and talk to your own server (whatever its address is).
     host_permissions: ['<all_urls>'],
     action: { default_title: 'Litewarden' },

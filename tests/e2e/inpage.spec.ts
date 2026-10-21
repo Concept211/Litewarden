@@ -509,6 +509,45 @@ test('Alt+Shift+L in a focused field opens the menu there', async ({ ctx, sw }) 
   await p.close();
 });
 
+test('right-click, "Fill with Litewarden": the menu opens on the field that was right-clicked', async ({ ctx, sw }) => {
+  const w = await sw();
+  // The item exists (update fails on an unknown id).
+  expect(await w.evaluate(() => chrome.contextMenus.update('open-menu', {}).then(() => true, () => false))).toBe(true);
+  const p = await page(ctx, C('stacked.html'));
+  await expect.poll(async () => (await icons(p)).length).toBe(2);
+  await p.click('#u', { button: 'right' });
+  await p.keyboard.press('Escape');
+  // Focus has moved on: the menu still goes to the field the right-click was on.
+  await p.click('#p');
+  // Playwright can't click Chrome's own context menu; send what its onClicked handler sends.
+  const tab = await tabIdOf(sw, p);
+  await w.evaluate((id) => chrome.tabs.sendMessage(id, { lw: 'open-menu', ctx: true }, { frameId: 0 }), tab);
+  const m = await surface(p, 'menu');
+  await expect(m.locator('.m-row')).toHaveCount(2);
+  const box = await frameBox(m);
+  const uf = (await p.locator('#u').boundingBox())!;
+  const pf = (await p.locator('#p').boundingBox())!;
+  expect(box.y, 'anchored on the username field, above the password field').toBeLessThan(pf.y);
+  expect(box.y + box.h).toBeGreaterThan(uf.y);
+  await p.close();
+});
+
+test('two-step page with no autocomplete hints (T-Mobile style): the username step gets the icon; a newsletter form does not', async ({ ctx }) => {
+  const p = await page(ctx, C('step-unmarked.html'));
+  await expect.poll(async () => (await icons(p)).length).toBe(1);
+  const [ic] = await icons(p);
+  const ef = (await p.locator('#e').boundingBox())!;
+  expect(ic!.y).toBeGreaterThan(ef.y);
+  expect(ic!.x + ic!.w).toBeLessThanOrEqual(ef.x + ef.width);
+  await clickIcon(p, '#e');
+  await expect((await surface(p, 'menu')).locator('.m-row')).toHaveCount(2);
+  await shot(p, 'inpage-step-unmarked', 1);
+  await p.goto(C('newsletter.html'));
+  await p.waitForTimeout(1500);
+  expect(await icons(p)).toEqual([]);
+  await p.close();
+});
+
 for (const [file, scope] of [
   ['modal.html', '.dlg'],
   ['edge.html', 'form'],

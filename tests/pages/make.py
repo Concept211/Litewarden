@@ -20,6 +20,12 @@ pages = {
     'step1.html': dict(t='Two-step: email', h='Two-step sign in', b='''<form action="step2.html" method="get">
 <label for="e">Email</label><div class="f"><input id="e" name="email" type="email" autocomplete="username"></div>
 <button type="submit">Next</button></form>'''),
+    'step-unmarked.html': dict(t='Log in to your account', h='Two-step sign in, no hints', b='''<form onsubmit="event.preventDefault()">
+<label for="e">Email or phone number</label><div class="f"><input id="e" name="email-or-phonenumber" type="text" autocomplete="on" aria-label="Email or phone number"></div>
+<button type="submit">Next</button></form>'''),
+    'newsletter.html': dict(t='Weekly news', h='News', b='''<div class="card"><p>Get the week's stories by email.</p><form onsubmit="event.preventDefault()">
+<label for="e">Email</label><div class="f"><input id="e" name="email" type="text"></div>
+<button type="submit">Subscribe</button></form></div>'''),
     'step2.html': dict(t='Two-step: password', h='Two-step sign in', b='''<form onsubmit="event.preventDefault()"><p id="who"></p><input type="hidden" name="username" autocomplete="username" id="hu">
 <label for="p">Password</label><div class="f"><input id="p" type="password" autocomplete="current-password"></div>
 <button type="submit">Sign in</button></form>''', j='''<script>const e=new URLSearchParams(location.search).get('email')||'';who.textContent='Signing in as '+e;hu.value=e;</script>'''),

@@ -5,7 +5,7 @@ import type { Api, CsApi, Req } from '../../shared/messages';
 import { fenceStorage, getSettings, local, mem, type IndexItem, type Settings } from '../../shared/store';
 import { clearClipboard, rememberCopy } from './clipboard';
 import { fill } from './fill';
-import { csHandlers, forgetTab, inpageHandlers, onUnlocked, openMenuCommand, pushPrompt, refreshAll } from './inpage';
+import { csHandlers, forgetTab, inpageHandlers, onUnlocked, openMenuAt, openMenuCommand, pushPrompt, refreshAll } from './inpage';
 import { armSyncAlarm, startLive, stopLive } from './live';
 import * as S from './session';
 
@@ -177,6 +177,16 @@ export default defineBackground(() => {
 
   chrome.commands.onCommand.addListener((cmd) => {
     if (cmd === 'open-menu') void openMenuCommand();
+  });
+  // Right-click in a field: "Fill with Litewarden" opens the in-page menu there. Chrome keeps the item across
+  // restarts, so it's made once per install or update.
+  chrome.runtime.onInstalled.addListener(() => {
+    chrome.contextMenus.removeAll(() =>
+      chrome.contextMenus.create({ id: 'open-menu', title: 'Fill with Litewarden', contexts: ['editable'], documentUrlPatterns: ['http://*/*', 'https://*/*'] }),
+    );
+  });
+  chrome.contextMenus.onClicked.addListener((info, tab) => {
+    if (info.menuItemId === 'open-menu' && tab?.id != null) void openMenuAt(tab.id, info.frameId ?? 0);
   });
 
   chrome.alarms.onAlarm.addListener((a) => {

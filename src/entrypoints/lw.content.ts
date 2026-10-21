@@ -564,6 +564,10 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
   document.addEventListener('click', (e) => teachPick(e), true);
   document.addEventListener('mousedown', (e) => teachPick(e), true);
 
+  // The field a right-click menu was opened on, for "Fill with Litewarden" there.
+  let rightClicked: EventTarget | undefined;
+  document.addEventListener('contextmenu', (e) => (rightClicked = e.composedPath()[0]), true);
+
   // ---------- messages from the worker ----------
   chrome.runtime.onMessage.addListener((m: ToCs, sender) => {
     if (sender.id !== chrome.runtime.id || !m || typeof m !== 'object' || !('lw' in m)) return;
@@ -585,8 +589,8 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
         if (teach?.token === m.token) endTeach(true);
         break;
       case 'open-menu': {
-        const a = deepActive();
-        if (document.hasFocus() && a instanceof HTMLInputElement && (isPassword(a) || isUsernameCandidate(a))) void openMenu(a, true);
+        const a = m.ctx ? rightClicked : document.hasFocus() ? deepActive() : null;
+        if (a instanceof HTMLInputElement && (isPassword(a) || isUsernameCandidate(a))) void openMenu(a, true);
         break;
       }
       case 'teach':

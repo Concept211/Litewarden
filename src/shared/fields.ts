@@ -6,6 +6,7 @@
 const USERISH = /user|e-?mail|login|account|ident|phone|mobile|member|customer|handle/i;
 const NOT_USER = /search|query|otp|one.?time|2fa|totp|captcha|code|token|zip|postal|amount|coupon|promo/i;
 const TEXTY = new Set(['', 'text', 'email', 'tel', 'username']);
+const SIGN_IN = /sign.?in|log.?in|log.?on|auth/i;
 
 export const ac = (el: HTMLInputElement) => (el.getAttribute('autocomplete') ?? '').toLowerCase().split(/\s+/);
 
@@ -54,6 +55,18 @@ export const strongUser = (el: HTMLInputElement) => {
   return a.includes('username') || a.includes('email') || el.type === 'email';
 };
 
+/**
+ * The username step of a two-step sign-in that doesn't mark its field (T-Mobile: type=text, autocomplete=on, "Email or
+ * phone number"). Only when the field asks for a username, email or phone, it is the one text field in its form, and
+ * the page or the form says sign-in, so a newsletter or contact form doesn't get the icon.
+ */
+function loneStepUser(el: HTMLInputElement, all: HTMLInputElement[]): boolean {
+  if (!USERISH.test(describe(el))) return false;
+  if (all.filter((i) => TEXTY.has(i.type) && i.form === el.form).length !== 1) return false;
+  const doc = el.ownerDocument;
+  return SIGN_IN.test(`${doc.location.pathname} ${doc.title} ${el.form?.getAttribute('action') ?? ''}`);
+}
+
 const before = (a: Node, b: Node) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) || a.getRootNode() !== b.getRootNode();
 
 /** The username field that goes with `password`: before it, in the same form when there is one. */
@@ -101,13 +114,15 @@ export function loginFields(root: Document | ShadowRoot = document): Array<{ el:
     add(partnerOf(p, users), 'username');
     add(p, 'password');
   }
-  if (!pws.length && !all.some(isPassword)) add(users.find(strongUser) ?? null, 'username');
+  if (!pws.length && !all.some(isPassword)) add(users.find(strongUser) ?? users.find((u) => loneStepUser(u, all)) ?? null, 'username');
   return out;
 }
 
 /** Cheap first check for the lazy content script: anything that looks like a login field in the light DOM. */
 export function looksLikeLogin(doc: Document): boolean {
-  return !!doc.querySelector('input[type=password], input[autocomplete~=username i], input[autocomplete~=current-password i], input[type=email]');
+  if (doc.querySelector('input[type=password], input[autocomplete~=username i], input[autocomplete~=current-password i], input[type=email]')) return true;
+  // An unmarked username step (see loneStepUser): only on pages that say sign-in.
+  return SIGN_IN.test(`${doc.location.pathname} ${doc.title}`) && !!doc.querySelector('input:not([type]), input[type=text], input[type=tel]');
 }
 
 export interface Captured {

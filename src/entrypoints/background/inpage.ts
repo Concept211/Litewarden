@@ -479,6 +479,11 @@ export async function openMenuCommand() {
   if (tab?.id != null) await chrome.tabs.sendMessage(tab.id, { lw: 'open-menu' } satisfies ToCs).catch(() => {});
 }
 
+/** "Fill with Litewarden" on a field's right-click menu: the menu opens on that field, in its frame. */
+export async function openMenuAt(tabId: number, frameId: number) {
+  await chrome.tabs.sendMessage(tabId, { lw: 'open-menu', ctx: true } satisfies ToCs, { frameId }).catch(() => {});
+}
+
 /** A page finished loading in a tab with an unanswered save prompt (the form submit navigated): show it there. */
 export async function pushPrompt(tabId: number) {
   const { pendingSaves } = await mem.get('pendingSaves');

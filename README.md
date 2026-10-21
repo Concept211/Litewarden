@@ -121,6 +121,7 @@ Then in Chrome (or Brave, or Edge):
 |---|---|---|
 | Anywhere in Chrome | Ctrl+Shift+L | Open Litewarden with search ready |
 | In a login field | Alt+Shift+L | Open the in-page menu |
+| In a login field | Right-click, Fill with Litewarden | Open the in-page menu |
 | Popup | type | Search |
 | Popup | ↑ ↓, Enter | Move, fill the selected login |
 | Popup | Alt+← Alt+→ | Previous or next folder |

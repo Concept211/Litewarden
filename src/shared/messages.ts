@@ -123,7 +123,8 @@ export interface CsHello {
 export type ToCs =
   | { lw: 'size'; token: string; w?: number; h: number }
   | { lw: 'close'; token: string }
-  | { lw: 'open-menu' }
+  /** Alt+Shift+L opens on the focused field; `ctx` (the right-click item) on the field that was right-clicked. */
+  | { lw: 'open-menu'; ctx?: boolean }
   | { lw: 'teach' }
   | { lw: 'teach-act'; token: string; act: 'back' | 'save' | 'cancel' | 'undo' | 'done' }
   | { lw: 'refresh' }
