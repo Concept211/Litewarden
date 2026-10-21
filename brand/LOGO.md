@@ -16,7 +16,7 @@ Wordmark: "Lite" in Hanken Grotesk Light next to "warden" in Hanken Grotesk Extr
 | `readme/banner.svg` | README and landing page header: white lockup on a rounded #1252A3 tile. Reads on any background, so it doesn't depend on the viewer's theme (GitHub mobile can show a light page while the phone is in dark mode). |
 | `readme/logo-light.svg`, `readme/logo-dark.svg` | README header lockup, transparent, for light and dark GitHub themes. |
 | `icons/icon-16.png`, `icon-32.png`, `icon-48.png`, `icon-128.png` | Chrome extension icons for `manifest.json`. Blue tile, white mark. `icon-128.png` is 96 px artwork with 16 px transparent padding. |
-| `icons/locked-16.png`, `locked-32.png` | Toolbar icon while the vault is locked: slate tile, pale mark, small padlock badge. Use `icon-*` when unlocked. |
+| `icons/locked-16.png`, `locked-32.png` | Toolbar icon while the vault is locked: the same icon on a gray tile. Use `icon-*` when unlocked. |
 | `store/icon-128.png` | Web Store icon (same file as `icons/icon-128.png`). |
 | `store/promo-440x280.png`, `.svg` | Web Store small promo tile. |
 
@@ -29,7 +29,7 @@ Wordmark: "Lite" in Hanken Grotesk Light next to "warden" in Hanken Grotesk Extr
 | Tint | #DBE5F6 | n/a |
 | Ink (wordmark, text) | #1B2029 | #F1F3F7 |
 | Ground | #F1F3F7 | #202733 |
-| Locked state (icon only) | tile #5C6779, mark #DCE2EC, badge #F1F3F7 with #1B2029 padlock | same |
+| Locked state (icon only) | tile #5F6368, white mark | same |
 
 The mark is one flat color. Only these colors; do not tint it or add a gradient.
 
