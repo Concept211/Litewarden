@@ -5,7 +5,8 @@
     <meta charset="utf-8" />
     <title>Litewarden</title>
     <style>
-      html, body { width: var(--pw, 380px); height: var(--ph, 600px); }
+      /* :root outranks slip.css's later html,body{height:100%}, which collapses the toolbar popup to one line. */
+      :root, :root body { width: var(--pw, 380px); height: var(--ph, 600px); }
       html.wide, html.wide body, html.popout, html.popout body { width: auto; height: 100vh; }
     </style>
   </head>

@@ -44,6 +44,16 @@ test('first run: server check, sign in, decrypt progress, then the site logins',
   await page.close();
 });
 
+test('popup frame keeps its set size (the toolbar popup sizes itself from it)', async ({ popup }) => {
+  const p = await popup();
+  await p.waitForSelector('#q');
+  // Chrome opens the toolbar popup small and grows it to the page's size, so a height relative to the window collapses.
+  await p.setViewportSize({ width: 380, height: 120 });
+  const size = () => p.evaluate(() => [document.documentElement, document.body].map((e) => `${e.offsetWidth}x${e.offsetHeight}`).join(' '));
+  expect(await size()).toBe('380x600 380x600');
+  await p.close();
+});
+
 test('settings: turn on PIN unlock', async ({ popup }) => {
   const p = await popup();
   await p.click('button[aria-label="Settings"]');
