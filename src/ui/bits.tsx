@@ -119,6 +119,16 @@ export function Tile({ item }: { item: IndexItem }) {
   );
 }
 
+/** The account's picture: its email domain's favicon (Vaultwarden has no avatars), else its first letter. */
+export function Avatar({ email }: { email: string }) {
+  const src = useIcon(email.split('@')[1]?.toLowerCase() || null);
+  return (
+    <span class={`av${src ? ' fav' : ''}`} aria-hidden="true">
+      {src ? <img src={src} alt="" /> : (email[0] ?? '?').toUpperCase()}
+    </span>
+  );
+}
+
 // ---------- toast ----------
 
 export interface ToastState {

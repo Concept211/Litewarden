@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // One user's session, in order: first run on the 2,000+ item vault, PIN, fill on every corpus page, copy and
 // clipboard clearing, search, lock and unlock, a killed service worker, the server going away, and timing.
+import fs from 'node:fs';
+import path from 'node:path';
 import type { Page } from '@playwright/test';
 import { totp } from '../../src/core/totp';
 import { CORPUS_PORT, OTHER, e2eCreds } from './accounts';
 import { ensureFolders } from './inpage-helpers';
-import { expect, test } from './fixtures';
+import { EXT, expect, test } from './fixtures';
 import { clipboard, finishFirstRun, shot, signIn, signOut, testServer, watchErrors, budget } from './helpers';
 
 test.describe.configure({ mode: 'serial' });
@@ -358,6 +360,31 @@ test('lock and unlock: PIN (wrong, then right), master password (wrong, then rig
   await expect(p.locator('#q')).toBeVisible();
   await p.close();
   await page.close();
+});
+
+test("unlock screen: the account's picture is its email domain's favicon, from the user's server", async ({ popup, corpus, ctx, sw }) => {
+  // The test servers don't download icons (every domain gets the fallback), so serve one for the email's domain.
+  const domain = creds.main.email.split('@')[1]!;
+  const fav = fs.readFileSync(path.join(EXT, 'icon', '32.png'));
+  const seen: string[] = [];
+  await ctx.route(`**/icons/${domain}/icon.png`, (r) => (seen.push(r.request().url()), r.fulfill({ status: 200, contentType: 'image/png', body: fav })));
+  try {
+    // Favicons are cached for the browser session; earlier tests cached "no icon" for this domain.
+    await (await sw()).evaluate(() => chrome.storage.session.remove('iconCache'));
+    const page = await corpus('stacked.html');
+    const p = await popup(page);
+    await p.click('button[aria-label="Lock"]');
+    await expect(p.locator('.acct .av.fav img')).toBeVisible();
+    expect(seen[0]).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/icons\//); // the user's own server, nobody else
+    await expect(p.locator('.acct .av')).not.toContainText(/\w/);
+    await shot(p, 'unlock-avatar-light');
+    await p.keyboard.type('135790');
+    await expect(p.locator('#q')).toBeVisible({ timeout: 15_000 });
+    await p.close();
+    await page.close();
+  } finally {
+    await ctx.unroute(`**/icons/${domain}/icon.png`);
+  }
 });
 
 test('Lock right as the popup opens stays locked: nothing writes the session or index back', async ({ popup, corpus, sw }) => {
