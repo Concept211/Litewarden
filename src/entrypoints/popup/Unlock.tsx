@@ -132,7 +132,7 @@ export function Unlock({ boot: b, onUnlocked, onLoggedOut }: { boot: Boot; onUnl
               <span class="l">
                 PIN<small>6 digits</small>
               </span>
-              <CodeBoxes cls="pin" label="PIN" value={pin} onChange={setPin} autoFocus disabled={busy} onComplete={(v) => void unlock('pin', v)} />
+              <CodeBoxes cls="pin" mask label="PIN" value={pin} onChange={setPin} autoFocus disabled={busy} onComplete={(v) => void unlock('pin', v)} />
               <span class="f-msg">
                 {err ? <CircleAlert /> : <Info />}
                 <span>

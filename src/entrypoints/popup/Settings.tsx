@@ -526,9 +526,9 @@ export function SettingsView({ boot: b, onBack, onLoggedOut }: { boot: Boot; onB
             <p>{pin1.length < 6 ? 'Pick a PIN you don’t use anywhere else.' : 'Type it once more.'}</p>
             <div class={`field${pinErr ? ' err' : ''}`}>
               {pin1.length < 6 ? (
-                <CodeBoxes cls="pin" label="New PIN" value={pin1} onChange={(v) => (setPin1(v), setPinErr(null))} autoFocus />
+                <CodeBoxes cls="pin" mask label="New PIN" value={pin1} onChange={(v) => (setPin1(v), setPinErr(null))} autoFocus />
               ) : (
-                <CodeBoxes key="again" cls="pin" label="Repeat PIN" value={pin2} onChange={(v) => (setPin2(v), setPinErr(null))} autoFocus />
+                <CodeBoxes key="again" cls="pin" mask label="Repeat PIN" value={pin2} onChange={(v) => (setPin2(v), setPinErr(null))} autoFocus />
               )}
               {pinErr && <span class="f-msg">{pinErr}</span>}
             </div>

@@ -66,7 +66,16 @@ test('settings: turn on PIN unlock', async ({ popup }) => {
   await p.keyboard.type('135790');
   await expect(p.locator('.sheet')).toContainText('Type it once more');
   await expect(p.locator('input[aria-label="Repeat PIN digit 1"]')).toBeFocused();
-  await p.keyboard.type('135790');
+  // Each digit shows briefly as it's typed, then turns into a dot.
+  const box = (n: number) => p.locator(`input[aria-label="Repeat PIN digit ${n}"]`);
+  await p.keyboard.type('13');
+  await expect(box(1)).toHaveClass(/masked/);
+  await expect(box(2)).not.toHaveClass(/masked/);
+  await shot(p, 'settings-pin-reveal');
+  await expect(box(2)).toHaveClass(/masked/, { timeout: 2000 });
+  expect(await box(2).evaluate((el) => getComputedStyle(el).getPropertyValue('-webkit-text-security'))).toBe('disc');
+  await p.keyboard.type('5790');
+  await shot(p, 'settings-pin-masked');
   await p.click('button:has-text("Turn on PIN")');
   await expect(p.locator('#toast')).toContainText('PIN unlock is on');
   await shot(p, 'settings-light');

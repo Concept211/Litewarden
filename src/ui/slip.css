@@ -264,6 +264,7 @@ html.is-menu,html.is-menu body{background:transparent!important}
 .or{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;margin:6px 0 2px}.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
 .pin{display:flex;gap:7px;justify-content:center;margin:6px 0 2px}
 .pin input{width:42px;height:50px;text-align:center;font:600 22px var(--mono);border:1.5px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);outline:none}
+.pin input.masked{-webkit-text-security:disc}
 .pin input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-tint)}
 .field.err .pin input{border-color:var(--low)}
 .wait{font-family:var(--mono)}

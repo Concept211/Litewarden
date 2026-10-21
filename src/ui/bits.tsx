@@ -202,6 +202,7 @@ export function CodeBoxes({
   label,
   autoFocus,
   disabled,
+  mask,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -210,8 +211,13 @@ export function CodeBoxes({
   label: string;
   autoFocus?: boolean;
   disabled?: boolean;
+  /** A PIN: each digit shows briefly as it's typed, then turns into a dot. */
+  mask?: boolean;
 }) {
   const refs = useRef<Array<HTMLInputElement | null>>([]);
+  const [shown, setShown] = useState(-1);
+  const shownTimer = useRef(0);
+  useEffect(() => () => clearTimeout(shownTimer.current), []);
   // Focus on mount, and again when the boxes come back from disabled (a wrong PIN clears and re-enables them).
   useEffect(() => {
     if (autoFocus && !disabled) refs.current[Math.min(value.length, 5)]?.focus();
@@ -222,6 +228,11 @@ export function CodeBoxes({
   }, [value === '']);
   const set = (v: string) => {
     const clean = v.replace(/\D/g, '').slice(0, 6);
+    if (mask) {
+      clearTimeout(shownTimer.current);
+      setShown(clean.length > value.length ? clean.length - 1 : -1);
+      shownTimer.current = window.setTimeout(() => setShown(-1), 800);
+    }
     onChange(clean);
     refs.current[Math.min(clean.length, 5)]?.focus();
     if (clean.length === 6) onComplete?.(clean);
@@ -231,6 +242,7 @@ export function CodeBoxes({
       {[0, 1, 2, 3, 4, 5].map((i) => (
         <input
           key={i}
+          class={mask && i !== shown ? 'masked' : undefined}
           ref={(el) => {
             refs.current[i] = el;
           }}
