@@ -14,7 +14,7 @@ const KEEP =
   'M65 10L79.667 10A2 2 0 0 1 81.667 12L81.667 24A2 2 0 0 0 83.667 26L88.667 26A2 2 0 0 0 90.667 24L90.667 12A2 2 0 0 1 92.667 10L107.333 10A2 2 0 0 1 109.333 12L109.333 24A2 2 0 0 0 111.333 26L116.333 26A2 2 0 0 0 118.333 24L118.333 12A2 2 0 0 1 120.333 10L135 10A2 2 0 0 1 137 12L137 53.172A2 2 0 0 1 136.414 54.586L114.101 76.899A14 14 0 0 0 110 86.799L110 99.431A14 14 0 0 0 117 111.555A34 34 0 1 1 83 111.555A14 14 0 0 0 90 99.431L90 86.799A14 14 0 0 0 85.899 76.899L63.586 54.586A2 2 0 0 1 63 53.172L63 12A2 2 0 0 1 65 10ZM81 141A19 19 0 1 0 119 141A19 19 0 1 0 81 141Z';
 
 const CSS = `
-.ic{position:fixed;width:22px;height:22px;border-radius:6px;border:0;padding:0;margin:0;display:grid;place-items:center;background:#1252a3;color:#fff;cursor:pointer;pointer-events:auto;box-sizing:border-box;z-index:1}
+.ic{position:fixed;width:22px;height:22px;border-radius:3px;border:0;box-shadow:0 0 0 1.5px #fff,0 1px 3px rgb(0 0 0/.35);padding:0;margin:0;display:grid;place-items:center;background:#1252a3;color:#fff;cursor:pointer;pointer-events:auto;box-sizing:border-box;z-index:1}
 .ic:hover{background:#0d3c77}.ic.locked{background:#5b6474}.ic.locked:hover{background:#454d5b}
 .ic:focus-visible{outline:2px solid #1252a3;outline-offset:2px}
 .ic svg{height:64%;width:auto;display:block}
