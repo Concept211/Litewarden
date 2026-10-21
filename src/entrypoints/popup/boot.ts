@@ -31,6 +31,8 @@ export interface Boot {
   kdfDismissed: boolean;
   /** Opened as the pop-out window: it stays open and follows the active tab of the browser window behind it. */
   popout: boolean;
+  /** The list's folder filter (see LocalStore.listFolder). */
+  listFolder: string;
 }
 
 export const isPopout = () => new URLSearchParams(location.search).has('popout');
@@ -56,7 +58,7 @@ export async function targetTab(): Promise<Tab | null> {
 
 export async function boot(): Promise<Boot> {
   const [l, m, tab] = await Promise.all([
-    local.get('account', 'settings', 'lastSync', 'lastSyncError', 'pinWrapped', 'kdfDismissed'),
+    local.get('account', 'settings', 'lastSync', 'lastSyncError', 'pinWrapped', 'kdfDismissed', 'listFolder'),
     // Small keys only: the full index (megabytes for a big vault) is read after the first paint.
     mem.get('session', 'indexCount', 'recentItems', 'tabMatches', 'pinWrapped', 'lockout', 'failures'),
     targetTab(),
@@ -82,6 +84,7 @@ export async function boot(): Promise<Boot> {
     kdfWeak: l.account ? checkKdf(l.account.kdf).reasons : [],
     kdfDismissed: !!l.account && l.kdfDismissed === kdfSignature(l.account.kdf),
     popout: isPopout(),
+    listFolder: l.listFolder ?? 'all',
   };
 }
 

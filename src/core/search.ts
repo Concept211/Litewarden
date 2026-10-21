@@ -10,17 +10,19 @@ export interface SearchDoc {
   urls?: string[];
   /** Optional: only present if the caller chose to index notes. */
   notes?: string | null;
+  /** Folder name: "crypto" finds what's in the Crypto folder. */
+  folder?: string | null;
   favorite?: boolean;
 }
 
-export type Field = 'name' | 'username' | 'url' | 'notes';
+export type Field = 'name' | 'username' | 'url' | 'notes' | 'folder';
 export type Range = [start: number, end: number];
 
 export interface SearchHit<T extends SearchDoc = SearchDoc> {
   doc: T;
   score: number;
   /** Ranges into the original strings. For `url`, keyed by index into doc.urls. */
-  ranges: { name: Range[]; username: Range[]; url: Map<number, Range[]>; notes: Range[] };
+  ranges: { name: Range[]; username: Range[]; url: Map<number, Range[]>; notes: Range[]; folder: Range[] };
 }
 
 /** Lowercase and strip accents one character at a time so indexes still line up with the original. */
@@ -40,6 +42,7 @@ interface Indexed<T> {
   username: string;
   urls: string[];
   notes: string;
+  folder: string;
 }
 
 const isWordStart = (s: string, i: number) => i === 0 || /[\s._@\-/·:()]/.test(s[i - 1]!);
@@ -87,6 +90,7 @@ export class SearchIndex<T extends SearchDoc = SearchDoc> {
       username: fold(doc.username ?? ''),
       urls: (doc.urls ?? []).map(fold),
       notes: fold(doc.notes ?? ''),
+      folder: fold(doc.folder ?? ''),
     }));
   }
 
@@ -107,7 +111,7 @@ export class SearchIndex<T extends SearchDoc = SearchDoc> {
   }
 
   private scoreRow(r: Indexed<T>, tokens: string[]): SearchHit<T> | null {
-    const ranges: SearchHit<T>['ranges'] = { name: [], username: [], url: new Map(), notes: [] };
+    const ranges: SearchHit<T>['ranges'] = { name: [], username: [], url: new Map(), notes: [], folder: [] };
     let score = 0;
     for (const t of tokens) {
       let best = 0;
@@ -128,6 +132,12 @@ export class SearchIndex<T extends SearchDoc = SearchDoc> {
           ranges.url.set(k, [...(ranges.url.get(k) ?? []), [p, p + t.length]]);
         }
       });
+      const f = r.folder.indexOf(t);
+      if (f >= 0) {
+        // Below the item's own fields: a folder holds many items, the name says which one.
+        best = Math.max(best, r.folder.startsWith(t) || isWordStart(r.folder, f) ? 8 : 7);
+        ranges.folder.push([f, f + t.length]);
+      }
       const n = r.notes.indexOf(t);
       if (n >= 0) {
         // An exact hit in the notes beats a fuzzy guess at the name.
@@ -148,6 +158,7 @@ export class SearchIndex<T extends SearchDoc = SearchDoc> {
     ranges.name = merge(ranges.name);
     ranges.username = merge(ranges.username);
     ranges.notes = merge(ranges.notes);
+    ranges.folder = merge(ranges.folder);
     for (const [k, v] of ranges.url) ranges.url.set(k, merge(v));
     return { doc: r.doc, score, ranges };
   }

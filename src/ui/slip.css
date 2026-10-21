@@ -29,6 +29,21 @@ svg.lucide{width:16px;height:16px;stroke-width:1.9}
 .top label:focus-within{border-color:var(--accent)}
 .top input{flex:1;min-width:0;border:0;background:none;font:inherit;font-size:14.5px;color:var(--ink);outline:none}
 .top input::placeholder{color:var(--muted)}
+/* folder rail: chips under the search box, scrolled sideways; the faded edge says there's more */
+.rail{display:flex;gap:6px;padding:0 10px 8px;overflow-x:auto;scrollbar-width:none;flex:none}
+.rail::-webkit-scrollbar{display:none}
+.rail.more-r{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 36px),transparent)}
+.rail.more-l{-webkit-mask-image:linear-gradient(90deg,transparent,#000 36px);mask-image:linear-gradient(90deg,transparent,#000 36px)}
+.rail.more-l.more-r{-webkit-mask-image:linear-gradient(90deg,transparent,#000 36px,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(90deg,transparent,#000 36px,#000 calc(100% - 36px),transparent)}
+.chip{height:28px;padding:0 10px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font-weight:600;font-size:12.5px;display:inline-flex;align-items:center;gap:5px;flex:none;white-space:nowrap}
+.chip:hover{border-color:var(--muted)}
+.chip svg.lucide{width:13px;height:13px;color:var(--muted)}
+.chip .lbl{max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.chip .n{font-family:var(--mono);font-size:10.5px;font-weight:400;color:var(--muted)}
+.chip.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.chip.on svg.lucide,.chip.on .n{color:inherit}.chip.on .n{opacity:.8}
+.un .fd{display:inline-flex;align-items:center;gap:3px;vertical-align:bottom}
+.un .fd svg.lucide{width:11px;height:11px;flex:none}
 .ib{width:32px;height:32px;display:grid;place-items:center;border-radius:50%;color:var(--muted)}
 .ib:hover{background:var(--raised);color:var(--ink)}
 .ib.done{background:var(--accent);color:var(--accent-ink)}
@@ -87,7 +102,7 @@ a.btn{text-decoration:none}
 #confirm{position:absolute;left:8px;right:8px;bottom:8px;background:var(--surface);padding:13px;display:none;z-index:5;border-radius:var(--r-card);box-shadow:0 8px 30px rgb(var(--shadow-c)/.25);border:1.5px solid var(--line)}#confirm.show{display:block}#confirm p{margin:0 0 12px}
 .c-actions{display:flex;gap:8px;justify-content:flex-end}.c-actions button{height:34px;padding:0 15px;border-radius:999px;font-weight:700;background:var(--raised)}.c-actions .c-ok{background:var(--accent);color:var(--accent-ink)}
 #help{position:absolute;inset:0;background:rgb(0 0 0/.4);display:none;z-index:6;align-items:flex-end;padding:8px}#help.open{display:flex}
-.h-card{background:var(--surface);width:100%;border-radius:var(--r-card);padding:12px 14px}
+.h-card{background:var(--surface);width:100%;border-radius:var(--r-card);padding:12px 14px;max-height:100%;overflow:auto;scrollbar-width:thin}
 .h-head{display:flex;justify-content:space-between;align-items:center;font-size:14px;margin-bottom:4px}
 .h-row{display:flex;gap:10px;height:30px;align-items:center}.h-keys{width:118px;flex:none}
 kbd{font-family:var(--mono);font-size:11px;background:var(--raised);border-radius:5px;padding:1px 5px;margin-right:3px}

@@ -145,6 +145,8 @@ export interface LocalStore {
   popoutBounds?: { left: number; top: number; width: number; height: number } | null;
   /** "Teach this site" rules, by hostname. Stay on this device. */
   siteRules?: Record<string, SiteRule>;
+  /** The popup list's folder filter: 'all', 'none' (items in no folder) or a folder id. Stays until changed. */
+  listFolder?: string;
 }
 
 /** One Litewarden surface drawn on a page (menu, save prompt, teach panel), known by a random token. */

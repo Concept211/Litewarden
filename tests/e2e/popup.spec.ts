@@ -4,6 +4,7 @@
 import type { Page } from '@playwright/test';
 import { totp } from '../../src/core/totp';
 import { CORPUS_PORT, OTHER, e2eCreds } from './accounts';
+import { ensureFolders } from './inpage-helpers';
 import { expect, test } from './fixtures';
 import { clipboard, finishFirstRun, shot, signIn, signOut, testServer, watchErrors, budget } from './helpers';
 
@@ -264,6 +265,68 @@ test('search: notes match, keyboard copy, highlight, help overlay, no results', 
   await shot(p, 'help-light', 1);
   await p.keyboard.press('Escape');
   await expect(p.locator('#help.open')).toHaveCount(0);
+  await p.close();
+  await page.close();
+});
+
+test('folders: the rail filters the list and search, sticks across opens, Alt+arrows step; site cards stay', async ({ popup, corpus }) => {
+  await ensureFolders();
+  const page = await corpus('stacked.html');
+  let p = await popup(page);
+  watchErrors(p, errors);
+  await p.click('button[aria-label="Sync now"]');
+  await expect(p.locator('#toast')).toContainText('Vault synced');
+  const rail = p.locator('.rail');
+  await expect(rail.locator('.chip')).toHaveText([/^All\s*[\d,]+$/, /E2E Crypto\s*1$/, /E2E Rental\s*1$/, /^No folder\s*[\d,]+$/]);
+  await expect(rail.locator('.chip.on')).toHaveText(/^All/);
+  // The unfiltered list names the folder in place of the site.
+  await p.fill('#q', 'carol');
+  await expect(p.locator('.row').first().locator('.un')).toContainText('carol@frames.test');
+  await p.fill('#q', 'rental');
+  await expect(p.locator('.row').first()).toContainText('Frames · Carol');
+  await expect(p.locator('.row').first().locator('.fd mark')).toHaveText('Rental');
+  await p.fill('#q', '');
+  await shot(p, 'folders-all-light', 1);
+
+  await rail.locator('.chip', { hasText: 'E2E Crypto' }).click();
+  await expect(p.locator('#q')).toBeFocused();
+  await expect(p.locator('#q')).toHaveAttribute('placeholder', 'Search E2E Crypto');
+  // This site's logins still show on top (Bob isn't in the folder); below, only the folder.
+  await expect(p.locator('.card')).toHaveCount(2);
+  await expect(p.locator('div.sec', { hasText: 'Recently used' })).toHaveCount(0);
+  await expect(p.locator('div.sec').last()).toHaveText(/E2E Crypto\s*1/);
+  await expect(p.locator('.list .row')).toHaveCount(1);
+  await expect(p.locator('.list .row')).toContainText('Corpus · Alice');
+  await shot(p, 'folders-picked-light', 1);
+  // Search stays inside the folder, with a way out.
+  await p.keyboard.type('bob');
+  await expect(p.locator('.nomatch')).toContainText('in E2E Crypto');
+  await p.click('button:has-text("Search all folders")');
+  await expect(rail.locator('.chip.on')).toHaveText(/^All/);
+  await expect(p.locator('.row').first()).toContainText('Corpus · Bob');
+  await p.fill('#q', '');
+  await rail.locator('.chip', { hasText: 'E2E Rental' }).click();
+  await p.close();
+
+  // The pick sticks for the next popup; Alt+arrows step through the rail and wrap.
+  p = await popup(page);
+  await expect(p.locator('.rail .chip.on')).toHaveText(/E2E Rental/);
+  await expect(p.locator('.list .row')).toHaveCount(1);
+  await p.keyboard.press('Alt+ArrowRight');
+  await expect(p.locator('.rail .chip.on')).toHaveText(/^No folder/);
+  await p.keyboard.press('Alt+ArrowRight');
+  await expect(p.locator('.rail .chip.on')).toHaveText(/^All/);
+  await p.keyboard.press('Alt+ArrowLeft');
+  await expect(p.locator('.rail .chip.on')).toHaveText(/^No folder/);
+  // Enter still fills this site's first login with a folder picked.
+  await p.keyboard.press('Enter');
+  await expect(page.locator('#u')).toHaveValue(/alice|bob/);
+  await p.close().catch(() => {});
+
+  // Back to All for the tests after this one.
+  p = await popup();
+  await p.locator('.rail .chip', { hasText: 'All' }).click();
+  await expect(p.locator('.rail .chip.on')).toHaveText(/^All/);
   await p.close();
   await page.close();
 });

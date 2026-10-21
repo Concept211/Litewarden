@@ -148,4 +148,16 @@ describe('search ranking regressions', () => {
     expect(idx.search('blue folder')[0]!.doc.id).toBe('notes');
     expect(idx.search('blue').map((h) => h.doc.id)).toEqual(['notes']);
   });
+
+  it('folder names match, below a hit on the item itself, and combine with other words', () => {
+    const idx = new SearchIndex([
+      { id: 'ledger', name: 'affiliate.ledger.com', folder: 'Crypto' },
+      { id: 'coinbase', name: 'coinbase.com', username: 'me@x.test', folder: 'Crypto' },
+      { id: 'named', name: 'Crypto tax notes' },
+      { id: 'rent', name: 'zillow.com', folder: 'Rental' },
+    ]);
+    expect(idx.search('crypto').map((h) => h.doc.id)).toEqual(['named', 'coinbase', 'ledger']);
+    expect(idx.search('crypto coin').map((h) => h.doc.id)).toEqual(['coinbase']);
+    expect(idx.search('rent')[0]!.ranges.folder).toEqual([[0, 4]]);
+  });
 });

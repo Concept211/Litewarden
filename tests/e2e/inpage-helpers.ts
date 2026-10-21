@@ -174,3 +174,27 @@ export async function createLogins(items: Array<{ name: string; username: string
     await api.createCipher(body as Record<string, unknown>);
   }
 }
+
+/**
+ * Two folders on the main e2e account, with corpus logins in them: "E2E Crypto" holds Alice, "E2E Rental" holds
+ * Carol; Bob and the generated items stay in no folder. Safe to run again (finds the folders by name).
+ */
+export async function ensureFolders(): Promise<{ crypto: string; rental: string }> {
+  const c = e2eCreds();
+  const { api, userKey } = await loginAccount(serverUrl(VERSION), { ...c.main, kdf: { kdf: 0, kdfIterations: 600000, kdfMemory: null, kdfParallelism: null } });
+  const sync = await api.sync();
+  const byName = new Map<string, string>();
+  for (const f of sync.folders ?? []) byName.set((await C.decryptString(f.name, userKey).catch(() => null)) ?? '', f.id);
+  const folder = async (name: string) => byName.get(name) ?? (await api.req<{ id: string }>('POST', '/api/folders', { json: { name: await C.encryptString(name, userKey) } })).id;
+  const crypto = await folder('E2E Crypto');
+  const rental = await folder('E2E Rental');
+  const ids: Record<string, string> = {};
+  for (const x of sync.ciphers) {
+    if (x.deletedDate) continue;
+    const name = await C.decryptString(x.name, userKey).catch(() => '');
+    if (name === 'Corpus · Alice' || name === 'Frames · Carol') ids[name] = x.id;
+  }
+  await api.req('PUT', '/api/ciphers/move', { json: { ids: [ids['Corpus · Alice']], folderId: crypto } });
+  await api.req('PUT', '/api/ciphers/move', { json: { ids: [ids['Frames · Carol']], folderId: rental } });
+  return { crypto, rental };
+}

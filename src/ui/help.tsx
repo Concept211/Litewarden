@@ -5,9 +5,10 @@ export const HELP: Array<[string, Array<[string, string]>]> = [
   [
     'In the popup',
     [
-      ['type', 'Search names, usernames, sites, notes'],
+      ['type', 'Search names, usernames, sites, notes, folders'],
       ['↑ ↓', 'Move'],
       ['Enter', 'Fill the selected login'],
+      ['Alt ← →', 'Previous or next folder'],
       ['Alt U', 'Copy username'],
       ['Alt P', 'Copy password'],
       ['Alt T', 'Copy 2FA code'],

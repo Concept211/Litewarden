@@ -3,10 +3,10 @@
 // Enter fills the selected login, a click fills, the stubs copy. Edit is a separate control.
 import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { AppWindow, CloudOff, ShieldAlert, Keyboard, KeyRound, Lock, NotebookText, Pencil, Plus, RefreshCw, Search, Settings, Timer, User, X } from 'lucide-preact';
+import { AppWindow, CloudOff, Folder as FolderIcon, ShieldAlert, Keyboard, KeyRound, Lock, NotebookText, Pencil, Plus, RefreshCw, Search, Settings, Timer, User, X } from 'lucide-preact';
 import { SearchIndex, type Range, type SearchHit } from '../../core/search';
 import { secondsRemaining, totp } from '../../core/totp';
-import { RemoteError, send, type FillResult } from '../../shared/messages';
+import { RemoteError, send, type FillResult, type Folder } from '../../shared/messages';
 import { clipHash } from '../../shared/cliphash';
 import { kdfSignature } from '../../core/kdf';
 import { local, mem, type IndexItem } from '../../shared/store';
@@ -21,6 +21,7 @@ interface Doc {
   username: string | null;
   urls: string[];
   notes: string | null;
+  folder: string | null;
   favorite: boolean;
   item: IndexItem;
 }
@@ -59,6 +60,48 @@ function notesSnippet(notes: string, ranges: Range[]): { text: string; ranges: R
   }
   const line = notes.slice(start).split('\n')[0] ?? '';
   return { text: (start > 0 ? '…' : '') + line, ranges: ranges.map(([a, b]) => [a - start + (start > 0 ? 1 : 0), b - start + (start > 0 ? 1 : 0)] as Range).filter(([a]) => a >= 0 && a < line.length + 1) };
+}
+
+interface Chip {
+  key: string;
+  label: string;
+  n: number;
+}
+
+/** The folder rail under the search box: All, each folder, then No folder. Scrolls sideways (the wheel too). */
+function Rail({ chips, pick, onPick }: { chips: Chip[]; pick: string; onPick: (key: string) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [edge, setEdge] = useState({ l: false, r: false });
+  const measure = () => {
+    const el = ref.current;
+    if (el) setEdge({ l: el.scrollLeft > 2, r: el.scrollLeft + el.clientWidth < el.scrollWidth - 2 });
+  };
+  useEffect(() => {
+    ref.current?.querySelector('.on')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    measure();
+  }, [pick, chips.length]);
+  return (
+    <div
+      ref={ref}
+      class={`rail${edge.l ? ' more-l' : ''}${edge.r ? ' more-r' : ''}`}
+      role="tablist"
+      aria-label="Folders"
+      onScroll={measure}
+      onWheel={(e) => {
+        if (!ref.current || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+        ref.current.scrollLeft += e.deltaY;
+        e.preventDefault();
+      }}
+    >
+      {chips.map((c) => (
+        <button class={`chip${c.key === pick ? ' on' : ''}`} role="tab" aria-selected={c.key === pick} data-folder={c.key} title={c.label} onClick={() => onPick(c.key)}>
+          {c.key !== 'all' && c.key !== 'none' && <FolderIcon />}
+          <span class="lbl">{c.label}</span>
+          <span class="n">{c.n.toLocaleString()}</span>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 /** What the new-login form starts from: the site in the tab, if any. */
@@ -107,6 +150,14 @@ export function Main({
   const [kdfHidden, setKdfHidden] = useState(b.kdfDismissed);
   const [sync, setSync] = useState({ at: b.lastSync, err: b.lastSyncError, busy: false });
   const [notes, setNotes] = useState<Record<string, string> | null>(null);
+  const [folders, setFolders] = useState<Folder[] | null>(null);
+  const [pick, setPickRaw] = useState(b.listFolder);
+  const setPick = (f: string) => {
+    setPickRaw(f);
+    setSel(0);
+    void local.set({ listFolder: f });
+  };
+  const loadFolders = () => void send('folders').then(setFolders).catch(() => {});
   const { toast, show, hide } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const secrets = useRef<Record<string, string>>({});
@@ -126,11 +177,15 @@ export function Main({
     performance.mark('lw-interactive');
     if (flashMsg) show(flashMsg);
     // The full index (search, counts) loads right after the first paint.
-    setTimeout(() => void mem.get('index').then((r) => setIndex(r.index ?? [])), 0);
+    setTimeout(() => {
+      void mem.get('index').then((r) => setIndex(r.index ?? []));
+      loadFolders();
+    }, 0);
     const onStore = (ch: Record<string, chrome.storage.StorageChange>, area: string) => {
       if (area === 'session' && ch.index?.newValue) {
         setIndex(ch.index.newValue as IndexItem[]);
         setCount((ch.index.newValue as IndexItem[]).length);
+        loadFolders();
         // The vault changed (sync, a live update, an edit): re-match this page. The worker does the same for the
         // active tab, but the pop-out's page and a test's target tab aren't always the active one.
         const t = tabRef.current;
@@ -178,26 +233,49 @@ export function Main({
     };
   }, []);
 
+  // ----- folders: the rail filters the list and search; this site's cards always show -----
+  const folderName = useMemo(() => new Map((folders ?? []).map((f) => [f.id, f.name])), [folders]);
+  const folderCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const it of index ?? []) m.set(it.folderId ?? 'none', (m.get(it.folderId ?? 'none') ?? 0) + 1);
+    return m;
+  }, [index]);
+  useEffect(() => document.getElementById('list')?.scrollTo(0, 0), [pick]);
+  // A folder deleted elsewhere: back to everything.
+  useEffect(() => {
+    if (folders && pick !== 'all' && pick !== 'none' && !folderName.has(pick)) setPick('all');
+  }, [folders]);
+  const inPick = (it: IndexItem) => pick === 'all' || (pick === 'none' ? !it.folderId : it.folderId === pick);
+  const pickName = pick === 'all' ? null : pick === 'none' ? 'No folder' : (folderName.get(pick) ?? 'Folder');
+  const chips: Chip[] = folders?.length
+    ? [
+        { key: 'all', label: 'All', n: count },
+        ...folders.map((f) => ({ key: f.id, label: f.name, n: folderCounts.get(f.id) ?? 0 })),
+        ...(folderCounts.get('none') || pick === 'none' ? [{ key: 'none', label: 'No folder', n: folderCounts.get('none') ?? 0 }] : []),
+      ]
+    : [];
+
   const matches = site0;
   const siteItems = site0 ?? [];
   const recentItems = useMemo(() => {
+    if (pick !== 'all') return [];
     const skip = new Set(siteItems.map((i) => i.id));
     return b.recentItems.filter((x) => !skip.has(x.id)).slice(0, 5);
-  }, [siteItems]);
+  }, [siteItems, pick]);
 
   // ----- search (built on first keystroke; notes load then too) -----
   const searchIndex = useMemo(() => {
     if (!query.trim() || !index) return null;
-    const docs: Doc[] = index.map((it) => ({ id: it.id, name: it.name, username: it.username ?? it.subtitle ?? null, urls: it.hosts, notes: notes?.[it.id] ?? null, favorite: it.favorite, item: it }));
+    const docs: Doc[] = index.map((it) => ({ id: it.id, name: it.name, username: it.username ?? it.subtitle ?? null, urls: it.hosts, notes: notes?.[it.id] ?? null, folder: it.folderId ? (folderName.get(it.folderId) ?? null) : null, favorite: it.favorite, item: it }));
     return new SearchIndex(docs);
-  }, [index, notes, !!query.trim()]);
+  }, [index, notes, folderName, !!query.trim()]);
   useEffect(() => {
     if (query.trim() && notes == null) void mem.get('notes').then((r) => setNotes(r.notes ?? {}));
   }, [query]);
-  const hits = useMemo(() => (searchIndex && query.trim() ? searchIndex.search(query) : []), [searchIndex, query]);
+  const hits = useMemo(() => (searchIndex && query.trim() ? searchIndex.search(query).filter((h) => inPick(h.doc.item)) : []), [searchIndex, query, pick]);
 
   // Below this site's cards and the recents: every item A to Z (virtualized), so the popup is never a void.
-  const allItems = index ?? [];
+  const allItems = useMemo(() => (pick === 'all' ? (index ?? []) : (index ?? []).filter(inPick)), [index, pick]);
   const flat: Entry[] = query.trim() ? hits.slice(0, 60).map((h) => ({ item: h.doc.item, hit: h })) : [...siteItems, ...recentItems, ...allItems].map((item) => ({ item }));
   const selIdx = Math.min(sel, flat.length - 1);
 
@@ -330,11 +408,18 @@ export function Main({
     return fill(c.item, c.kind === 'site' ? { force: true } : { force: true, allowFrame: true });
   }
 
-  const live = useRef({ help, confirm, flat, selIdx, query, fill, copy, open });
-  live.current = { help, confirm, flat, selIdx, query, fill, copy, open };
+  /** Alt+Left / Alt+Right: the previous or next folder on the rail, wrapping around. */
+  function stepFolder(d: number) {
+    if (!chips.length) return;
+    const i = chips.findIndex((c) => c.key === pick);
+    setPick(chips[(i + d + chips.length) % chips.length]!.key);
+  }
+
+  const live = useRef({ help, confirm, flat, selIdx, query, fill, copy, open, stepFolder });
+  live.current = { help, confirm, flat, selIdx, query, fill, copy, open, stepFolder };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const { help, confirm, flat, selIdx, query, fill, copy, open } = live.current;
+      const { help, confirm, flat, selIdx, query, fill, copy, open, stepFolder } = live.current;
       if (help && (e.key === 'Escape' || e.key === '?')) {
         e.preventDefault();
         return setHelp(false);
@@ -349,6 +434,10 @@ export function Main({
           return setConfirm(null);
         }
         return;
+      }
+      if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        return stepFolder(e.key === 'ArrowRight' ? 1 : -1);
       }
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
@@ -445,6 +534,14 @@ export function Main({
     const r = hit?.ranges;
     const notesOnly = !!(r && r.notes.length && !r.name.length && !r.username.length && !r.url.size && notes?.[item.id]);
     const snip = notesOnly ? notesSnippet(notes![item.id]!, r!.notes) : null;
+    // The folder shows in place of the site when it helps: a search that matched it, or the unfiltered list.
+    const fname = item.folderId ? folderName.get(item.folderId) : undefined;
+    const fd = fname && (r ? r.folder.length > 0 : pick === 'all') ? (
+      <span class="fd">
+        <FolderIcon />
+        <Hl text={fname} ranges={r?.folder} />
+      </span>
+    ) : null;
     return (
       <div class={`row${isSel(i) ? ' is-sel' : ''}`} data-row data-id={item.id} style={style} onClick={() => (setSel(i), login ? void fill(item) : open(item))}>
         <Tile item={item} />
@@ -456,11 +553,15 @@ export function Main({
             {login ? (
               <>
                 {item.username && <Hl text={item.username} ranges={r?.username} />}
-                {item.username && item.hosts[0] && ' · '}
-                {item.hosts[0] && <Hl text={item.hosts[0]} ranges={r?.url.get(0)} />}
+                {item.username && (fd || item.hosts[0]) && ' · '}
+                {fd ?? (item.hosts[0] && <Hl text={item.hosts[0]} ranges={r?.url.get(0)} />)}
               </>
             ) : (
-              sub[0]
+              <>
+                {sub[0]}
+                {fd && ' · '}
+                {fd}
+              </>
             )}
           </div>
           {snip && (
@@ -520,7 +621,7 @@ export function Main({
       <>
         <div class="sec">
           <span>
-            {hits.length.toLocaleString()} {hits.length === 1 ? 'match' : 'matches'} <span class="q">for “{query.trim()}”</span>
+            {hits.length.toLocaleString()} {hits.length === 1 ? 'match' : 'matches'} <span class="q">for “{query.trim()}”{pickName ? ` in ${pickName}` : ''}</span>
           </span>
           <span>{hits.length > 60 ? 'top 60' : ''}</span>
         </div>
@@ -529,8 +630,15 @@ export function Main({
     ) : (
       <div class="empty nomatch">
         <h3>No match for “{query.trim()}”</h3>
-        <p>Searched names, usernames, sites{notes ? ' and notes' : ''} in {count.toLocaleString()} items. Check the spelling.</p>
+        <p>
+          Searched names, usernames, sites{notes ? ', notes' : ''} and folders in {pickName ? `${pickName} (${allItems.length.toLocaleString()} items)` : `${count.toLocaleString()} items`}. Check the spelling.
+        </p>
         <div class="nm-acts">
+          {pickName && (
+            <button class="btn" onClick={() => (setPick('all'), inputRef.current?.focus())}>
+              Search all folders
+            </button>
+          )}
           <button class="btn sec" onClick={() => (setQuery(''), inputRef.current?.focus())}>
             Clear search
           </button>
@@ -567,10 +675,22 @@ export function Main({
             <div class="list">{recentItems.map((item, k) => row({ item }, siteItems.length + k))}</div>
           </>
         )}
+        {pickName && !allItems.length && index && (
+          <>
+            <div class="sec">
+              <span>{pickName}</span>
+              <span>0</span>
+            </div>
+            <div class="empty">
+              <h3>{pick === 'none' ? 'Every item is in a folder' : `${pickName} is empty`}</h3>
+              <p>Move items here from the item editor (Folder) or the web vault.</p>
+            </div>
+          </>
+        )}
         {allItems.length > 0 && (
           <>
             <div class="sec">
-              <span>All items</span>
+              <span>{pickName ?? 'All items'}</span>
               <span>{allItems.length.toLocaleString()}</span>
             </div>
             <VList
@@ -595,7 +715,7 @@ export function Main({
           <input
             id="q"
             ref={inputRef}
-            placeholder={count ? `Search ${count.toLocaleString()} items` : 'Search'}
+            placeholder={pickName ? `Search ${pickName}` : count ? `Search ${count.toLocaleString()} items` : 'Search'}
             aria-label="Search vault"
             autocomplete="off"
             spellcheck={false}
@@ -620,6 +740,7 @@ export function Main({
           </button>
         )}
       </div>
+      {chips.length > 0 && <Rail chips={chips} pick={pick} onPick={(k) => (setPick(k), inputRef.current?.focus())} />}
       <div id="list">
         {sync.err && (
           <div class="warn">

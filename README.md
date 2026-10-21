@@ -50,7 +50,8 @@ on self-hosted servers. Litewarden is a smaller client that does the everyday th
 - **Popup**
   - Logins for the current site on top, one card each. Click or press Enter to fill.
   - Copy buttons for username, password and the live 2FA code on every card.
-  - Search across names, usernames, websites and notes, with the matches highlighted.
+  - Search across names, usernames, websites, notes and folders, with the matches highlighted.
+  - Your folders as a row of chips under the search box. One click shows just that folder, and the choice sticks.
   - A list of recently used items, or everything A to Z on a fresh install.
 - **Autofill**
   - Reads `autocomplete` attributes first, then looks at labels and layout. Handles two-step logins (username page,
@@ -122,6 +123,7 @@ Then in Chrome (or Brave, or Edge):
 | In a login field | Alt+Shift+L | Open the in-page menu |
 | Popup | type | Search |
 | Popup | ↑ ↓, Enter | Move, fill the selected login |
+| Popup | Alt+← Alt+→ | Previous or next folder |
 | Popup | Alt+U, Alt+P, Alt+T | Copy username, password, 2FA code |
 | Popup | Alt+E | Open the item |
 | Popup | Esc | Clear the search, then close |
