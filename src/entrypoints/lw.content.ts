@@ -136,11 +136,18 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
    */
   function drop(fr: HTMLIFrameElement, back: HTMLElement | null) {
     if (host && document.activeElement === host) {
-      if (back?.isConnected) back.focus({ preventScroll: true });
+      if (back?.isConnected) focusBack(back);
       else window.focus();
     }
     Object.assign(fr.style, { visibility: 'hidden', pointerEvents: 'none', left: '-9999px' });
     setTimeout(() => fr.remove(), 300);
+  }
+  /** Focus we hand back after closing a surface; "open the menu on focus" must not take it for the user's own. */
+  let handedBack: Element | null = null;
+  function focusBack(el: HTMLElement) {
+    handedBack = el;
+    el.focus({ preventScroll: true });
+    setTimeout(() => handedBack === el && (handedBack = null), 100);
   }
   const put = (el: HTMLElement, r: Rect) => Object.assign(el.style, { left: `${Math.round(r.x)}px`, top: `${Math.round(r.y)}px`, width: `${Math.ceil(r.w)}px`, height: `${Math.ceil(r.h)}px` });
 
@@ -276,8 +283,11 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
   };
 
   // ---------- in-page menu ----------
+  let menuSeq = 0;
   async function openMenu(anchor: HTMLInputElement, focus: boolean) {
     if (teach) return;
+    // Focus and a click on the icon can both open a menu at once: only the latest one shows.
+    const mine = ++menuSeq;
     await activate();
     closeMenu();
     let token: string;
@@ -286,6 +296,8 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
     } catch {
       return;
     }
+    if (mine !== menuSeq) return void cs('cs:closed', { token }).catch(() => {});
+    closeMenu();
     const fr = frame('menu.html', token, 'Litewarden');
     menu = { token, fr, anchor, h: 236 };
     placeMenuFrame();
@@ -530,7 +542,7 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
         e.stopPropagation();
         const a = menu.anchor;
         closeMenu();
-        a.focus();
+        focusBack(a);
         return;
       }
     }
@@ -544,6 +556,7 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
   function onFocus(e: FocusEvent) {
     if (!conf?.menuOnFocus || teach) return;
     const t = e.composedPath()[0];
+    if (t === handedBack) return void (handedBack = null);
     if (t instanceof HTMLInputElement && icons.has(t) && menu?.anchor !== t) void openMenu(t, false);
   }
 

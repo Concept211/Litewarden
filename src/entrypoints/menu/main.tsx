@@ -33,8 +33,8 @@ function Menu() {
       if (d.server) await initIcons(d.server);
       setData(d);
     } catch (e) {
+      // Not "locked": the vault may well be open. Say what failed; Esc and the footer still close the frame.
       setMsg((e as RemoteError).message);
-      setData({ status: 'locked', site: '', items: [], totp: {}, server: null, theme: 'system' });
     }
   }
   useEffect(() => {
@@ -70,7 +70,7 @@ function Menu() {
   }, [data]);
 
   // The frame on the page hugs the menu. Not while filtering: a menu that shrinks as you type would jump around.
-  useAutoSize(token, !!data && !q);
+  useAutoSize(token, (!!data || !!msg) && !q);
 
   useEffect(() => setSel((s) => Math.min(s, Math.max(0, items.length - 1))), [items.length]);
 
@@ -124,7 +124,27 @@ function Menu() {
     return () => document.removeEventListener('keydown', on);
   }, []);
 
-  if (!data) return <div class="menu" ref={root} />;
+  const foot = (
+    <div class="m-foot">
+      <span class="sp">Esc to close</span>
+      <button onClick={(e) => can(e) && void send('surfaceAct', { token, act: 'teach' })}>Wrong fields?</button>
+      <button onClick={(e) => can(e) && void send('surfaceAct', { token, act: 'hide' })}>Hide here</button>
+    </div>
+  );
+  if (!data)
+    return (
+      <div class="menu" ref={root}>
+        {msg && (
+          <>
+            <div class="m-msg">{msg}</div>
+            <div class="m-foot">
+              <span class="sp">Esc to close</span>
+              <button onClick={close}>Close</button>
+            </div>
+          </>
+        )}
+      </div>
+    );
   const locked = data.status !== 'unlocked';
   return (
     <div class="menu" ref={root}>
@@ -171,11 +191,7 @@ function Menu() {
         </div>
       )}
       {msg && <div class="m-msg">{msg}</div>}
-      <div class="m-foot">
-        <span class="sp">Esc to close</span>
-        <button onClick={(e) => can(e) && void send('surfaceAct', { token, act: 'teach' })}>Wrong fields?</button>
-        <button onClick={(e) => can(e) && void send('surfaceAct', { token, act: 'hide' })}>Hide here</button>
-      </div>
+      {foot}
     </div>
   );
 }

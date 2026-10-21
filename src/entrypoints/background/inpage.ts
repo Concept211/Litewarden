@@ -30,6 +30,26 @@ function token(): string {
 
 // ---------- surfaces ----------
 
+/**
+ * Runs read-change-write edits of the surface and prompt records one at a time. Messages arrive concurrently: a
+ * menu's "closed" and the next menu's "open" each read the record before the other wrote it, and the later write
+ * wiped the new menu's token (it then said it had expired and couldn't be closed).
+ */
+let queue: Promise<unknown> = Promise.resolve();
+function serial<T>(fn: () => Promise<T>): Promise<T> {
+  const run = queue.then(fn, fn);
+  queue = run.catch(() => {});
+  return run;
+}
+
+async function editSurfaces(fn: (all: Record<string, Surface>) => void) {
+  await serial(async () => {
+    const all = await surfaces();
+    fn(all);
+    await mem.set({ surfaces: all });
+  });
+}
+
 async function surfaces() {
   const { surfaces: all } = await mem.get('surfaces');
   const now = Date.now();
@@ -40,11 +60,11 @@ async function surfaces() {
 
 async function addSurface(s: Surface): Promise<string> {
   const t = token();
-  const all = await surfaces();
-  // One of each kind per frame: opening a new menu replaces the old one.
-  for (const [k, v] of Object.entries(all)) if (v.tabId === s.tabId && v.frameId === s.frameId && v.kind === s.kind) delete all[k];
-  all[t] = s;
-  await mem.set({ surfaces: all });
+  await editSurfaces((all) => {
+    // One of each kind per frame: opening a new menu replaces the old one.
+    for (const [k, v] of Object.entries(all)) if (v.tabId === s.tabId && v.frameId === s.frameId && v.kind === s.kind) delete all[k];
+    all[t] = s;
+  });
   return t;
 }
 
@@ -56,10 +76,7 @@ async function surface(t: string, sender: chrome.runtime.MessageSender): Promise
 }
 
 async function dropSurface(t: string) {
-  const all = await surfaces();
-  if (!all[t]) return;
-  delete all[t];
-  await mem.set({ surfaces: all });
+  await editSurfaces((all) => void delete all[t]);
 }
 
 export async function toCs(s: { tabId: number; frameId: number }, msg: ToCs) {
@@ -110,10 +127,12 @@ async function pendings() {
 }
 
 async function setPending(t: string, p: PendingSave | null) {
-  const all = await pendings();
-  if (p) all[t] = p;
-  else delete all[t];
-  await mem.set({ pendingSaves: all });
+  await serial(async () => {
+    const all = await pendings();
+    if (p) all[t] = p;
+    else delete all[t];
+    await mem.set({ pendingSaves: all });
+  });
 }
 
 /** Should this submit get a prompt, and which kind? Null: nothing new to save. */
@@ -330,6 +349,9 @@ export const inpageHandlers: ExtHandlers = {
   menuData: ({ token: t }, sender) => menuData(t, sender),
   menuFill: ({ token: t, id, force }, sender) => menuFill(t, id, !!force, sender),
   surfaceAct: async ({ token: t, act, w, h }, sender) => {
+    // A frame whose record is gone (expired, extension updated) can still close: ask every frame of its tab to drop
+    // the frame with this token. Only the page's own content script holds that token, so nothing else reacts.
+    if (act === 'close' && !(await surfaces())[t] && sender.tab?.id != null) return void (await chrome.tabs.sendMessage(sender.tab.id, { lw: 'close', token: t } satisfies ToCs).catch(() => {}));
     const s = await surface(t, sender);
     if (act === 'size') return toCs(s, { lw: 'size', token: t, h: h ?? 0, ...(w ? { w } : {}) });
     await toCs(s, { lw: 'close', token: t });
@@ -389,9 +411,7 @@ export const csHandlers: CsHandlers = {
     if (kind === 'prompt') {
       const p = given ? (await pendings())[given] : null;
       if (!p || p.tabId !== s.tabId) throw new S.UserError('No prompt waiting.');
-      const all = await surfaces();
-      all[given!] = s;
-      await mem.set({ surfaces: all });
+      await editSurfaces((all) => void (all[given!] = s));
       return { token: given! };
     }
     return { token: await addSurface(s) };
@@ -402,11 +422,14 @@ export const csHandlers: CsHandlers = {
     await mem.set({ stepUser: { ...(stepUser ?? {}), [sender.tab!.id!]: { host: hostOf(sender.url!), username, at: Date.now() } } });
   },
   'cs:teachState': async ({ token: t, state }, sender) => {
-    const all = await surfaces();
-    const s = all[t];
-    if (!s || s.tabId !== sender.tab!.id || s.frameId !== sender.frameId) return;
-    all[t] = { ...s, teach: state };
-    await mem.set({ surfaces: all });
+    let mine = false;
+    await editSurfaces((all) => {
+      const s = all[t];
+      if (!s || s.tabId !== sender.tab!.id || s.frameId !== sender.frameId) return;
+      all[t] = { ...s, teach: state };
+      mine = true;
+    });
+    if (!mine) return;
     await chrome.runtime.sendMessage({ event: 'teach-state', token: t, state } satisfies { event: string; token: string; state: TeachState }).catch(() => {});
   },
   'cs:saveRule': async ({ rule }, sender) => {
@@ -435,14 +458,14 @@ export const csHandlers: CsHandlers = {
 
 /** A tab closed: forget its surfaces and prompts. */
 export async function forgetTab(tabId: number) {
-  const all = await surfaces();
-  let changed = false;
-  for (const [k, s] of Object.entries(all)) if (s.tabId === tabId) (delete all[k], (changed = true));
-  if (changed) await mem.set({ surfaces: all });
-  const ps = await pendings();
-  let pc = false;
-  for (const [k, p] of Object.entries(ps)) if (p.tabId === tabId) (delete ps[k], (pc = true));
-  if (pc) await mem.set({ pendingSaves: ps });
+  await editSurfaces((all) => {
+    for (const [k, s] of Object.entries(all)) if (s.tabId === tabId) delete all[k];
+  });
+  await serial(async () => {
+    const ps = await pendings();
+    for (const [k, p] of Object.entries(ps)) if (p.tabId === tabId) delete ps[k];
+    await mem.set({ pendingSaves: ps });
+  });
   const { stepUser } = await mem.get('stepUser');
   if (stepUser?.[tabId]) {
     delete stepUser[tabId];

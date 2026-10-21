@@ -118,6 +118,32 @@ test('menu: Esc closes, the field stays usable, an outside click closes', async 
   await p.close();
 });
 
+test('menu whose record is gone (expired, extension updated): says so, not "locked", and still closes', async ({ ctx, sw }) => {
+  const p = await page(ctx, C('stacked.html'));
+  await expect.poll(async () => (await icons(p)).length).toBe(2);
+  await (await sw()).evaluate(() => chrome.storage.session.set({ surfaces: {} }));
+  // Wipe the record between "open" and the menu's first request: forget every record the moment one is written.
+  await (await sw()).evaluate(() => {
+    const on = (ch: Record<string, chrome.storage.StorageChange>) => {
+      if (ch.surfaces && Object.keys(ch.surfaces.newValue ?? {}).length) void chrome.storage.session.set({ surfaces: {} });
+    };
+    chrome.storage.onChanged.addListener(on);
+    (globalThis as unknown as { __lwOff: () => void }).__lwOff = () => chrome.storage.onChanged.removeListener(on);
+  });
+  await clickIcon(p, '#u');
+  const m = await surface(p, 'menu');
+  await expect(m.locator('.m-msg')).toContainText('expired');
+  await expect(m.locator('text=Litewarden is locked')).toHaveCount(0);
+  await m.locator('button', { hasText: 'Close' }).focus();
+  await p.keyboard.press('Escape');
+  await expect.poll(() => gone(p, 'menu')).toBe(true);
+  await (await sw()).evaluate(() => (globalThis as unknown as { __lwOff: () => void }).__lwOff());
+  // Back to normal: the next menu lists the logins.
+  await clickIcon(p, '#u');
+  await expect((await surface(p, 'menu')).locator('.m-row')).toHaveCount(2);
+  await p.close();
+});
+
 test('menu: Enter fills the first login, arrows pick another, the menu closes', async ({ ctx }) => {
   const p = await page(ctx, C('stacked.html'));
   await expect.poll(async () => (await icons(p)).length).toBe(2);
@@ -429,6 +455,32 @@ test('"open the menu when a field gets focus": off by default; on, focus opens i
   await surface(p, 'menu');
   await p.keyboard.type('abc');
   await expect(p.locator('#u')).toHaveValue('abc');
+  // Moving between the fields fast, and focus plus an icon click at once, used to lose the new menu's token (it said
+  // "locked", couldn't close) and stack a second frame. Now: one menu, with the logins, and Esc closes it.
+  const shown = async () => {
+    const out = [];
+    for (const f of p.frames().filter((x) => x.url().includes('/menu.html'))) {
+      // A frame being removed can detach between the two calls.
+      const b = await f
+        .frameElement()
+        .then((e) => e.boundingBox())
+        .catch(() => null);
+      if (b && b.x > -100) out.push(f);
+    }
+    return out;
+  };
+  for (let i = 0; i < 4; i++) {
+    await p.click('#p');
+    await p.click('#u');
+    await p.click('#p');
+    await clickIcon(p, '#u');
+    await expect.poll(async () => (await shown()).length).toBe(1);
+    const m = (await shown())[0]!;
+    await expect(m.locator('.m-row')).toHaveCount(2);
+    await expect(m.locator('.m-msg')).toHaveCount(0);
+    await p.keyboard.press('Escape');
+    await expect.poll(async () => (await shown()).length).toBe(0);
+  }
   await p.close();
   const s2 = await popup();
   await s2.click('button[aria-label="Settings"]');
