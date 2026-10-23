@@ -10,6 +10,8 @@ description: Free, open-source Chrome extension for self-hosted Vaultwarden. Ope
 Litewarden is a free, open-source extension for Chrome, Brave and Edge, for people who run their own
 [Vaultwarden](https://github.com/dani-garcia/vaultwarden) server. It also works with Bitwarden servers.
 
+**[Add to Chrome from the Chrome Web Store](https://chromewebstore.google.com/detail/ieaiaclmomgdnlelnfnhonjajpofjomn)** (free, and it updates itself)
+
 **Beta:** Litewarden is new, so expect some bugs. If something breaks, please
 [report it on GitHub](https://github.com/Concept211/Litewarden/issues/new/choose).
 
@@ -22,7 +24,7 @@ Litewarden is a free, open-source extension for Chrome, Brave and Edge, for peop
 - **2FA codes built in**, PIN unlock, save and update prompts, live sync and a full keyboard workflow.
 - **Private.** End-to-end encrypted, no telemetry, and it talks only to your own server.
 
-[See it on GitHub](https://github.com/Concept211/Litewarden) · [Privacy policy](privacy)
+[Chrome Web Store](https://chromewebstore.google.com/detail/ieaiaclmomgdnlelnfnhonjajpofjomn) · [Source on GitHub](https://github.com/Concept211/Litewarden) · [Privacy policy](privacy)
 
 Made by [Concept211](https://concept211.com). Also from us: [Gnuke](https://getgnuke.com) cleans the junk out of
 your Gmail in one click.

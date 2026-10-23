@@ -5,11 +5,16 @@
 <h1 align="center">Fast, lightweight password manager extension for Vaultwarden</h1>
 
 <p align="center">
+  <a href="https://chromewebstore.google.com/detail/ieaiaclmomgdnlelnfnhonjajpofjomn"><img alt="Chrome Web Store" src="https://img.shields.io/chrome-web-store/v/ieaiaclmomgdnlelnfnhonjajpofjomn?label=Chrome%20Web%20Store&color=1252A3"></a>
   <a href="https://github.com/Concept211/Litewarden/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Concept211/Litewarden/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-1252A3"></a>
   <img alt="Manifest V3" src="https://img.shields.io/badge/Chrome-Manifest%20V3-1252A3">
   <img alt="Vaultwarden 1.35 and later" src="https://img.shields.io/badge/Vaultwarden-1.35%2B-1252A3">
   <a href="https://github.com/Concept211/Litewarden/issues"><img alt="Status: beta" src="https://img.shields.io/badge/status-beta-D97706"></a>
+</p>
+
+<p align="center">
+  <a href="https://chromewebstore.google.com/detail/ieaiaclmomgdnlelnfnhonjajpofjomn"><b>Add to Chrome from the Chrome Web Store</b></a>
 </p>
 
 <p align="center">
@@ -99,12 +104,18 @@ on self-hosted servers. Litewarden is a smaller client that does the everyday th
 
 ## Install
 
-Litewarden isn't listed in the Chrome Web Store yet. Until it is, build it from source. You need Node.js 22 or
-later.
+Install Litewarden from the [Chrome Web Store](https://chromewebstore.google.com/detail/ieaiaclmomgdnlelnfnhonjajpofjomn). It works in Chrome, Brave, Edge and other Chromium browsers,
+and it updates itself when a new version comes out.
+
+Then click the Litewarden icon in the toolbar, enter the address you use for your web vault, and sign in.
+
+### Build from source
+
+To run your own build instead, you need Node.js 22 or later.
 
 ```sh
 git clone https://github.com/Concept211/Litewarden.git
-cd litewarden
+cd Litewarden
 npm ci
 npm run build
 ```
@@ -114,6 +125,8 @@ Then in Chrome (or Brave, or Edge):
 1. Open `chrome://extensions` and turn on **Developer mode**.
 2. Click **Load unpacked** and pick the `.output/chrome-mv3` folder.
 3. Click the Litewarden icon, enter the address you use for your web vault, and sign in.
+
+A build loaded this way doesn't update itself. Pull and rebuild to get new versions.
 
 ## Keyboard shortcuts
 
