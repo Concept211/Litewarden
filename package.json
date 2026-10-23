@@ -1,7 +1,7 @@
 {
   "name": "litewarden",
   "description": "A fast, lightweight password manager extension for Vaultwarden (and Bitwarden) servers.",
-  "version": "0.1.7-beta",
+  "version": "0.1.8-beta",
   "private": true,
   "type": "module",
   "license": "GPL-3.0-only",
