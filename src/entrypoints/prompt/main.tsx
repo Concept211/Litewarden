@@ -196,17 +196,14 @@ function Prompt() {
           {err && <p class="p-err">{err}</p>}
         </div>
         <div class="p-acts">
-          {!locked && (
-            <button class="never" onClick={(e) => void act('never', e)}>
-              Never for this site
-            </button>
-          )}
-          {locked && <span style={{ marginRight: 'auto' }} />}
+          <button class="never" onClick={(e) => void act('never', e)}>
+            Never for this site
+          </button>
           <button class="btn sec" onClick={(e) => void act('notnow', e)}>
             Not now
           </button>
           <button class="btn" disabled={!!busy} onClick={(e) => void act(primaryAct, e)}>
-            {busy === primaryAct ? <span class="spinner" /> : primary}
+            {busy === primaryAct ? <span class="spinner" /> : locked ? 'Unlock' : primary}
           </button>
         </div>
       </div>

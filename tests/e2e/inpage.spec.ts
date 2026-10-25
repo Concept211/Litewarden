@@ -338,6 +338,57 @@ test('saving while locked: "Unlock to save", unlock, then save', async ({ ctx, p
   await p.close();
 });
 
+test('never for this site while locked: no unlock needed, no more prompts there, Undo brings the card back', async ({ ctx, popup }) => {
+  const s = await popup();
+  await s.click('button[aria-label="Lock"]');
+  await s.waitForSelector('#go');
+  await s.close();
+  const p = await page(ctx, SAVE('lockednever', 'login-nav.html'));
+  await expect.poll(async () => (await icons(p)).filter((i) => i.locked).length).toBe(2);
+  await submitLogin(p, `ln-${RUN}`, 'Locked-Never-Pa55');
+  await p.waitForURL(/welcome\.html/);
+  const f = await surface(p, 'prompt');
+  await expect(f.locator('.p-body')).toContainText('Litewarden is locked');
+  // All three actions on one row, nothing clipped.
+  const row = await f.locator('.p-acts').evaluate((el) => ({
+    fits: el.scrollWidth <= el.clientWidth,
+    mids: [...el.querySelectorAll('button')].map((b) => (b.getBoundingClientRect().top + b.getBoundingClientRect().bottom) / 2),
+    oneLine: [...el.querySelectorAll('button')].every((b) => (b as HTMLElement).offsetHeight <= 32),
+  }));
+  expect(row.fits).toBe(true);
+  expect(Math.max(...row.mids) - Math.min(...row.mids)).toBeLessThanOrEqual(1);
+  expect(row.oneLine).toBe(true);
+  await p.waitForTimeout(300);
+  await f.locator('.never').click();
+  await expect(f.locator('.conf')).toContainText("Won't ask on lockednever.save-lw.test");
+  // Undo: back to the locked card, and the site is off the list again.
+  await f.locator('.conf .btn.ghost').click();
+  await expect(f.locator('.p-body')).toContainText('Litewarden is locked');
+  await p.waitForTimeout(300);
+  await f.locator('.never').click();
+  await expect(f.locator('.conf')).toContainText("Won't ask on lockednever.save-lw.test");
+  await p.goto(SAVE('lockednever', 'login-nav.html'));
+  await expect.poll(async () => (await icons(p)).filter((i) => i.locked).length).toBe(2);
+  await submitLogin(p, `ln2-${RUN}`, 'Locked-Never-Pa55-2');
+  await p.waitForURL(/welcome\.html/);
+  await p.waitForTimeout(1500);
+  await expect.poll(() => gone(p, 'prompt')).toBe(true);
+  // Unlock again for the tests after this one; the site stays on the list and nothing was saved.
+  const u = await popup(p);
+  watchErrors(u, errors);
+  await u.fill('#pw', creds.main.password);
+  await u.keyboard.press('Enter');
+  await u.waitForSelector('#q', { timeout: 30_000 });
+  await u.click('button[aria-label="Settings"]');
+  await u.click('[data-cat=autofill]');
+  await u.locator('.set', { hasText: 'Sites that never ask to save' }).click();
+  await expect(u.locator('[data-list=neverSaveSites]')).toContainText('lockednever.save-lw.test');
+  await u.close();
+  for (const x of ctx.pages()) if (x.url().includes('popout=1')) await x.close();
+  expect((await serverLogins('lockednever.save-lw.test')).length).toBe(0);
+  await p.close();
+});
+
 // ---------- teach this site ----------
 
 test('teach this site: offered when a fill finds no fields; point at the fields; the rule fills; Settings removes it', async ({ ctx, popup, sw }) => {
