@@ -1,0 +1,10 @@
+<!doctype html><html><head><meta charset="utf-8"><title>App login that can fail</title><link rel="stylesheet" href="_base.css"></head><body>
+<header>App that signs in in place</header><main><div id="root"><form id="f">
+<p id="err" style="color:#b91c1c" hidden>Your username or password is incorrect.</p>
+<label for="u">Username</label><div class="f"><input id="u" name="username" autocomplete="username"></div>
+<label for="p">Password</label><div class="f"><input id="p" name="password" type="password" autocomplete="current-password"></div>
+<button type="submit">Sign in</button></form></div></main><script>
+f.onsubmit=async(e)=>{e.preventDefault();err.hidden=true;for(const i of f.elements)i.disabled=true;
+await new Promise((r)=>setTimeout(r,900));for(const i of f.elements)i.disabled=false;
+if(p.value==='Right-Pa55')root.innerHTML='<div class="card"><h2>Welcome back</h2><p>Signed in.</p></div>';else err.hidden=false;};
+</script></body></html>

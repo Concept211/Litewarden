@@ -88,6 +88,25 @@ go.onclick=async()=>{await fetch('none.html',{method:'GET'});history.pushState({
 <label for="u">Username</label><div class="f"><input id="u" name="username" autocomplete="username"></div>
 <label for="p">Password</label><div class="f"><input id="p" name="password" type="password" autocomplete="current-password"></div>
 <button type="submit">Sign in</button></form>'''),
+    # A wrong password brings the login page back with an error (server-rendered); Right-Pa55 signs in.
+    'login-retry.html': dict(t='Login that can fail', h='Classic portal', b='''<form id="f" action="login-retry.html?err=1" method="post">
+<p id="err" style="color:#b91c1c" hidden>Your username or password is incorrect.</p>
+<label for="u">Username</label><div class="f"><input id="u" name="username" autocomplete="username"></div>
+<label for="p">Password</label><div class="f"><input id="p" name="password" type="password" autocomplete="current-password"></div>
+<button type="submit">Sign in</button></form>''', j='''<script>
+if(location.search.includes('err'))err.hidden=false;
+f.onsubmit=()=>{if(p.value==='Right-Pa55')f.action='welcome.html'};
+</script>'''),
+    # The app checks the password in place: the form is disabled while it waits, then shows an error and stays.
+    'login-retry-spa.html': dict(t='App login that can fail', h='App that signs in in place', b='''<div id="root"><form id="f">
+<p id="err" style="color:#b91c1c" hidden>Your username or password is incorrect.</p>
+<label for="u">Username</label><div class="f"><input id="u" name="username" autocomplete="username"></div>
+<label for="p">Password</label><div class="f"><input id="p" name="password" type="password" autocomplete="current-password"></div>
+<button type="submit">Sign in</button></form></div>''', j='''<script>
+f.onsubmit=async(e)=>{e.preventDefault();err.hidden=true;for(const i of f.elements)i.disabled=true;
+await new Promise((r)=>setTimeout(r,900));for(const i of f.elements)i.disabled=false;
+if(p.value==='Right-Pa55')root.innerHTML='<div class="card"><h2>Welcome back</h2><p>Signed in.</p></div>';else err.hidden=false;};
+</script>'''),
     'welcome.html': dict(t='Welcome', h='Classic portal', b='<div class="card"><h2>Welcome</h2><p>You are signed in.</p></div>'),
     'weird.html': dict(t='Fields detection can not read', h='Members area', b='''<form onsubmit="event.preventDefault();out.textContent='submitted'">
 <label for="mcode">Member search code</label><div class="f"><input id="mcode" name="search_code" type="text"></div>

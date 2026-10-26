@@ -100,7 +100,7 @@ export interface PromptData {
 export interface CsApi {
   'cs:hello': [{ top: boolean }, CsHello];
   /** A new surface. Prompts pass the pending-save token they were given, so the prompt frame finds its data. */
-  'cs:open': [{ kind: 'menu' | 'prompt' | 'teach'; token?: string }, { token: string }];
+  'cs:open': [{ kind: 'menu' | 'prompt' | 'teach'; token?: string }, { token: string; signIn?: boolean }];
   'cs:submitted': [Captured, { token: string } | null];
   'cs:userStep': [{ username: string }, void];
   'cs:teachState': [{ token: string; state: TeachState }, void];

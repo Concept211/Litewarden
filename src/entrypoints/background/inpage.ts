@@ -177,10 +177,13 @@ async function submitted(c: Captured, sender: chrome.runtime.MessageSender): Pro
   for (const [k, p] of Object.entries(all)) {
     if (p.tabId === tabId && p.username === c.username && p.password === c.password && p.state === 'ask') return answer(k, sender);
   }
+  // A new submit in the tab is a retry: the earlier unanswered one (likely a wrong password) is dropped.
+  for (const [k, p] of Object.entries(all)) if (p.tabId === tabId && p.state === 'ask') await setPending(k, null);
   const d = await decide(url, c, settings);
   if (!d) return null;
   const t = token();
-  await setPending(t, { tabId, url, username: c.username, password: c.password, current: c.current, kind: d.kind, itemId: d.itemId, created: Date.now(), state: 'ask' });
+  const signIn = !c.current && !c.isNew;
+  await setPending(t, { tabId, url, username: c.username, password: c.password, current: c.current, signIn, kind: d.kind, itemId: d.itemId, created: Date.now(), state: 'ask' });
   // A submit that navigates may already have replaced the page by now: deliver to whatever page the tab shows.
   // (The next page's "load complete" delivers again; showing is idempotent per token.)
   if (sender.frameId === 0) void deliverPrompt(tabId, t);
@@ -411,8 +414,17 @@ export const csHandlers: CsHandlers = {
     if (kind === 'prompt') {
       const p = given ? (await pendings())[given] : null;
       if (!p || p.tabId !== s.tabId) throw new S.UserError('No prompt waiting.');
+      if (p.state === 'ask' && p.kind !== 'locked') {
+        // Asked again on a later page: the vault may have changed since the submit (saved another way, synced).
+        const d = await decide(p.url, { username: p.username, password: p.password, current: p.current, isNew: false }, await getSettings());
+        if (!d) {
+          await setPending(given!, null);
+          throw new S.UserError('Nothing to save.');
+        }
+        if (d.kind !== p.kind || d.itemId !== p.itemId) await setPending(given!, { ...p, ...d });
+      }
       await editSurfaces((all) => void (all[given!] = s));
-      return { token: given! };
+      return { token: given!, signIn: p.state === 'ask' && !!p.signIn };
     }
     return { token: await addSurface(s) };
   },

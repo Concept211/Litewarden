@@ -177,6 +177,8 @@ export interface PendingSave {
   password: string;
   /** Old password from a change-password form. */
   current: string | null;
+  /** A sign-in (not a signup or change-password form): the card waits until the login form has gone. */
+  signIn?: boolean;
   kind: 'save' | 'update' | 'locked';
   /** Existing login to update. */
   itemId: string | null;

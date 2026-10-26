@@ -99,6 +99,8 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
   let menu: { token: string; fr: HTMLIFrameElement; anchor: HTMLInputElement; h: number } | null = null;
   let prompt: { token: string; fr: HTMLIFrameElement; form: Element | null; h: number; bar: boolean } | null = null;
   let teach: { token: string; fr: HTMLIFrameElement; step: TeachState['step']; map: Record<'username' | 'password' | 'totp', HTMLInputElement | null>; hover: HTMLDivElement | null; marks: HTMLDivElement[]; bar: boolean } | null = null;
+  /** A sign-in's save card waiting for the login form to go away. */
+  let held: { token: string; timer: number } | null = null;
   let lastSubmit = { key: '', at: 0 };
   let lastForm: Element | null = null;
 
@@ -349,16 +351,50 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
   let opening: string | null = null;
   async function showPrompt(token: string) {
     // The same prompt can be announced twice (the submit's answer and the next page's load); show it once.
-    if (window !== window.top || prompt?.token === token || opening === token) return;
+    if (window !== window.top || prompt?.token === token || opening === token || held?.token === token) return;
     opening = token;
+    let signIn = false;
     try {
       if (!activating) await activate();
-      await cs('cs:open', { kind: 'prompt', token });
+      signIn = !!(await cs('cs:open', { kind: 'prompt', token })).signIn;
     } catch {
       return;
     } finally {
       opening = null;
     }
+    unhold();
+    // A sign-in's card waits until the login form has gone (the next page, or the app's signed-in view). A form
+    // still there after the submit, or a fresh one on the next page, usually means the password was wrong.
+    if (signIn && loginShown()) {
+      const until = Date.now() + 10 * 60_000;
+      let gone = 0;
+      const tick = () => {
+        if (loginShown()) return void ((gone = 0), Date.now() > until && unhold());
+        // Gone twice in a row: an app that re-renders its form doesn't count.
+        if (++gone < 2) return;
+        unhold();
+        openPrompt(token);
+      };
+      held = { token, timer: window.setInterval(tick, 400) };
+      return;
+    }
+    openPrompt(token);
+  }
+
+  function unhold() {
+    if (held) clearInterval(held.timer);
+    held = null;
+  }
+  /** A password field is on screen. Disabled counts: pages disable the form while the sign-in is checked. */
+  const loginShown = () =>
+    inputs(document).some((i) => {
+      if (!isPassword(i) || !i.isConnected) return false;
+      const r = i.getBoundingClientRect();
+      const st = getComputedStyle(i);
+      return r.width >= 2 && r.height >= 2 && st.visibility !== 'hidden' && st.display !== 'none' && Number(st.opacity) > 0.05;
+    });
+
+  function openPrompt(token: string) {
     closePrompt(false);
     const fr = frame('prompt.html', token, 'Litewarden: save login');
     prompt = { token, fr, form: lastForm, h: 250, bar: false };
@@ -554,7 +590,8 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
   }
 
   function onFocus(e: FocusEvent) {
-    if (!conf?.menuOnFocus || teach) return;
+    // Not while the save card is up: two of our surfaces at once crowd the form. The field icon still opens it.
+    if (!conf?.menuOnFocus || teach || prompt) return;
     const t = e.composedPath()[0];
     if (t === handedBack) return void (handedBack = null);
     if (t instanceof HTMLInputElement && icons.has(t) && menu?.anchor !== t) void openMenu(t, false);

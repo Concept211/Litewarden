@@ -299,6 +299,87 @@ test('SPA login over fetch (no form, no navigation): the prompt shows; Not now c
   await p.close();
 });
 
+test('a wrong password gets no save card; the retry that works does (app that checks in place)', async ({ ctx }) => {
+  // Regression: the card asked to save a password the site had just rejected, while the form was still up.
+  const p = await page(ctx, SAVE('retryspa', 'login-retry-spa.html'));
+  await expect.poll(async () => (await icons(p)).length).toBe(2);
+  const user = `retry-${RUN}`;
+  await submitLogin(p, user, 'Wrong-Pa55');
+  await expect(p.locator('#err')).toBeVisible();
+  await p.waitForTimeout(2000);
+  expect(await gone(p, 'prompt'), 'no card while the login form is still there').toBe(true);
+  await p.fill('#p', 'Right-Pa55');
+  await p.click('button[type=submit]');
+  await expect(p.locator('h2')).toHaveText('Welcome back');
+  const f = await surface(p, 'prompt');
+  await expect(f.locator('input[aria-label=Username]')).toHaveValue(user);
+  await expect(f.locator('input[aria-label=Password]')).toHaveValue('Right-Pa55');
+  await p.waitForTimeout(300);
+  await f.locator('.p-acts .btn.sec').click();
+  await expect.poll(() => gone(p, 'prompt')).toBe(true);
+  expect((await serverLogins('retryspa.save-lw.test')).length).toBe(0);
+  await p.close();
+});
+
+test('a wrong password gets no save card; the retry that works does (login page served again)', async ({ ctx }) => {
+  const p = await page(ctx, SAVE('retry', 'login-retry.html'));
+  await expect.poll(async () => (await icons(p)).length).toBe(2);
+  const user = `retry-${RUN}`;
+  await submitLogin(p, user, 'Wrong-Pa55');
+  await p.waitForURL(/err=1/);
+  await expect(p.locator('#err')).toBeVisible();
+  await expect.poll(async () => (await icons(p)).length).toBe(2);
+  await p.waitForTimeout(2000);
+  expect(await gone(p, 'prompt'), 'no card on the login page that came back').toBe(true);
+  await submitLogin(p, user, 'Right-Pa55');
+  await p.waitForURL(/welcome\.html/);
+  const f = await surface(p, 'prompt');
+  await expect(f.locator('.p-head b')).toContainText('Save login for retry.save-lw.test?');
+  await expect(f.locator('input[aria-label=Password]')).toHaveValue('Right-Pa55');
+  await p.waitForTimeout(300);
+  await f.locator('.p-acts .btn.sec').click();
+  await expect.poll(() => gone(p, 'prompt')).toBe(true);
+  await p.close();
+});
+
+test('open the menu on focus: not while the save card is up; the field icon still opens it', async ({ ctx, popup }) => {
+  const focusSwitch = async (on: boolean) => {
+    const s = await popup();
+    watchErrors(s, errors);
+    await s.click('button[aria-label="Settings"]');
+    await s.click('[data-cat=autofill]');
+    const sw = s.getByRole('switch', { name: 'Open the menu when a field gets focus' });
+    if ((await sw.isChecked()) !== on) await s.locator('.set', { has: sw }).locator('.sw').click();
+    await expect(sw).toBeChecked({ checked: on });
+    await s.close();
+  };
+  await focusSwitch(true);
+  try {
+    // A change-password form stays up after its submit, so its card shows next to it at once.
+    const p = await page(ctx, SAVE('focus', 'change-password.html'));
+    await expect.poll(async () => (await icons(p)).length).toBeGreaterThan(0);
+    await p.fill('#c', 'Old-Pa55');
+    await p.fill('#n1', 'New-Pa55-x');
+    await p.fill('#n2', 'New-Pa55-x');
+    await p.click('button[type=submit]');
+    await surface(p, 'prompt');
+    await p.click('#c');
+    await p.waitForTimeout(800);
+    expect(await gone(p, 'menu'), 'no menu on focus while the card is up').toBe(true);
+    await clickIcon(p, '#c');
+    await surface(p, 'menu');
+    await p.close();
+    // Without a card, focus still opens the menu.
+    const q = await page(ctx, C('stacked.html'));
+    await expect.poll(async () => (await icons(q)).length).toBe(2);
+    await q.click('#u');
+    await surface(q, 'menu');
+    await q.close();
+  } finally {
+    await focusSwitch(false);
+  }
+});
+
 test('saving while locked: "Unlock to save", unlock, then save', async ({ ctx, popup }) => {
   const s = await popup();
   await s.click('button[aria-label="Lock"]');

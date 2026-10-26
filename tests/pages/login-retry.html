@@ -1,0 +1,9 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Login that can fail</title><link rel="stylesheet" href="_base.css"></head><body>
+<header>Classic portal</header><main><form id="f" action="login-retry.html?err=1" method="post">
+<p id="err" style="color:#b91c1c" hidden>Your username or password is incorrect.</p>
+<label for="u">Username</label><div class="f"><input id="u" name="username" autocomplete="username"></div>
+<label for="p">Password</label><div class="f"><input id="p" name="password" type="password" autocomplete="current-password"></div>
+<button type="submit">Sign in</button></form></main><script>
+if(location.search.includes('err'))err.hidden=false;
+f.onsubmit=()=>{if(p.value==='Right-Pa55')f.action='welcome.html'};
+</script></body></html>
