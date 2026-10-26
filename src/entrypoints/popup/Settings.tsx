@@ -42,7 +42,7 @@ import {
 import { RemoteError, send } from '../../shared/messages';
 import type { SiteRule } from '../../shared/rules';
 import { POPUP_SIZES, type LiveState, type Settings } from '../../shared/store';
-import { Busy, CodeBoxes, ago } from '../../ui/bits';
+import { Busy, CodeBoxes, Favicon, ago, initIcons } from '../../ui/bits';
 import { HelpRows } from '../../ui/help';
 import type { Boot } from './boot';
 
@@ -268,7 +268,7 @@ export function SettingsView({
     body = list.length ? (
       <div class="group" data-list={key}>
         {list.map((h) => (
-          <Row icon={<Globe />} title={h} desc={page === 'iconsites' ? 'No icon in its login fields' : 'Litewarden never offers to save here'}>
+          <Row icon={<Favicon host={h} fallback={<Globe />} />} title={h} desc={page === 'iconsites' ? 'No icon in its login fields' : 'Litewarden never offers to save here'}>
             <button class="ib" aria-label={`Remove ${h}`} title="Remove" onClick={() => void save({ [key]: list.filter((x) => x !== h) } as Partial<Settings>, 'Removed')}>
               <X />
             </button>
@@ -282,7 +282,7 @@ export function SettingsView({
     body = ruleCount ? (
       <div class="group" data-list="rules">
         {Object.entries(rules!).map(([h, r]) => (
-          <Row icon={<Crosshair />} title={h} desc={[r.username && `username ${r.username.label}`, r.password && `password ${r.password.label}`, r.totp && `2FA ${r.totp.label}`].filter(Boolean).join(', ')}>
+          <Row icon={<Favicon host={h} fallback={<Crosshair />} />} title={h} desc={[r.username && `username ${r.username.label}`, r.password && `password ${r.password.label}`, r.totp && `2FA ${r.totp.label}`].filter(Boolean).join(', ')}>
             <button
               class="ib"
               aria-label={`Remove the rule for ${h}`}

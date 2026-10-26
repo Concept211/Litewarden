@@ -3,14 +3,15 @@
 // Enter fills the selected login, a click fills, the stubs copy. Edit is a separate control.
 import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { AppWindow, CloudOff, Folder as FolderIcon, ShieldAlert, Keyboard, KeyRound, Lock, NotebookText, Pencil, Plus, RefreshCw, Search, Settings, Timer, User, X } from 'lucide-preact';
+import { AppWindow, CloudOff, Folder as FolderIcon, ShieldAlert, Keyboard, KeyRound, Lock, NotebookText, Pencil, Plus, RefreshCw, Search, Settings, SquareArrowOutUpRight, Timer, User, X } from 'lucide-preact';
 import { SearchIndex, type Range, type SearchHit } from '../../core/search';
 import { secondsRemaining, totp } from '../../core/totp';
+import { launchUrl } from '../../core/uri';
 import { RemoteError, send, type FillResult, type Folder } from '../../shared/messages';
 import { clipHash } from '../../shared/cliphash';
 import { kdfSignature } from '../../core/kdf';
 import { local, mem, type IndexItem } from '../../shared/store';
-import { Keep, Tile, Toast, ago, initIcons, useToast } from '../../ui/bits';
+import { Keep, Site, Tile, Toast, ago, useToast } from '../../ui/bits';
 import { HelpRows } from '../../ui/help';
 import { VList } from '../../ui/vlist';
 import { targetTab, type Boot, type Tab } from './boot';
@@ -170,7 +171,6 @@ export function Main({
   // ----- start-up: focus, icons, auto-lock touch, matches when the worker hadn't computed them -----
   useEffect(() => {
     inputRef.current?.focus();
-    if (b.account) void initIcons(b.account.server);
     void send('touch').catch(() => {});
     if (site0 == null && tab && site) void send('matchTab', { tabId: tab.id, url: tab.url }).then((r) => setSite0(r.items)).catch(() => setSite0([]));
     else if (!site) setSite0([]);
@@ -360,6 +360,19 @@ export function Main({
     window.close();
   }
 
+  /** Open the login's site in a new tab; the background fills it when the form shows up. */
+  async function launch(item: IndexItem) {
+    setConfirm(null);
+    if (item.type !== 1 || !launchUrl(item.uris)) return show('This login has no web address to open.');
+    try {
+      const r = await send('launch', { id: item.id, tabId: tab?.id });
+      if (b.popout) return show(`Opening ${r.host}`);
+      window.close();
+    } catch (e) {
+      show((e as RemoteError).message);
+    }
+  }
+
   function open(item: IndexItem) {
     keep.query = query;
     onOpen(item.id);
@@ -415,11 +428,11 @@ export function Main({
     setPick(chips[(i + d + chips.length) % chips.length]!.key);
   }
 
-  const live = useRef({ help, confirm, flat, selIdx, query, fill, copy, open, stepFolder });
-  live.current = { help, confirm, flat, selIdx, query, fill, copy, open, stepFolder };
+  const live = useRef({ help, confirm, flat, selIdx, query, fill, copy, open, launch, stepFolder });
+  live.current = { help, confirm, flat, selIdx, query, fill, copy, open, launch, stepFolder };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const { help, confirm, flat, selIdx, query, fill, copy, open, stepFolder } = live.current;
+      const { help, confirm, flat, selIdx, query, fill, copy, open, launch, stepFolder } = live.current;
       if (help && (e.key === 'Escape' || e.key === '?')) {
         e.preventDefault();
         return setHelp(false);
@@ -427,7 +440,7 @@ export function Main({
       if (confirm) {
         if (e.key === 'Enter') {
           e.preventDefault();
-          return void confirmOk(confirm);
+          return void (confirm.kind === 'site' && launchUrl(confirm.item.uris) ? launch(confirm.item) : confirmOk(confirm));
         }
         if (e.key === 'Escape') {
           e.preventDefault();
@@ -456,6 +469,12 @@ export function Main({
         e.preventDefault();
         const it = flat[selIdx]?.item;
         if (it) open(it);
+        return;
+      }
+      if (e.altKey && /^o$/i.test(e.key)) {
+        e.preventDefault();
+        const it = flat[selIdx]?.item;
+        if (it) void launch(it);
         return;
       }
       if (e.altKey && /^[upt]$/i.test(e.key)) {
@@ -530,6 +549,7 @@ export function Main({
   const row = (e: Entry, i: number, style?: Record<string, string>) => {
     const { item, hit } = e;
     const login = item.type === 1;
+    const go = login ? launchUrl(item.uris)?.hostname.replace(/^www\./, '') : undefined;
     const sub = login ? [item.username, item.hosts[0]].filter(Boolean) : [item.subtitle ?? (item.type === 3 ? 'Card' : item.type === 2 ? 'Note' : 'Identity')];
     const r = hit?.ranges;
     const notesOnly = !!(r && r.notes.length && !r.name.length && !r.username.length && !r.url.size && notes?.[item.id]);
@@ -573,6 +593,11 @@ export function Main({
         </div>
         {login && (
           <span style={{ display: 'contents' }} onClick={(ev) => ev.stopPropagation()}>
+            {go && (
+              <button class="ib launch" title={`Open ${go} and fill (Alt O)`} aria-label={`Open ${go} and fill`} onClick={() => void launch(item)}>
+                <SquareArrowOutUpRight />
+              </button>
+            )}
             <button class={`ib${done === `${item.id}:username` ? ' done' : ''}`} title="Copy username" aria-label="Copy username" onClick={() => copy(item, 'username')}>
               <User />
             </button>
@@ -601,6 +626,7 @@ export function Main({
     );
   };
 
+  const confirmGo = confirm ? launchUrl(confirm.item.uris)?.hostname.replace(/^www\./, '') : undefined;
   const server = b.account?.server.replace(/^https?:\/\//, '') ?? '';
   let body: ComponentChildren;
   if (!count && !query.trim()) {
@@ -651,7 +677,9 @@ export function Main({
         {site && (
           <>
             <div class="sec">
-              <span>{site}</span>
+              <span>
+                <Site host={site} />
+              </span>
               <span>{matches == null ? '' : `${siteItems.length} ${siteItems.length === 1 ? 'login' : 'logins'}`}</span>
             </div>
             {matches != null && !siteItems.length && (
@@ -811,24 +839,42 @@ export function Main({
               <>
                 No login form found on this page. Point at the fields once and Litewarden fills them from then on.
               </>
+            ) : confirm.kind === 'site' && confirmGo ? (
+              <>
+                This is a <b><Site host={confirm.item.hosts[0]} /></b> login and you're on <b><Site host={site} /></b>.
+              </>
             ) : confirm.kind === 'site' ? (
               <>
-                Fill a <b>{confirm.item.hosts[0] ?? 'non-web'}</b> login on <b>{site}</b>? The sites don't match.
+                Fill a <b>{confirm.item.hosts[0] ? <Site host={confirm.item.hosts[0]} /> : 'non-web'}</b> login on <b><Site host={site} /></b>? The sites don't match.
               </>
             ) : (
               <>
-                The login form on this page comes from <b>{confirm.origin?.replace(/^https?:\/\//, '')}</b>, not <b>{site}</b>. Fill it anyway?
+                The login form on this page comes from <b><Site host={confirm.origin?.replace(/^https?:\/\//, '')} /></b>, not <b><Site host={site} /></b>. Fill it anyway?
               </>
             )}
           </p>
-          <div class="c-actions">
-            <button class="c-cancel" onClick={() => setConfirm(null)}>
-              Cancel
-            </button>
-            <button class="c-ok" onClick={() => void confirmOk(confirm)}>
-              {confirm.kind === 'nofields' ? 'Teach this site' : 'Fill anyway'}
-            </button>
-          </div>
+          {confirm.kind === 'site' && confirmGo ? (
+            <div class="c-actions three">
+              <button class="c-cancel" onClick={() => setConfirm(null)}>
+                Cancel
+              </button>
+              <button class="c-alt" onClick={() => void confirmOk(confirm)}>
+                Fill here
+              </button>
+              <button class="c-ok c-go" title={`Open ${confirmGo} in a new tab and fill it`} onClick={() => void launch(confirm.item)}>
+                Open {confirmGo}
+              </button>
+            </div>
+          ) : (
+            <div class="c-actions">
+              <button class="c-cancel" onClick={() => setConfirm(null)}>
+                Cancel
+              </button>
+              <button class="c-ok" onClick={() => void confirmOk(confirm)}>
+                {confirm.kind === 'nofields' ? 'Teach this site' : 'Fill anyway'}
+              </button>
+            </div>
+          )}
         </div>
       )}
       {help && (

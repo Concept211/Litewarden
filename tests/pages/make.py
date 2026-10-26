@@ -35,6 +35,9 @@ pages = {
 <iframe id="fr" src="frame-login.html" style="width:100%;height:280px;border:1px solid #ccc"></iframe></div>'''),
     'cross.html': dict(t='Login in a cross-origin frame', h='Portal with a third-party login', b='''<div class="card"><p>The form below is served by another site.</p>
 <iframe id="fr" style="width:100%;height:280px;border:1px solid #ccc"></iframe></div>''', j='''<script>fr.src=location.protocol+'//frames.example-lw.test:'+location.port+'/frame-login.html'</script>'''),
+    'go-other.html': dict(t='Sends you to another site', h='Moving', b='<div class="card">Taking you to another site...</div>', j='''<script>location.replace(location.protocol+'//frames.example-lw.test:'+location.port+'/stacked.html')</script>'''),
+    'framed-own.html': dict(t='Login framed from a sister site', h='Portal (frames.example-lw.test) with its sign-in from login.example-lw.test', b='''<div class="card"><iframe id="fr" style="width:100%;height:280px;border:1px solid #ccc"></iframe></div>''', j='''<script>fr.src=location.protocol+'//login.example-lw.test:'+location.port+'/frame-login.html'</script>'''),
+    'framed-other.html': dict(t='Login framed from an unrelated site', h='Portal with its sign-in from corpus.lw.test', b='''<div class="card"><iframe id="fr" style="width:100%;height:280px;border:1px solid #ccc"></iframe></div>''', j='''<script>fr.src=location.protocol+'//corpus.lw.test:'+location.port+'/frame-login.html'</script>'''),
     'shadow.html': dict(t='Shadow DOM login', h='Web components portal', b='<x-login></x-login>', j='''<script>
 const css='<style>input{display:block;width:300px;height:36px;margin:4px 0 12px}</style>';
 customElements.define('x-login',class extends HTMLElement{connectedCallback(){const r=this.attachShadow({mode:'open'});

@@ -9,14 +9,15 @@ import { CipherType, type FullItem, type ListUri } from '../../core/vault';
 import type { Draft } from '../../core/edit';
 import { generatePassword, strength, GEN_MAX, GEN_MIN, type GenOptions } from '../../core/generator';
 import { secondsRemaining, totp } from '../../core/totp';
-import { iconDomain, parseLoose } from '../../core/uri';
+import { iconDomain, launchUrl, parseLoose } from '../../core/uri';
 import { validateDraft } from '../../core/edit';
 import { RemoteError, send, type Folder, type ItemDetail } from '../../shared/messages';
 import { clipHash } from '../../shared/cliphash';
 import { mem, type IndexItem, type PopupScreen } from '../../shared/store';
-import { Busy, Tile, Toast, useToast } from '../../ui/bits';
+import { Busy, Site, Tile, Toast, useToast } from '../../ui/bits';
 import type { Boot } from './boot';
 import type { NewPrefill } from './MainView';
+import { scanTab } from './scanqr';
 import { here } from './where';
 
 const MATCH: Array<[number | null, string]> = [
@@ -209,6 +210,27 @@ export function ItemView({
     }
   }
 
+  /** Open the login's site in a new tab; the background fills it when the form shows up. */
+  async function launch() {
+    if (!id) return;
+    try {
+      const r = await send('launch', { id, tabId: tab?.id });
+      setSheet(null);
+      if (b.popout) return show(`Opening ${r.host}`);
+      window.close();
+    } catch (e) {
+      show((e as RemoteError).message);
+    }
+  }
+
+  /** Read the 2FA setup QR code showing on the page into the 2FA field. */
+  async function scan() {
+    const r = await scanTab(tab).catch(() => ({ ok: false as const, message: "Couldn't read the page. Try again." }));
+    if (!r.ok) return show(r.message);
+    setLogin({ totp: r.uri });
+    show(r.label ? `2FA key added: ${r.label}` : '2FA key added');
+  }
+
   async function save() {
     if (!draft || busy) return;
     const bad = validateDraft(draft);
@@ -346,6 +368,7 @@ export function ItemView({
     const l = it.login;
     const meta = [detail!.folderName ? `Folder: ${detail!.folderName}` : 'No folder', detail!.revisionDate && `Edited ${fmtDate(detail!.revisionDate)}`, detail!.creationDate && `Created ${fmtDate(detail!.creationDate)}`].filter(Boolean).join(' · ');
     const canFill = isLogin && !!tab && !!tabHost;
+    const go = l ? launchUrl(l.uris)?.hostname.replace(/^www\./, '') : undefined;
     return (
       <div class="scr item">
         <div class="hdr">
@@ -440,7 +463,7 @@ export function ItemView({
                             )
                           }
                         >
-                          <div>{u.uri}</div>
+                          <div>{parseLoose(u.uri) ? <Site host={u.uri} /> : u.uri}</div>
                         </Kv>
                       );
                     })}
@@ -521,15 +544,31 @@ export function ItemView({
           <div class="sheet" onClick={(e) => e.target === e.currentTarget && setSheet(null)}>
             <div class="h-card" role="dialog" aria-label="Confirm fill">
               <div class="h-head">
-                <b>Fill on {tabHost}?</b>
+                <b>
+                  Fill on <Site host={tabHost} />?
+                </b>
               </div>
-              <p>This login is saved for {l?.uris[0] ? host(l.uris[0].uri) : 'another site'}, not {tabHost}.</p>
-              <div class="c-actions">
-                <button onClick={() => setSheet(null)}>Cancel</button>
-                <button class="c-ok" onClick={() => fill(true)}>
-                  Fill anyway
-                </button>
-              </div>
+              <p>
+                This login is saved for {l?.uris[0] ? <Site host={host(l.uris[0].uri)} /> : 'another site'}, not <Site host={tabHost} />.
+              </p>
+              {go ? (
+                <div class="c-actions three">
+                  <button class="c-cancel" onClick={() => setSheet(null)}>
+                    Cancel
+                  </button>
+                  <button onClick={() => fill(true)}>Fill here</button>
+                  <button class="c-ok c-go" title={`Open ${go} in a new tab and fill it`} onClick={() => void launch()}>
+                    Open {go}
+                  </button>
+                </div>
+              ) : (
+                <div class="c-actions">
+                  <button onClick={() => setSheet(null)}>Cancel</button>
+                  <button class="c-ok" onClick={() => fill(true)}>
+                    Fill anyway
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -646,7 +685,9 @@ export function ItemView({
                 </span>
                 <span class="inp">
                   <input id="f-totp" class="mono" value={l.totp ?? ''} autocomplete="off" spellcheck={false} placeholder="Optional" onInput={(e) => setLogin({ totp: (e.currentTarget as HTMLInputElement).value })} />
-                  <ScanLine class="lucide dim" aria-hidden="true" />
+                  <button type="button" class="ib" aria-label="Scan the QR code on the page" title="Scan the 2FA QR code showing on the page" onClick={() => void scan()}>
+                    <ScanLine />
+                  </button>
                 </span>
               </label>
               <div class="field">

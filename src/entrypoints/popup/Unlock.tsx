@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { CircleAlert, Eye, EyeOff, Info, LockKeyhole, LockOpen, Timer } from 'lucide-preact';
 import { RemoteError, send } from '../../shared/messages';
-import { Avatar, Busy, CodeBoxes, initIcons, Keep } from '../../ui/bits';
+import { Avatar, Busy, CodeBoxes, Keep } from '../../ui/bits';
 import type { Boot } from './boot';
 import { useAutoFocus } from './focus';
 
@@ -29,7 +29,6 @@ export function Unlock({ boot: b, onUnlocked, onLoggedOut }: { boot: Boot; onUnl
   const [now, setNow] = useState(Date.now());
   const [confirmOut, setConfirmOut] = useState(false);
   useAutoFocus([mode, until > now]);
-  useEffect(() => void (b.account && initIcons(b.account.server)), []);
 
   useEffect(() => {
     if (!until) return;

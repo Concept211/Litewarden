@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Page } from '@playwright/test';
 import { totp } from '../../src/core/totp';
-import { CORPUS_PORT, OTHER, e2eCreds } from './accounts';
+import { CORPUS, CORPUS_PORT, OTHER, e2eCreds } from './accounts';
 import { ensureFolders } from './inpage-helpers';
 import { EXT, expect, test } from './fixtures';
 import { clipboard, finishFirstRun, shot, signIn, signOut, testServer, watchErrors, budget } from './helpers';
@@ -181,7 +181,7 @@ test('fill: a form from another site in a frame asks first', async ({ popup, cor
   await page.close();
 });
 
-test('fill: a login for another site asks first; a page with no form says so', async ({ popup, ctx }) => {
+test('fill: a login for another site asks first (fill here, or open its site); a page with no form says so', async ({ popup, ctx }) => {
   const page = await ctx.newPage();
   await page.goto(`${OTHER}/stacked.html`);
   const p = await popup(page);
@@ -191,8 +191,10 @@ test('fill: a login for another site asks first; a page with no form says so', a
   await expect(p.locator('.row').first()).toContainText('Corpus · Bob');
   await expect(p.locator('.row.is-sel')).toContainText('Corpus · Bob');
   await p.keyboard.press('Enter');
-  await expect(p.locator('#confirm')).toContainText("The sites don't match");
-  await p.keyboard.press('Enter');
+  await expect(p.locator('#confirm')).toContainText("login and you're on frames.example-lw.test");
+  await expect(p.locator('#confirm .c-ok')).toHaveText('Open corpus.lw.test');
+  await shot(p, 'confirm-site-light', 1);
+  await p.locator('#confirm button', { hasText: 'Fill here' }).click();
   await p.waitForEvent('close', { timeout: 3000 }).catch(async () => console.log(`still open: toast "${await p.locator('#toast').innerText()}" confirm "${await p.locator('#confirm').innerText().catch(() => '')}"`));
   await expect(page.locator('#u')).toHaveValue('bob');
   await page.goto(`http://corpus.lw.test:${CORPUS_PORT}/none.html`);
@@ -203,6 +205,129 @@ test('fill: a login for another site asks first; a page with no form says so', a
   await expect(p2.locator('#confirm')).toContainText('No login form found');
   await expect(p2.locator('#confirm .c-ok')).toHaveText('Teach this site');
   await p2.close();
+  await page.close();
+});
+
+/** What the corpus serves at a site's "/" (a tab the extension opens loads before Playwright can route it). */
+async function root(site: string, page: string | null) {
+  await fetch(`http://127.0.0.1:${CORPUS_PORT}/__root?host=${new URL(site).host}${page ? `&page=${page}` : ''}`);
+}
+test.afterAll(async () => {
+  for (const site of [CORPUS, OTHER]) await root(site, null).catch(() => {});
+});
+
+test("open and fill: the sheet, the row icon and Alt O open the login's site in a new tab and fill it", async ({ popup, ctx, extId, sw }) => {
+  const page = await ctx.newPage();
+  await page.goto(`${OTHER}/none.html`);
+  /** Do `act` in the popup; return the tab it opens once the popup has closed. */
+  const opens = async (p: Page, act: () => Promise<void>) => {
+    const tab = ctx.waitForEvent('page', { predicate: (t) => !t.url().startsWith('chrome-extension://') });
+    const closed = p.isClosed() ? Promise.resolve() : p.waitForEvent('close', { timeout: 5000 });
+    // The popup closes as soon as the tab opens, which can be before a key press has finished (keyup).
+    await act().catch((e) => {
+      if (!p.isClosed()) throw e;
+    });
+    const t = await tab;
+    await closed;
+    return t;
+  };
+  const search = async (p: Page, q: string) => {
+    await expect(p.locator('#q')).toBeFocused();
+    await p.keyboard.type(q);
+  };
+
+  // The "sites don't match" sheet: Enter takes its main button, Open.
+  let p = await popup(page);
+  await search(p, 'corpus bob');
+  await expect(p.locator('.row.is-sel')).toContainText('Corpus · Bob');
+  await p.keyboard.press('Enter');
+  await expect(p.locator('#confirm .c-ok')).toHaveText('Open corpus.lw.test');
+  let t = await opens(p, () => p.keyboard.press('Enter'));
+  await expect(t).toHaveURL(`${CORPUS}/`);
+  await expect(t.locator('#u')).toHaveValue('bob');
+  await expect(t.locator('#p')).toHaveValue('bob-S3cret!');
+  await expect(page.locator('body')).not.toContainText('bob'); // the page the popup was on is left alone
+  // It opens next to the tab the popup was on.
+  const idx = await (await sw()).evaluate(async (urls) => { const all = await chrome.tabs.query({}); return urls.map((u) => all.find((x) => x.url === u)?.index ?? -1); }, [page.url(), t.url()]);
+  expect(idx[1]).toBe(idx[0]! + 1);
+  await t.close();
+
+  // The row icon: only on the selected row and the one under the mouse. 2FA logins copy the code, as a fill does.
+  p = await popup(page);
+  await search(p, 'corpus');
+  await expect(p.locator('.row.is-sel .ib.launch')).toBeVisible();
+  const alice = p.locator('.row:not(.is-sel)', { hasText: 'Corpus · Alice' });
+  await expect(alice.locator('.ib.launch')).toBeHidden();
+  await alice.hover();
+  await expect(alice.locator('.ib.launch')).toHaveAttribute('title', 'Open corpus.lw.test and fill (Alt O)');
+  await shot(p, 'row-open-light', 1);
+  t = await opens(p, () => alice.locator('.ib.launch').click());
+  await expect(t.locator('#p')).toHaveValue('alice-Pa55-word');
+  await expect.poll(() => clipboard(ctx, extId), { timeout: 10_000 }).toMatch(/^\d{6}$/);
+  await t.close();
+
+  // Alt O on the selected row. A login whose page sends you on to another site gets nothing.
+  await root(CORPUS, 'go-other.html');
+  p = await popup(page);
+  await search(p, 'corpus bob');
+  await expect(p.locator('.row.is-sel')).toContainText('Corpus · Bob');
+  t = await opens(p, () => p.keyboard.press('Alt+o'));
+  await expect(t).toHaveURL(`${OTHER}/stacked.html`);
+  await t.waitForTimeout(3000);
+  await expect(t.locator('#u')).toHaveValue('');
+  await t.close();
+
+  // An app that draws the form late and then draws it again (spa.html): the fill lands on the form that stays.
+  await root(CORPUS, 'spa.html');
+  p = await popup(page);
+  await search(p, 'corpus bob');
+  t = await opens(p, () => p.keyboard.press('Alt+o'));
+  await expect(t.locator('body')).toHaveAttribute('data-render', '2');
+  await expect(t.locator('[name=pw]')).toHaveValue('bob-S3cret!');
+  await expect(t.locator('[name=email]')).toHaveValue('bob');
+  await t.close();
+  await root(CORPUS, null);
+
+  // The item view's "sites don't match" sheet offers it too.
+  p = await popup(page);
+  await search(p, 'corpus bob');
+  await p.keyboard.press('Alt+e');
+  await p.locator('.dock .btn', { hasText: 'Fill on frames.example-lw.test' }).click();
+  await expect(p.locator('.sheet .c-ok')).toHaveText('Open corpus.lw.test');
+  t = await opens(p, () => p.locator('.sheet .c-ok').click());
+  await expect(t.locator('#p')).toHaveValue('bob-S3cret!');
+  await t.close();
+  await page.close();
+});
+
+test("open and fill: a sign-in form framed from the login's own site fills without asking; another site's doesn't", async ({ popup, ctx }) => {
+  const page = await ctx.newPage();
+  await page.goto(`${CORPUS}/none.html`);
+  // Carol's login is for frames.example-lw.test (base domain example-lw.test): login.example-lw.test is hers.
+  await root(OTHER, 'framed-own.html');
+  const open = async () => {
+    const p = await popup(page);
+    await expect(p.locator('#q')).toBeFocused();
+    await p.keyboard.type('frames carol');
+    await expect(p.locator('.row.is-sel')).toContainText('Frames · Carol');
+    const tab = ctx.waitForEvent('page', { predicate: (t) => !t.url().startsWith('chrome-extension://') });
+    // The popup closes as soon as the tab opens, which can be before the key press has finished (keyup).
+    await p.keyboard.press('Alt+o').catch((e) => {
+      if (!p.isClosed()) throw e;
+    });
+    const t = await tab;
+    await expect.poll(() => t.frames().length).toBe(2);
+    return t;
+  };
+  let t = await open();
+  await expect.poll(() => t.frames()[1]!.locator('#p').inputValue().catch(() => '')).toBe('carol-Fr4me');
+  await t.close();
+  await root(OTHER, 'framed-other.html');
+  t = await open();
+  await t.waitForTimeout(3000);
+  expect(await t.frames()[1]!.locator('#p').inputValue()).toBe('');
+  await t.close();
+  await root(OTHER, null);
   await page.close();
 });
 

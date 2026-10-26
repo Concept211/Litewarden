@@ -15,6 +15,18 @@ export function parseLoose(uri: string): URL | null {
   }
 }
 
+/** Where "open and fill" goes: the first web address that isn't a pattern (regex) or turned off for matching.
+ * One saved without a scheme ("chase.com") opens over https. */
+export function launchUrl(uris: ListUri[]): URL | null {
+  for (const u of uris) {
+    if (u.match === 4 || u.match === 5) continue;
+    const s = u.uri.trim();
+    const p = parseLoose(/^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : 'https://' + s);
+    if (p) return p;
+  }
+  return null;
+}
+
 /** Domain to request the favicon for (from the user's own server's /icons endpoint). */
 export function iconDomain(uris: ListUri[]): string | null {
   for (const u of uris) {

@@ -3,6 +3,7 @@
 // the generator, edits (checked from a second device), errors that keep the edit, trash, live updates from another
 // device, settings categories taking effect, and the pop-out window. Throwaway test servers only.
 import type { Page } from '@playwright/test';
+import QRCode from 'qrcode';
 import { decryptItem, type Keys } from '../../src/core';
 import { webCrypto as C } from '../../src/core/crypto';
 import { buildCipher, loginAccount } from '../../scripts/testserver/seed';
@@ -522,6 +523,47 @@ test('pop-out: a window that stays open after filling, follows the tab, remember
   await w.evaluate(async () => {
     for (const x of await chrome.windows.getAll({ windowTypes: ['popup'] })) await chrome.windows.remove(x.id!);
   });
+  await page.close();
+});
+
+test('2FA secret: the scan button reads the setup QR code showing on the page', async ({ popup, ctx }) => {
+  const page = await ctx.newPage();
+  await page.goto(`http://corpus.lw.test:${CORPUS_PORT}/none.html`);
+  const showQr = (text: string) =>
+    QRCode.toDataURL(text, { margin: 4, width: 220 }).then((src) =>
+      page.evaluate((s) => {
+        document.getElementById('qr')?.remove();
+        const i = document.createElement('img');
+        i.id = 'qr';
+        i.src = s;
+        document.body.prepend(i);
+        return i.decode();
+      }, src),
+    );
+  const p = await popup(page);
+  await p.click('button[aria-label="New login"]');
+  await expect(p.locator('.hdr h1')).toHaveText('New login');
+  const scan = async () => {
+    // The scan reads the tab the popup is over, which has to be the one showing (as it is under the real popup).
+    await page.bringToFront();
+    await p.locator('button[aria-label="Scan the QR code on the page"]').click();
+  };
+  await scan();
+  await expect(p.locator('#toast')).toContainText('No QR code found on the page');
+  await showQr('https://example.com/not-a-2fa-code');
+  await scan();
+  await expect(p.locator('#toast')).toContainText("That QR code isn't a 2FA setup code");
+  await showQr('otpauth-migration://offline?data=CjEKCkhlbGxvId6tvu8SGFRlc3QgVXNlcg');
+  await scan();
+  await expect(p.locator('#toast')).toContainText('Google Authenticator export');
+  await expect(p.locator('#f-totp')).toHaveValue('');
+  const uri = 'otpauth://totp/Example%20Site:alex%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=Example%20Site';
+  await showQr(uri);
+  await scan();
+  await expect(p.locator('#f-totp')).toHaveValue(uri);
+  await expect(p.locator('#toast')).toContainText('2FA key added: Example Site, alex@example.com');
+  await shot(p, 'scan-qr-light', 1);
+  await p.close();
   await page.close();
 });
 

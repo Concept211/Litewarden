@@ -6,6 +6,7 @@ import { FirstRun } from './FirstRun';
 import { Main, type MainKeep, type NewPrefill } from './MainView';
 import { Unlock } from './Unlock';
 import { here } from './where';
+import { initIcons } from '../../ui/bits';
 import type { PopupScreen } from '../../shared/store';
 
 type Resume = Extract<PopupScreen, { item: string | null }>;
@@ -46,6 +47,8 @@ export function App({ boot: initial }: { boot: Boot }) {
   const settings0 = useRef(initial.where && 'settings' in initial.where ? initial.where.settings : undefined);
   const ItemView = useLoaded(() => ItemViewC, loadItem, typeof view === 'object');
   const SettingsView = useLoaded(() => SettingsC, loadSettings, view === 'settings');
+  // Favicons for every screen, started once per open (the popup can reopen straight into an item or Settings).
+  useEffect(() => void (b.account && initIcons(b.account.server)), [b.account?.server]);
   // Warm both after the first paint so the first click doesn't wait.
   useEffect(() => {
     const t = setTimeout(() => void loadItem().then(loadSettings), 400);

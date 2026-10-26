@@ -5,6 +5,7 @@ import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { CreditCard, NotebookText, StickyNote } from 'lucide-preact';
 import { serverUrls } from '../core/api';
+import { parseLoose } from '../core/uri';
 import type { IndexItem } from '../shared/store';
 import { mem } from '../shared/store';
 
@@ -117,6 +118,25 @@ export function Tile({ item }: { item: IndexItem }) {
       {item.type === 3 ? <CreditCard /> : item.type === 2 ? <StickyNote /> : item.type === 4 ? <NotebookText /> : (item.name.trim()[0] ?? '?').toUpperCase()}
     </span>
   );
+}
+
+/** A site's name with its favicon in front, wherever a site is named. Just the name until the icon loads, or if
+ * the server has none. */
+export function Site({ host }: { host: string | null | undefined }) {
+  const domain = host ? (parseLoose(host)?.hostname.toLowerCase() ?? null) : null;
+  const src = useIcon(domain);
+  return (
+    <span class="site">
+      {src && <img src={src} alt="" />}
+      {host}
+    </span>
+  );
+}
+
+/** Just the favicon, or `fallback` until it loads or when the server has none. */
+export function Favicon({ host, fallback }: { host: string; fallback: ComponentChildren }) {
+  const src = useIcon(parseLoose(host)?.hostname.toLowerCase() ?? null);
+  return src ? <img class="favicon" src={src} alt="" /> : <>{fallback}</>;
 }
 
 /** The account's picture: its email domain's favicon (Vaultwarden has no avatars), else its first letter. */

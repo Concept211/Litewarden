@@ -2,9 +2,11 @@
 // In-page Litewarden, as a user meets it: field icons, the menu (placement that covers nothing, at three window
 // widths), Esc and outside clicks, filling from the menu, the save and update prompts (checked on the server),
 // "never for this site", saving while locked, an SPA login over fetch, and "teach this site" end to end.
+import fs from 'node:fs';
+import path from 'node:path';
 import type { Page } from '@playwright/test';
 import { CORPUS_PORT, e2eCreds } from './accounts';
-import { expect, test } from './fixtures';
+import { EXT, expect, test } from './fixtures';
 import { finishFirstRun, shot, signIn, signOut, watchErrors, budget } from './helpers';
 import { clickIcon, contentCost, frameBox, gone, icons, overlaps, protectedBoxes, serverLogins, surface, tabIdOf, pressOrExplain, createLogins } from './inpage-helpers';
 
@@ -22,6 +24,10 @@ test.beforeAll(async ({ popup, ctx }) => {
   // Popup tabs left open by earlier spec files stop Playwright's input from reaching extension frames in other
   // tabs (a harness quirk; the real toolbar popup and pop-out window don't do it). Start clean.
   for (const x of ctx.pages()) if (x.url().startsWith('chrome-extension://')) await x.close();
+  // The test servers don't download icons (every site gets the fallback): give the test sites one, so the cards
+  // show a site's favicon beside its name as they do for real sites.
+  const fav = fs.readFileSync(path.join(EXT, 'icon', '32.png'));
+  await ctx.route(/\/icons\/[^/]*lw\.test\/icon\.png$/, (r) => r.fulfill({ status: 200, contentType: 'image/png', body: fav }));
   const p0 = await page(ctx, C('stacked.html'));
   const p = await popup(p0);
   watchErrors(p, errors);
@@ -184,6 +190,7 @@ test('save prompt: a new login, after the form navigates; it lands on the server
   await p.waitForURL(/welcome\.html/);
   const f = await surface(p, 'prompt');
   await expect(f.locator('.p-head b')).toContainText('Save login for shop.save-lw.test?');
+  await expect(f.locator('.p-head .site img')).toBeVisible();
   await expect(f.locator('input[aria-label=Username]')).toHaveValue(NEW_USER);
   await expect(f.locator('input[aria-label=Password]')).toHaveValue('Shop-Pa55-2026');
   await p.waitForTimeout(300);
@@ -513,6 +520,7 @@ test('teach this site: offered when a fill finds no fields; point at the fields;
   await shot(p, 'inpage-teach-light', 2);
   await p.click('#otp');
   await expect(t.locator('.saved')).toContainText('Saved for corpus.lw.test');
+  await expect(t.locator('.saved .site img')).toBeVisible();
   await expect(t.locator('.map')).toContainText('#mcode');
   await shot(p, 'inpage-teach-saved-light', 1);
   await p.waitForTimeout(300);

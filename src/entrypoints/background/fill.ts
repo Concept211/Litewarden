@@ -32,7 +32,9 @@ async function code(secret: string | null | undefined, rs: Rules, host: string):
   return secret && rs[host]?.totp ? totp(secret).catch(() => null) : null;
 }
 
-export async function fill(tabId: number, id: string, force = false, allowFrame = false): Promise<FillResult> {
+/** `allowFrame`: fill a login form from another origin inside the page without asking; 'matching' only when that
+ * frame belongs to the login's own site. */
+export async function fill(tabId: number, id: string, force = false, allowFrame: boolean | 'matching' = false): Promise<FillResult> {
   const tab = await chrome.tabs.get(tabId);
   const url = tab.url ?? '';
   if (!/^https?:\/\//i.test(url)) return { outcome: 'blocked-page' };
@@ -56,7 +58,8 @@ export async function fill(tabId: number, id: string, force = false, allowFrame 
     .sort((a, b) => b.p.score - a.p.score || Number(b.p.top) - Number(a.p.top) || Number(b.p.origin === pageOrigin) - Number(a.p.origin === pageOrigin));
   const best = cands[0];
   if (!best) return { outcome: 'no-fields' };
-  if (best.p.origin !== pageOrigin && !allowFrame) return { outcome: 'confirm-frame', frameOrigin: best.p.origin };
+  const frameOk = allowFrame === true || (allowFrame === 'matching' && matchesPage(item.login.uris, best.p.origin));
+  if (best.p.origin !== pageOrigin && !frameOk) return { outcome: 'confirm-frame', frameOrigin: best.p.origin };
   return run(tabId, best.frameId, new URL(best.p.origin).hostname, id, item.login, rs);
 }
 

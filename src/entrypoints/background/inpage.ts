@@ -200,12 +200,13 @@ async function answer(t: string, sender: chrome.runtime.MessageSender): Promise<
 async function promptData(t: string, error?: string): Promise<PromptData> {
   const p = (await pendings())[t];
   if (!p) throw new S.UserError('This prompt has expired.');
-  const [settings, folders, item] = await Promise.all([
+  const [settings, folders, item, { account }] = await Promise.all([
     getSettings(),
     p.kind === 'save' && (await mem.get('session')).session ? S.folders().catch(() => []) : Promise.resolve([]),
     p.itemId ? S.fullItem(p.itemId).catch(() => null) : Promise.resolve(null),
+    local.get('account'),
   ]);
-  return { kind: p.kind, state: p.state, site: siteName(hostOf(p.url)), username: p.username, password: p.password, itemName: item?.name ?? null, folders, theme: settings.theme, ...(error ? { error } : {}) };
+  return { kind: p.kind, state: p.state, site: siteName(hostOf(p.url)), username: p.username, password: p.password, itemName: item?.name ?? null, folders, theme: settings.theme, server: account?.server ?? null, ...(error ? { error } : {}) };
 }
 
 function draftFrom(it: FullItem): Draft {
@@ -268,7 +269,7 @@ async function promptAct(a: Api['promptAct'][0], sender: chrome.runtime.MessageS
 }
 
 async function basicData(p: PendingSave): Promise<PromptData> {
-  return { kind: p.kind, state: p.state, site: siteName(hostOf(p.url)), username: p.username, password: p.password, itemName: null, folders: [], theme: (await getSettings()).theme };
+  return { kind: p.kind, state: p.state, site: siteName(hostOf(p.url)), username: p.username, password: p.password, itemName: null, folders: [], theme: (await getSettings()).theme, server: (await local.get('account')).account?.server ?? null };
 }
 
 async function closePrompt(t: string, tabId: number) {
@@ -370,7 +371,8 @@ export const inpageHandlers: ExtHandlers = {
   promptAct: (a, sender) => promptAct(a, sender),
   teachData: async ({ token: t }, sender) => {
     const s = await surface(t, sender);
-    return { site: siteName(hostOf(s.url)), state: s.teach ?? { step: 1, username: null, password: null, totp: null } };
+    const { account } = await local.get('account');
+    return { site: siteName(hostOf(s.url)), server: account?.server ?? null, state: s.teach ?? { step: 1, username: null, password: null, totp: null } };
   },
   teachAct: ({ token: t, act }, sender) => teachAct(t, act, sender),
   startTeach: ({ tabId }) => startTeach(tabId),

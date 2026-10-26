@@ -60,6 +60,9 @@ svg.lucide{width:16px;height:16px;stroke-width:1.9}
 .tile img{width:18px;height:18px;display:block}
 .row .tile img,.m-row .tile img{width:16px;height:16px}
 .tile svg.lucide{width:14px;height:14px}
+/* a site named in text, with its favicon in front */
+.site{white-space:nowrap}
+.site img{width:1.1em;height:1.1em;border-radius:3px;vertical-align:-.17em;margin-right:.3em}
 .who{flex:1;min-width:0;line-height:1.25}
 .nm{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .un{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -84,6 +87,9 @@ svg.lucide{width:16px;height:16px;stroke-width:1.9}
 .row .tile{width:26px;height:26px;font-size:12px;border-radius:7px}
 .row .nm{font-size:13.5px}.row .un{font-size:12px}
 .row .ib{width:30px;height:30px}
+/* "open the site and fill": only on the row under the mouse or picked with the arrow keys, so rows keep their room */
+.row .ib.launch{display:none;color:var(--accent-text)}
+.row:hover .ib.launch,.row.is-sel .ib.launch{display:grid}
 .btn{height:34px;padding:0 14px;border-radius:999px;font-weight:700;display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:var(--accent-ink)}
 .btn:hover{background:var(--accent-hover)}
 a.btn{text-decoration:none}
@@ -101,6 +107,9 @@ a.btn{text-decoration:none}
 #toast.show{display:flex}#toast .t-time{font-family:var(--mono);font-size:12px;opacity:.75;font-weight:400}
 #confirm{position:absolute;left:8px;right:8px;bottom:8px;background:var(--surface);padding:13px;display:none;z-index:5;border-radius:var(--r-card);box-shadow:0 8px 30px rgb(var(--shadow-c)/.25);border:1.5px solid var(--line)}#confirm.show{display:block}#confirm p{margin:0 0 12px}
 .c-actions{display:flex;gap:8px;justify-content:flex-end}.c-actions button{height:34px;padding:0 15px;border-radius:999px;font-weight:700;background:var(--raised)}.c-actions .c-ok{background:var(--accent);color:var(--accent-ink)}
+.c-actions.three .c-cancel{margin-right:auto}
+.c-actions .c-go{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c-actions.three button:not(.c-go){flex:none}
 #help{position:absolute;inset:0;background:rgb(0 0 0/.4);display:none;z-index:6;align-items:flex-end;padding:8px}#help.open{display:flex}
 .h-card{background:var(--surface);width:100%;border-radius:var(--r-card);padding:12px 14px;max-height:100%;overflow:auto;scrollbar-width:thin}
 .h-head{display:flex;justify-content:space-between;align-items:center;font-size:14px;margin-bottom:4px}
@@ -168,6 +177,7 @@ html.is-menu,html.is-menu body{background:transparent!important}
 .set{display:flex;align-items:center;gap:11px;padding:10px 10px 10px 10px;min-height:56px}
 .set .si{width:30px;height:30px;border-radius:9px;background:var(--raised);display:grid;place-items:center;flex:none;color:var(--ink)}
 .set .si svg.lucide{width:16px;height:16px}
+.set .si img.favicon{width:16px;height:16px;border-radius:3px}
 .set .st-t{flex:1;min-width:0}
 .set .st-t b{display:block;font-size:13.5px;font-weight:700}
 .set .st-t span{display:block;color:var(--muted);font-size:12px;line-height:1.35;margin-top:1px}

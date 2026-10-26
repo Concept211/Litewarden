@@ -11,7 +11,7 @@ import '../../ui/slip.css';
 import '../../ui/inpage.css';
 import { BellOff, Check, Eye, EyeOff, X } from 'lucide-preact';
 import { send, type PromptData, type RemoteError } from '../../shared/messages';
-import { Keep } from '../../ui/bits';
+import { Keep, Site, initIcons } from '../../ui/bits';
 import { applyFrameTheme, useAutoSize, useGuard, useHash } from '../../ui/frame';
 import { tidyPaste } from '../../ui/paste';
 
@@ -33,6 +33,7 @@ function Prompt() {
 
   const take = (x: PromptData) => {
     applyFrameTheme(x.theme);
+    if (x.server) void initIcons(x.server);
     setD(x);
     setUser(x.username);
     setPw(x.password);
@@ -91,6 +92,8 @@ function Prompt() {
   const upd = d.kind === 'update';
   const locked = d.kind === 'locked';
   const title = upd ? `Update password for ${d.username || 'this login'}?` : `Save login for ${d.site}?`;
+  const site = <Site host={d.site} />;
+  const heading = upd ? title : <>Save login for {site}?</>;
   const X_ = (
     <button class="ib x" aria-label="Not now" title="Not now (Esc)" onClick={(e) => void act('notnow', e)}>
       <X />
@@ -104,8 +107,8 @@ function Prompt() {
         <div class="conf" role="status">
           <span class={`ok-dot${never ? ' off' : ''}`}>{never ? <BellOff /> : <Check />}</span>
           <div class="t">
-            <b>{never ? `Won't ask on ${d.site}` : upd ? 'Password updated' : 'Login saved'}</b>
-            <span>{never ? 'Change it in Settings, Autofill.' : upd ? `${d.username} on ${d.site}` : `${d.username || 'No username'} on ${d.site}`}</span>
+            <b>{never ? <>Won't ask on {site}</> : upd ? 'Password updated' : 'Login saved'}</b>
+            <span>{never ? 'Change it in Settings, Autofill.' : <>{upd ? d.username : d.username || 'No username'} on {site}</>}</span>
           </div>
           <button class="btn ghost" onClick={(e) => void act('undo', e)}>
             Undo
@@ -126,7 +129,7 @@ function Prompt() {
         <div class="bar">
           <Keep />
           <div class="t">
-            <b>{title}</b>
+            <b>{heading}</b>
             <span>{locked ? 'Litewarden is locked' : upd ? 'The password you just used is new' : `${d.username || 'No username'} · ••••••••••`}</span>
           </div>
           <button class="btn" disabled={!!busy} onClick={(e) => void act(primaryAct, e)}>
@@ -143,15 +146,15 @@ function Prompt() {
         <div class="p-head">
           <Keep />
           <b>
-            {title}
-            {upd && <span class="p-sub">{d.site}</span>}
+            {heading}
+            {upd && <span class="p-sub">{site}</span>}
           </b>
           {X_}
         </div>
         {blocked && <div class="blocked">Part of this card is hidden by the page, so clicks are ignored.</div>}
         <div class="p-body">
           {locked ? (
-            <p class="p-text">Litewarden is locked. Unlock it to save {d.username ? <b>{d.username}</b> : 'this login'} for {d.site}.</p>
+            <p class="p-text">Litewarden is locked. Unlock it to save {d.username ? <b>{d.username}</b> : 'this login'} for {site}.</p>
           ) : upd ? (
             <div class="diff">
               <div>

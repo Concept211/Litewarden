@@ -47,6 +47,8 @@ export interface Api {
   getTotpSecrets: [{ ids: string[] }, Record<string, string>];
   clipboardCopied: [{ seconds?: number; hash?: string }, void];
   fill: [{ tabId: number; id: string; force?: boolean; allowFrame?: boolean }, FillResult];
+  /** Open the login's site in a new tab (next to `tabId`) and fill it once the sign-in form shows up. */
+  launch: [{ id: string; tabId?: number }, { host: string }];
   matchTab: [{ tabId: number; url: string }, { ids: string[]; items: import('./store').IndexItem[] }];
   setPin: [{ pin: string | null }, void];
   setSettings: [Partial<Settings>, Settings];
@@ -63,7 +65,7 @@ export interface Api {
   surfaceAct: [{ token: string; act: 'size' | 'close' | 'teach' | 'hide'; w?: number; h?: number }, void];
   promptData: [{ token: string }, PromptData];
   promptAct: [{ token: string; act: 'save' | 'notnow' | 'never' | 'undo' | 'unlock'; username?: string; password?: string; folderId?: string | null }, PromptData];
-  teachData: [{ token: string }, { site: string; state: TeachState }];
+  teachData: [{ token: string }, { site: string; server: string | null; state: TeachState }];
   teachAct: [{ token: string; act: 'back' | 'save' | 'cancel' | 'undo' | 'done' }, void];
   /** From the popup: start "teach this site" on the page. */
   startTeach: [{ tabId: number }, { ok: boolean }];
@@ -92,6 +94,8 @@ export interface PromptData {
   itemName: string | null;
   folders: Folder[];
   theme: Settings['theme'];
+  /** The account's server, for the site's favicon. */
+  server: string | null;
   /** Set when the last action failed. */
   error?: string;
 }

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { fold, SearchIndex } from '../../src/core/search';
 import { base32decode, parseTotp, secondsRemaining, totp } from '../../src/core/totp';
 import { baseDomain, iconDomain, matchesPage, matchUri, UriMatch } from '../../src/core/urlmatch';
+import { launchUrl } from '../../src/core/uri';
 
 describe('TOTP (RFC 6238 appendix B vectors, 8 digits)', () => {
   const secrets = {
@@ -86,6 +87,13 @@ describe('URL matching', () => {
     const uris = [{ uri: 'androidapp://x', match: null }, { uri: 'https://Accounts.Example.com/login', match: null }];
     expect(matchesPage(uris, 'https://example.com/')).toBe(true);
     expect(iconDomain(uris)).toBe('accounts.example.com');
+  });
+  it('launchUrl: the first web address, skipping app URIs, regex patterns and "never"', () => {
+    expect(launchUrl([{ uri: 'androidapp://x', match: null }, { uri: 'chase.com', match: null }])?.href).toBe('https://chase.com/');
+    expect(launchUrl([{ uri: 'http://intranet.lan:8080/login', match: null }])?.href).toBe('http://intranet.lan:8080/login');
+    expect(launchUrl([{ uri: '^https://.*\.example\.com', match: UriMatch.RegularExpression }, { uri: 'https://a.example.com/login?x=1', match: UriMatch.Never }, { uri: 'https://b.example.com/in', match: UriMatch.Exact }])?.href).toBe('https://b.example.com/in');
+    expect(launchUrl([{ uri: 'androidapp://x', match: null }])).toBeNull();
+    expect(launchUrl([])).toBeNull();
   });
 });
 

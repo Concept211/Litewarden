@@ -13,6 +13,7 @@ export const HELP: Array<[string, Array<[string, string]>]> = [
       ['Alt P', 'Copy password'],
       ['Alt T', 'Copy 2FA code'],
       ['Alt E', 'Open the item'],
+      ['Alt O', "Open the login's site and fill it"],
       ['Esc', 'Clear search, then close'],
       ['?', 'This list'],
     ],

@@ -10,7 +10,7 @@ import '../../ui/slip.css';
 import '../../ui/inpage.css';
 import { secondsRemaining, totp } from '../../core/totp';
 import { send, type MenuData, type RemoteError } from '../../shared/messages';
-import { Keep, Tile, initIcons } from '../../ui/bits';
+import { Keep, Site, Tile, initIcons } from '../../ui/bits';
 import { applyFrameTheme, useAutoSize, useGuard, useHash } from '../../ui/frame';
 
 function Menu() {
@@ -176,7 +176,7 @@ function Menu() {
           ))}
           {!items.length && (
             <div class="m-msg">
-              <b>{q ? `No match for "${q}"` : `No logins saved for ${data.site}`}</b>
+              <b>{q ? `No match for "${q}"` : <>No logins saved for <Site host={data.site} /></>}</b>
               {q ? 'Try another word.' : 'Sign in once and Litewarden offers to save it.'}
             </div>
           )}

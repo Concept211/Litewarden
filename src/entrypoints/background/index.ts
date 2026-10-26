@@ -5,6 +5,7 @@ import type { Api, CsApi, Req } from '../../shared/messages';
 import { fenceStorage, getSettings, local, mem, type IndexItem, type Settings } from '../../shared/store';
 import { clearClipboard, rememberCopy } from './clipboard';
 import { fill } from './fill';
+import { launch } from './launch';
 import { csHandlers, forgetTab, inpageHandlers, onUnlocked, openMenuAt, openMenuCommand, pushPrompt, refreshAll } from './inpage';
 import { armSyncAlarm, startLive, stopLive } from './live';
 import * as S from './session';
@@ -43,6 +44,7 @@ const handlers: Handlers = {
     if (s > 0) await chrome.alarms.create('clipclear', { when: Date.now() + s * 1000 });
   },
   fill: async ({ tabId, id, force, allowFrame }) => fill(tabId, id, force, allowFrame || !(await getSettings()).askFrames),
+  launch: ({ id, tabId }) => launch(id, tabId),
   matchTab: ({ tabId, url }) => matchTab(tabId, url),
   setPin: ({ pin }) => S.setPin(pin),
   setSettings: async (patch) => {

@@ -12,7 +12,7 @@ import '../../ui/inpage.css';
 import { Check, X } from 'lucide-preact';
 import { getSettings, type TeachState } from '../../shared/store';
 import { send, type RemoteError } from '../../shared/messages';
-import { Keep } from '../../ui/bits';
+import { Keep, Site, initIcons } from '../../ui/bits';
 import { applyFrameTheme, useGuard, useHash } from '../../ui/frame';
 
 type Act = 'back' | 'save' | 'cancel' | 'undo' | 'done';
@@ -29,7 +29,7 @@ function Teach() {
   useEffect(() => {
     void getSettings().then((s) => applyFrameTheme(s.theme));
     send('teachData', { token })
-      .then((d) => (setSite(d.site), setSt(d.state)))
+      .then((d) => (d.server && void initIcons(d.server), setSite(d.site), setSt(d.state)))
       .catch((e: RemoteError) => setErr(e.message));
     const on = (m: { event?: string; token?: string; state?: TeachState }) => {
       if (m?.event === 'teach-state' && m.token === token && m.state) setSt(m.state);
@@ -61,7 +61,7 @@ function Teach() {
           <div class="t">
             <b>Rule saved</b>
             <span>
-              {site}: username {st.username ?? 'none'}, password {st.password ?? 'none'}
+              <Site host={site} />: username {st.username ?? 'none'}, password {st.password ?? 'none'}
               {st.totp ? `, 2FA ${st.totp}` : ''}
             </span>
           </div>
@@ -79,7 +79,9 @@ function Teach() {
           <span class="ok-dot">
             <Check />
           </span>
-          <b>Saved for {site}</b>
+          <b>
+            Saved for <Site host={site} />
+          </b>
         </div>
         <div class="map">
           <span>Username</span>
@@ -154,7 +156,7 @@ function Teach() {
       {blocked && <div class="blocked">Part of this panel is hidden by the page, so clicks are ignored.</div>}
       <div class="p-body">
         <p class="muted" style={{ margin: '0 2px', fontSize: '12px', lineHeight: 1.45 }}>
-          Point at {site ? `${site}'s` : 'the'} login fields once and Litewarden remembers them on this device.
+          Point at {site ? <><Site host={site} />'s</> : 'the'} login fields once and Litewarden remembers them on this device.
         </p>
         {role(1, 'Username or email', st.username)}
         {role(2, 'Password', st.password)}
