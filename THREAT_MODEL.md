@@ -214,7 +214,10 @@ Litewarden can't clear those.
 - A scan of the built package finds no `eval`, no `new Function` and no remote script tags. The only hosts named in
   the code are Bitwarden cloud's (used only if you pick it), GitHub links, and placeholder examples.
 - Dependencies are pinned to exact versions in `package.json`; the runtime ones are Preact, @preact/signals,
-  hash-wasm (Argon2), tldts (public suffix list), lucide-preact (icons) and two Fontsource font packages.
+  hash-wasm (Argon2), tldts (public suffix list), lucide-preact (icons), jsQR (reads a 2FA setup QR code) and two
+  Fontsource font packages.
+- The 2FA scan button takes one screenshot of the visible tab, only when you click it, and decodes it inside the
+  popup. The image isn't stored or sent anywhere.
 - Litewarden doesn't use Bitwarden's SDK and contains no code under Bitwarden's commercial license.
 
 Residual risk: a compromised npm dependency at build time would end up in the package. Reproducible builds and a
