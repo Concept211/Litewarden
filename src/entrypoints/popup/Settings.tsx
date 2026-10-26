@@ -100,8 +100,25 @@ const LIVE_TEXT: Record<LiveState['status'], string> = {
   off: 'Off. Litewarden checks on the timer below.',
 };
 
-export function SettingsView({ boot: b, onBack, onLoggedOut }: { boot: Boot; onBack: () => void; onChanged?: () => void; onLoggedOut: () => void }) {
-  const [page, setPage] = useState<Page>('home');
+const PAGES: Page[] = ['home', 'autofill', 'security', 'keyboard', 'shortcuts', 'appearance', 'sync', 'account', 'about', 'iconsites', 'neversites', 'rules'];
+
+export function SettingsView({
+  boot: b,
+  page0,
+  onPage,
+  onBack,
+  onLoggedOut,
+}: {
+  boot: Boot;
+  /** The page to open on (the one the popup was on when it closed). */
+  page0?: string;
+  onPage?: (page: Page) => void;
+  onBack: () => void;
+  onChanged?: () => void;
+  onLoggedOut: () => void;
+}) {
+  const [page, setPage] = useState<Page>(PAGES.includes(page0 as Page) ? (page0 as Page) : 'home');
+  useEffect(() => onPage?.(page), [page]);
   const [s, setS] = useState(b.settings);
   const [pinOn, setPinOn] = useState(b.pinEnabled);
   const [sheet, setSheet] = useState<'pin' | 'logout' | null>(null);

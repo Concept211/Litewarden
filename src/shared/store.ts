@@ -7,6 +7,7 @@
 //    org keys and the decrypted list index the popup reads directly on open.
 import type { Kdf, ServerInfo, SyncResponse, Tokens } from '../core';
 import { DEFAULT_GEN, type GenOptions } from '../core/generator';
+import type { Draft } from '../core/edit';
 import type { ListItem } from '../core/vault';
 import type { SiteRule } from './rules';
 import type { Sealed } from './vaultkey';
@@ -225,6 +226,19 @@ export interface SessionStore {
   pendingSaves?: Record<string, PendingSave>;
   /** Two-step logins: the username typed on page 1, by tab, for the password page. */
   stepUser?: Record<string, { host: string; username: string; at: number }>;
+  /** Where the popup was when it closed, so opening it again lands there. Removed on lock and log out. */
+  popupWhere?: PopupWhere;
+}
+
+/** A popup screen to come back to: a Settings page, or an item (open, being edited, or new). */
+export type PopupScreen =
+  | { settings: string }
+  | { item: string | null; prefill?: { host: string | null; origin: string | null }; mode: 'view' | 'edit'; draft?: Draft; baseline?: string };
+
+export interface PopupWhere {
+  screen: PopupScreen;
+  /** Last seen open (the popup refreshes this while it's up). */
+  at: number;
 }
 
 export const local = {

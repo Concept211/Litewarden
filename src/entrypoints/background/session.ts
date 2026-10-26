@@ -200,7 +200,7 @@ async function wipeLocalVault() {
   keysCache = null;
   await local.remove('vault', 'lastSync', 'recent', 'pinWrapped', 'persistedSession', 'tokens');
   await dropKey();
-  await mem.remove('session', 'index', 'indexCount', 'recentItems', 'notes', 'tabMatches', 'iconCache', 'pinWrapped', 'failures');
+  await mem.remove('session', 'index', 'indexCount', 'recentItems', 'notes', 'tabMatches', 'iconCache', 'pinWrapped', 'failures', 'popupWhere');
 }
 
 // ---------- unlock / lock ----------
@@ -331,7 +331,7 @@ export async function persistSession(session: Session | null): Promise<void> {
 export async function lock() {
   lockEpoch++;
   keysCache = null;
-  await mem.remove('session', 'index', 'indexCount', 'recentItems', 'notes', 'tabMatches', 'failures');
+  await mem.remove('session', 'index', 'indexCount', 'recentItems', 'notes', 'tabMatches', 'failures', 'popupWhere');
   await persistSession(null);
   await chrome.alarms.clear('autolock');
   onLockChange?.(false);

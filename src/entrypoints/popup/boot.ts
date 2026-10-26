@@ -3,7 +3,8 @@
 // list is on screen fast; the worker only gets a "touch" afterwards to push the auto-lock deadline.
 import { checkKdf, kdfSignature } from '../../core/kdf';
 import { send } from '../../shared/messages';
-import { POPUP_SIZES, local, mem, withDefaults, type Account, type IndexItem, type Lockout, type Settings } from '../../shared/store';
+import { POPUP_SIZES, local, mem, withDefaults, type Account, type IndexItem, type Lockout, type PopupScreen, type Settings } from '../../shared/store';
+import { pickScreen } from './where';
 
 export interface Tab {
   id: number;
@@ -33,6 +34,8 @@ export interface Boot {
   popout: boolean;
   /** The list's folder filter (see LocalStore.listFolder). */
   listFolder: string;
+  /** The screen the popup was on when it closed, to open on again (see where.ts). */
+  where: PopupScreen | null;
 }
 
 export const isPopout = () => new URLSearchParams(location.search).has('popout');
@@ -60,7 +63,7 @@ export async function boot(): Promise<Boot> {
   const [l, m, tab] = await Promise.all([
     local.get('account', 'settings', 'lastSync', 'lastSyncError', 'pinWrapped', 'kdfDismissed', 'listFolder'),
     // Small keys only: the full index (megabytes for a big vault) is read after the first paint.
-    mem.get('session', 'indexCount', 'recentItems', 'tabMatches', 'pinWrapped', 'lockout', 'failures'),
+    mem.get('session', 'indexCount', 'recentItems', 'tabMatches', 'pinWrapped', 'lockout', 'failures', 'popupWhere'),
     targetTab(),
   ]);
   const settings = withDefaults(l.settings);
@@ -85,6 +88,7 @@ export async function boot(): Promise<Boot> {
     kdfDismissed: !!l.account && l.kdfDismissed === kdfSignature(l.account.kdf),
     popout: isPopout(),
     listFolder: l.listFolder ?? 'all',
+    where: unlocked ? pickScreen(m.popupWhere) : null,
   };
 }
 

@@ -11,7 +11,8 @@ interface Fx {
   extId: string;
   sw: () => Promise<Worker>;
   /** Open the popup as a page aimed at `target` (the popup normally targets the active tab). */
-  popup: (target?: Page, opts?: { theme?: 'light' | 'dark'; tabId?: number }) => Promise<Page>;
+  /** `resume`: open where the last popup left off (see popup/where.ts); by default it opens fresh, on the list. */
+  popup: (target?: Page, opts?: { theme?: 'light' | 'dark'; tabId?: number; resume?: boolean }) => Promise<Page>;
   corpus: (file: string) => Promise<Page>;
 }
 
@@ -62,6 +63,7 @@ export const test = base.extend<{}, Fx>({
         const url = target.url();
         tabId = String(await (await sw()).evaluate(async (u) => (await chrome.tabs.query({})).filter((t) => t.url === u).sort((a, b) => b.id! - a.id!)[0]?.id ?? '', url));
       }
+      if (!opts.resume) await (await sw()).evaluate(() => chrome.storage.session.remove('popupWhere'));
       const p = await context.newPage();
       await p.setViewportSize({ width: 380, height: 600 });
       if (opts.theme) await p.emulateMedia({ colorScheme: opts.theme });

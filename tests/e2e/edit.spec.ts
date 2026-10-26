@@ -250,6 +250,120 @@ test('errors keep the edit: empty name, a value the server refuses, the server g
   await page.close();
 });
 
+/** Paste into the focused field the way the browser delivers it (a trusted paste needs the system clipboard). */
+async function paste(p: Page, sel: string, text: string) {
+  await p.fill(sel, '');
+  await p.focus(sel);
+  await p.evaluate((t) => {
+    const dt = new DataTransfer();
+    dt.setData('text/plain', t);
+    const ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+    // Nobody tidied it: insert it as Chrome would (a line break becomes a space in a one-line field).
+    if (document.activeElement!.dispatchEvent(ev)) document.execCommand('insertText', false, t.replace(/\r?\n/g, ' '));
+  }, text);
+}
+
+test('paste drops the line breaks a selection picks up at either end', async ({ popup, ctx }) => {
+  const page = await ctx.newPage();
+  await page.goto(`${NEWSITE}/stacked.html`);
+  const p = await open(popup, page);
+  await p.locator('.card button[aria-label^="Open"]').click();
+  await p.click('button:has-text("Edit")');
+  await paste(p, '#f-pw', '\nPasted-Pa55\r\n');
+  await expect(p.locator('#f-pw')).toHaveValue('Pasted-Pa55');
+  // A password keeps a space of its own; only whitespace around the line break goes.
+  await paste(p, '#f-pw', ' Two words \n');
+  await expect(p.locator('#f-pw')).toHaveValue(' Two words');
+  await paste(p, '#f-user', '  alex@site.test \n');
+  await expect(p.locator('#f-user')).toHaveValue('alex@site.test');
+  await paste(p, 'input[aria-label="Website 1"]', '\nhttps://www.newsite-lw.test/login\n');
+  await expect(p.locator('input[aria-label="Website 1"]')).toHaveValue('https://www.newsite-lw.test/login');
+  // Ctrl+Z still undoes a tidied paste.
+  await p.keyboard.press('Control+z');
+  await expect(p.locator('input[aria-label="Website 1"]')).not.toHaveValue('https://www.newsite-lw.test/login');
+  // Clean text goes in untouched; the notes (several lines on purpose) are left alone.
+  await paste(p, '#f-user', 'plain');
+  await expect(p.locator('#f-user')).toHaveValue('plain');
+  await p.close();
+  await page.close();
+});
+
+test('the popup closing mid-edit: opening it again lands back in the edit, until saved, discarded or locked', async ({ popup, ctx, sw }) => {
+  const page = await ctx.newPage();
+  await page.goto(`${NEWSITE}/stacked.html`);
+  type Where = { at: number; screen: { mode?: string; settings?: string; draft?: { notes: string | null } } };
+  const where = async () => (await (await sw()).evaluate(() => chrome.storage.session.get('popupWhere'))).popupWhere as Where | undefined;
+  // The popup records its place just after each change paints; a person can't close it faster than that, a test can.
+  const settled = (f: (w: Where | undefined) => unknown) => expect.poll(async () => !!f(await where())).toBe(true);
+  let p = await open(popup, page);
+  await p.locator('.card button[aria-label^="Open"]').click();
+  await p.click('button:has-text("Edit")');
+  await p.fill('#f-user', 'mid-edit');
+  await p.fill('#f-notes', 'line one\nline two');
+  await settled((w) => w?.screen.draft?.notes === 'line one\nline two');
+  // Focus goes elsewhere and the toolbar popup closes.
+  await p.close();
+  p = await popup(page, { resume: true });
+  watchErrors(p, errors);
+  await expect(p.locator('.hdr h1')).toHaveText('Edit login');
+  await expect(p.locator('#f-user')).toHaveValue('mid-edit');
+  await expect(p.locator('#f-notes')).toHaveValue('line one\nline two');
+  await shot(p, 'edit-resumed-light', 2);
+  // Unsaved edits wait however long it takes.
+  await (await sw()).evaluate(() => chrome.storage.session.get('popupWhere').then((r) => chrome.storage.session.set({ popupWhere: { ...(r.popupWhere as object), at: Date.now() - 3_600_000 } })));
+  await p.close();
+  p = await popup(page, { resume: true });
+  watchErrors(p, errors);
+  await expect(p.locator('#f-user')).toHaveValue('mid-edit');
+  // Discard: back on the item, and that's where the popup opens next.
+  await p.keyboard.press('Escape');
+  await p.locator('.sheet button:has-text("Discard")').click();
+  await expect(p.locator('button:has-text("Edit")')).toBeVisible();
+  await settled((w) => w?.screen.mode === 'view');
+  await p.close();
+  p = await popup(page, { resume: true });
+  watchErrors(p, errors);
+  await expect(p.locator('button:has-text("Edit")')).toBeVisible();
+  // A screen with nothing unsaved is remembered for 5 minutes, then the popup starts on the list again.
+  await (await sw()).evaluate(() => chrome.storage.session.get('popupWhere').then((r) => chrome.storage.session.set({ popupWhere: { ...(r.popupWhere as object), at: Date.now() - 6 * 60_000 } })));
+  await p.close();
+  p = await popup(page, { resume: true });
+  watchErrors(p, errors);
+  await expect(p.locator('.card button[aria-label^="Open"]')).toBeVisible();
+  // Settings: the page you were on.
+  await p.click('button[aria-label="Settings"]');
+  await p.click('[data-cat=autofill]');
+  await settled((w) => w?.screen.settings === 'autofill');
+  await p.close();
+  p = await popup(page, { resume: true });
+  watchErrors(p, errors);
+  await expect(p.getByRole('switch', { name: 'Open the menu when a field gets focus' })).toBeVisible();
+  // Back to the list: nothing to come back to.
+  await p.keyboard.press('Escape');
+  await p.keyboard.press('Escape');
+  await expect(p.locator('.card button[aria-label^="Open"]')).toBeVisible();
+  await expect.poll(where).toBeUndefined();
+  // Locking forgets an edit in progress (it can hold a password that was never saved).
+  await p.locator('.card button[aria-label^="Open"]').click();
+  await p.click('button:has-text("Edit")');
+  await p.fill('#f-pw', 'Never-Saved-Pa55');
+  await expect.poll(where).toBeDefined();
+  await p.evaluate(() => chrome.runtime.sendMessage({ type: 'lock' }));
+  await expect(p.locator('#pw')).toBeVisible();
+  expect(await where()).toBeUndefined();
+  await p.fill('#pw', creds.main.password);
+  await p.keyboard.press('Enter');
+  await expect(p.locator('.card button[aria-label^="Open"]')).toBeVisible({ timeout: 30_000 });
+  await p.close();
+  p = await popup(page, { resume: true });
+  watchErrors(p, errors);
+  await expect(p.locator('.card button[aria-label^="Open"]')).toBeVisible();
+  const d = await device();
+  expect((await d.find(NAME))?.item.login?.password).not.toBe('Never-Saved-Pa55');
+  await p.close();
+  await page.close();
+});
+
 test('live update: an item added on another device appears without pressing sync', async ({ popup, ctx, sw }) => {
   const page = await ctx.newPage();
   await page.goto(`${NEWSITE}/password-only.html`);

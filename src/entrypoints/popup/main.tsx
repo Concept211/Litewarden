@@ -10,8 +10,10 @@ import '../../ui/slip.css';
 import { App } from './App';
 import { withDefaults, type Settings } from '../../shared/store';
 import { applyLook, boot } from './boot';
+import { tidyPaste } from '../../ui/paste';
 
 performance.mark('lw-start');
+tidyPaste();
 // A popup opened as a normal tab (tests, pop-out later) fills the window instead of the 380x600 frame.
 if (new URLSearchParams(location.search).has('wide')) document.documentElement.classList.add('wide');
 boot().then((b) => {

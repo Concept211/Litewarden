@@ -13,6 +13,9 @@ import { BellOff, Check, Eye, EyeOff, X } from 'lucide-preact';
 import { send, type PromptData, type RemoteError } from '../../shared/messages';
 import { Keep } from '../../ui/bits';
 import { applyFrameTheme, useAutoSize, useGuard, useHash } from '../../ui/frame';
+import { tidyPaste } from '../../ui/paste';
+
+tidyPaste();
 
 type Act = 'save' | 'notnow' | 'never' | 'undo' | 'unlock';
 

@@ -13,10 +13,11 @@ import { iconDomain, parseLoose } from '../../core/uri';
 import { validateDraft } from '../../core/edit';
 import { RemoteError, send, type Folder, type ItemDetail } from '../../shared/messages';
 import { clipHash } from '../../shared/cliphash';
-import { mem, type IndexItem } from '../../shared/store';
+import { mem, type IndexItem, type PopupScreen } from '../../shared/store';
 import { Busy, Tile, Toast, useToast } from '../../ui/bits';
 import type { Boot } from './boot';
 import type { NewPrefill } from './MainView';
+import { here } from './where';
 
 const MATCH: Array<[number | null, string]> = [
   [null, 'Base domain (default)'],
@@ -81,6 +82,7 @@ export function ItemView({
   id: initialId,
   prefill,
   startEdit,
+  resume,
   onBack,
   onLocked,
 }: {
@@ -88,13 +90,15 @@ export function ItemView({
   id: string | null;
   prefill?: NewPrefill;
   startEdit?: boolean;
+  /** Where the user was on this item when the popup closed: view or edit, and the unsaved edit. */
+  resume?: Extract<PopupScreen, { item: string | null }>;
   onBack: (flash?: string) => void;
   onLocked: () => void;
 }) {
   const [id, setId] = useState(initialId);
   const [detail, setDetail] = useState<ItemDetail | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
-  const [mode, setMode] = useState<'view' | 'edit'>(initialId && !startEdit ? 'view' : 'edit');
+  const [mode, setMode] = useState<'view' | 'edit'>(resume?.mode ?? (initialId && !startEdit ? 'view' : 'edit'));
   const [draft, setDraft] = useState<Draft | null>(null);
   const [baseline, setBaseline] = useState('');
   const [reveal, setReveal] = useState(false);
@@ -114,12 +118,12 @@ export function ItemView({
   const tab = b.tab;
   const tabHost = tab && /^https?:/i.test(tab.url) ? new URL(tab.url).hostname : null;
 
-  async function load(which: string) {
+  async function load(which: string, edits?: Draft) {
     try {
       const d = await send('getItem', { id: which });
       setDetail(d);
       const dr = toDraft(d.item);
-      setDraft(dr);
+      setDraft(edits ?? dr);
       setBaseline(JSON.stringify(dr));
       setLoadErr(null);
     } catch (e) {
@@ -128,8 +132,11 @@ export function ItemView({
   }
 
   useEffect(() => {
-    if (initialId) void load(initialId);
-    else {
+    if (initialId) void load(initialId, resume?.draft);
+    else if (resume?.draft) {
+      setDraft(resume.draft);
+      setBaseline(resume.baseline ?? '');
+    } else {
       const dr: Draft = {
         type: CipherType.Login,
         name: prefill?.host ?? '',
@@ -170,6 +177,12 @@ export function ItemView({
 
   const dirty = !!draft && JSON.stringify(draft) !== baseline;
   const isNew = !id;
+
+  // Remember this place (and the edit in progress) for when the popup closes and opens again.
+  useEffect(() => {
+    if (!draft) return;
+    here({ item: id, ...(id ? {} : { prefill: prefill ?? { host: null, origin: null } }), mode, ...(mode === 'edit' ? { draft, baseline } : {}) });
+  }, [id, mode, draft, baseline]);
 
   // ----- actions -----
   async function copy(value: string | null | undefined, what: string, sensitive: boolean) {
