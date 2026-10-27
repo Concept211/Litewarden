@@ -563,6 +563,44 @@ test('2FA secret: the scan button reads the setup QR code showing on the page', 
   await expect(p.locator('#f-totp')).toHaveValue(uri);
   await expect(p.locator('#toast')).toContainText('2FA key added: Example Site, alex@example.com');
   await shot(p, 'scan-qr-light', 1);
+
+  // A setup page: a small dense code among steps, fields, icons and text. This drives the real scan (the page's
+  // measurements, the screenshot's scale, both ways of finding the code); the decoding itself is checked against a
+  // page that broke it in tests/unit/scanqr.test.ts.
+  const long = 'otpauth://totp/Cloudflare:alex.morgan%40example.com?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=Cloudflare';
+  const src = await QRCode.toDataURL(long, { margin: 0, width: 170 });
+  const busy = (qr: string) =>
+    page.evaluate(
+      ([qr, src]) => {
+        const lorem = 'Install an authenticator app on your mobile device, then enter the code it shows below. ';
+        const icon = '<svg width="18" height="18" viewBox="0 0 24 24"><path d="M3 3h18v18H3z M7 7h10v10H7z" fill="#222"/></svg>';
+        document.body.innerHTML = `
+          <style>body{font:13px system-ui;margin:0;display:grid;grid-template-columns:120px 1fr}nav p{margin:10px 8px}main{min-width:0}
+            .qrbg{width:370px;height:190px;background:#fff url(${JSON.stringify(src)}) 20px 10px/170px 170px no-repeat}</style>
+          <nav>${Array.from({ length: 14 }, (_, i) => `<p>${icon} Menu item ${i + 1}</p>`).join('')}</nav>
+          <main><p>&larr; Back</p><ol><li>${lorem}</li><li>Scan the following QR code in your authenticator app</li></ol>
+            ${qr}
+            <ol start="3"><li>Enter the code from your authenticator app below</li></ol><input style="width:300px;height:26px">
+            <ol start="4"><li>Enter your password</li></ol><input type="password" style="width:300px;height:26px"> ${icon}
+            <p>${lorem.repeat(2)}</p><p>Can't scan the QR code? Follow alternative steps ${icon}</p><button>Next</button></main>`;
+        return Promise.all([...document.images].map((i) => i.decode()));
+      },
+      [qr, src],
+    );
+  const clear = () => p.locator('#f-totp').fill('');
+  // The screenshot is of the real test window, which is smaller than the page's emulated viewport.
+  await page.setViewportSize({ width: 500, height: 505 });
+  // An <img> in a white box: found where the page drew it.
+  await busy(`<div style="background:#fff;padding:20px;width:170px;margin:6px 60px"><img src="${src}" width="170" height="170"></div>`);
+  await clear();
+  await scan();
+  await expect(p.locator('#f-totp')).toHaveValue(long);
+  // A CSS background on a wide element the page doesn't mark as an image: found by its look in the screenshot.
+  await busy('<div class="qrbg"></div>');
+  await clear();
+  await scan();
+  await expect(p.locator('#f-totp')).toHaveValue(long);
+  await expect(p.locator('#toast')).toContainText('2FA key added: Cloudflare, alex.morgan@example.com');
   await p.close();
   await page.close();
 });
