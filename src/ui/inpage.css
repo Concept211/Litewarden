@@ -31,14 +31,14 @@ html.is-menu .app{height:auto;overflow:visible}
 .bar .keep,.tbar .keep{width:16px;height:16px;flex:none}
 .bar .t,.conf .t,.tbar .t{flex:1;min-width:0}
 .bar .t b,.tbar .t b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bar .t span,.tbar .t span{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.bar .t>span,.tbar .t>span{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
 .bar .btn,.conf .btn,.tbar .btn{height:30px;padding:0 12px;flex:none}
 .bar .ib,.tbar .ib,.conf .ib{width:30px;height:30px;flex:none}
 .conf{padding:11px 8px 11px 12px}
 .ok-dot{width:26px;height:26px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;flex:none}
 .ok-dot.off{background:var(--raised);color:var(--ink)}
 .ok-dot svg.lucide{width:15px;height:15px}
-.conf .t{font-size:13px}.conf .t b{display:block}.conf .t span{color:var(--muted);font-size:12px}
+.conf .t{font-size:13px}.conf .t b{display:block}.conf .t>span{color:var(--muted);font-size:12px}
 /* teach panel */
 .tbar{display:flex;align-items:center;gap:10px;height:58px;padding:0 8px 0 12px;background:var(--surface);border:1px solid var(--menu-edge);border-radius:14px}
 .dots{display:flex;gap:4px;flex:none}.dots i{width:7px;height:7px;border-radius:50%;background:var(--line)}.dots i.on{background:var(--accent)}

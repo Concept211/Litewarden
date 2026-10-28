@@ -745,6 +745,14 @@ test('narrow, short window: the save prompt becomes the slim bar and still cover
   await p.waitForTimeout(300);
   const b = await frameBox(f);
   expect(b.h).toBeLessThan(70);
+  // The title (with its site name inline) and the username line each take one line, inside the bar.
+  const fit = await f.locator('.bar').evaluate((bar) => {
+    const t = bar.querySelector('.t b')!;
+    return { title: t.getBoundingClientRect().height, lines: bar.querySelector('.t')!.scrollHeight, bar: bar.clientHeight, site: getComputedStyle(t.querySelector('.site')!).display };
+  });
+  expect(fit.site).toBe('inline');
+  expect(fit.title).toBeLessThan(24);
+  expect(fit.lines).toBeLessThanOrEqual(fit.bar);
   await assertCoversNothing(p, b, 'main');
   await shot(p, 'inpage-bar-light', 2);
   await f.locator('button[aria-label="Not now"]').click();
