@@ -219,6 +219,18 @@ Litewarden can't clear those.
 - The 2FA scan button takes one screenshot of the visible tab, only when you click it, and decodes it inside the
   popup. To know where to look, it asks the page for the positions of its images, canvases and SVGs (positions
   only, nothing else). The image isn't stored or sent anywhere.
+- 2FA setup pages (Settings, Autofill, "Offer to add 2FA keys", on by default). The content script reads the top
+  page's text to spot a setup: 2FA wording plus an `otpauth://` link, a typed key or a square image. It sends the
+  worker only what it found there (the link, the key, the images' positions). Only for such a page does the worker
+  take one screenshot of the visible tab and read the QR code in memory; the screenshot isn't stored or sent.
+  The key waits in session memory (cleared when the browser closes, dropped after 10 minutes or when the tab
+  leaves the site) until you choose. Nothing is saved without a click on the card or in the popup, which follow
+  the same rules as the save card (own frame, click guard, covers nothing).
+- What a page can do with it: show a fake setup to get a key of its choosing saved to a login of its own domain.
+  The code Litewarden then types into the page comes from that same key, so the page learns nothing it didn't
+  already know; a real key's codes are never typed into a page this way. Replacing a login's existing key needs
+  its own "Replace" click with a warning, and the old key is kept in the login's notes (Undo also restores it), so
+  a fake setup can't lock you out of an account.
 - Litewarden doesn't use Bitwarden's SDK and contains no code under Bitwarden's commercial license.
 
 Residual risk: a compromised npm dependency at build time would end up in the package. Reproducible builds and a

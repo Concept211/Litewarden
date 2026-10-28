@@ -27,7 +27,7 @@ export const test = base.extend<{}, Fx>({
       args: [
         `--disable-extensions-except=${EXT}`,
         `--load-extension=${EXT}`,
-        `--host-resolver-rules=MAP *.lw.test 127.0.0.1, MAP *.example-lw.test 127.0.0.1, MAP *.newsite-lw.test 127.0.0.1, MAP *.save-lw.test 127.0.0.1`,
+        `--host-resolver-rules=MAP *.lw.test 127.0.0.1, MAP *.example-lw.test 127.0.0.1, MAP *.newsite-lw.test 127.0.0.1, MAP *.save-lw.test 127.0.0.1, MAP *-2fa.test 127.0.0.1`,
       ],
     });
     // LW_CPU_THROTTLE=4 slows every page down (CDP) to reproduce timing seen on slow CI runners. Off by default.

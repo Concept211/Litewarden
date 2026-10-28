@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// The in-page part of Litewarden: field icons, the in-page menu, the save / update prompt and "teach this site".
+// The in-page part of Litewarden: field icons, the in-page menu, the save / update prompt, "teach this site" and
+// the card that offers to add a 2FA key on a site's 2FA setup page.
 // Lazy by design: until a page shows a login field this script only runs one cheap query (plus a throttled one
 // when the page changes). It never reads the vault. The menu, prompt and panel are extension pages in iframes
 // (the page can't read or script them); this script only places them so they cover nothing, and tells the
 // worker what the user submitted. Everything Litewarden draws lives in one closed shadow root.
-import { capture, inputs, isPassword, isUsernameCandidate, loginFields, looksLikeLogin, scopeOf, strongUser, visible, type Role } from '../shared/fields';
+import { capture, inputs, isPassword, isUsernameCandidate, loginFields, looksLikeLogin, scopeOf, setValue, strongUser, visible, type Role } from '../shared/fields';
 import type { CsApi, CsHello, ToCs } from '../shared/messages';
 import { placeMenu, placePanel, placePrompt, type Rect } from '../shared/place';
 import { refFor, resolve, type SiteRule } from '../shared/rules';
 import type { TeachState } from '../shared/store';
+import { codeFields, findSetup, type SetupSeen } from '../shared/twofa';
 
 const KEEP =
   'M65 10L79.667 10A2 2 0 0 1 81.667 12L81.667 24A2 2 0 0 0 83.667 26L88.667 26A2 2 0 0 0 90.667 24L90.667 12A2 2 0 0 1 92.667 10L107.333 10A2 2 0 0 1 109.333 12L109.333 24A2 2 0 0 0 111.333 26L116.333 26A2 2 0 0 0 118.333 24L118.333 12A2 2 0 0 1 120.333 10L135 10A2 2 0 0 1 137 12L137 53.172A2 2 0 0 1 136.414 54.586L114.101 76.899A14 14 0 0 0 110 86.799L110 99.431A14 14 0 0 0 117 111.555A34 34 0 1 1 83 111.555A14 14 0 0 0 90 99.431L90 86.799A14 14 0 0 0 85.899 76.899L63.586 54.586A2 2 0 0 1 63 53.172L63 12A2 2 0 0 1 65 10ZM81 141A19 19 0 1 0 119 141A19 19 0 1 0 81 141Z';
@@ -99,6 +101,8 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
   let menu: { token: string; fr: HTMLIFrameElement; anchor: HTMLInputElement; h: number } | null = null;
   let prompt: { token: string; fr: HTMLIFrameElement; form: Element | null; h: number; bar: boolean } | null = null;
   let teach: { token: string; fr: HTMLIFrameElement; step: TeachState['step']; map: Record<'username' | 'password' | 'totp', HTMLInputElement | null>; hover: HTMLDivElement | null; marks: HTMLDivElement[]; bar: boolean } | null = null;
+  /** The 2FA card on a setup page. */
+  let card: { token: string; fr: HTMLIFrameElement; h: number; bar: boolean } | null = null;
   /** A sign-in's save card waiting for the login form to go away. */
   let held: { token: string; timer: number } | null = null;
   let lastSubmit = { key: '', at: 0 };
@@ -267,6 +271,7 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
     }
     placeMenuFrame();
     placePromptFrame();
+    placeCard();
     placeTeach();
   }
 
@@ -424,6 +429,100 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
     prompt = null;
     drop(p.fr, null);
     if (tell) void cs('cs:closed', { token: p.token }).catch(() => {});
+  }
+
+  // ---------- 2FA setup pages ----------
+  let setup: (SetupSeen & { sx: number; sy: number }) | null = null;
+  let setupSig = '';
+  let setupAt = 0;
+  let setupGap = 1500;
+  let setupTimer = 0;
+  /** Look for a 2FA setup on this page: rarely (it reads the page's text), and less often while there's none. */
+  function checkSetup() {
+    if (window !== window.top || ctx.isInvalid || document.visibilityState !== 'visible') return;
+    const wait = setupAt - Date.now();
+    if (wait > 0) {
+      if (!setupTimer) setupTimer = window.setTimeout(() => ((setupTimer = 0), checkSetup()), wait);
+      return;
+    }
+    setupAt = Date.now() + setupGap;
+    const idle = (globalThis.requestIdleCallback ?? ((cb: () => void) => setTimeout(cb, 1))) as (cb: () => void, o?: { timeout: number }) => void;
+    idle(
+      () => {
+        const t = performance.now();
+        const seen = findSetup();
+        cost.twofa = performance.now() - t;
+        if (!seen) {
+          setup = null;
+          setupGap = Math.min(10_000, setupGap * 2);
+          return;
+        }
+        setupGap = 1500;
+        setup = { ...seen, sx: scrollX, sy: scrollY };
+        if (!seen.uri && !seen.key && !seen.boxes.length) return;
+        const sig = JSON.stringify([seen.uri, seen.key, seen.boxes.map((b) => [Math.round(b.x), Math.round(b.y), Math.round(b.w)])]);
+        if (sig === setupSig) return;
+        setupSig = sig;
+        void cs('cs:twofa', seen)
+          .then((r) => r && showCard(r.token))
+          .catch(() => (setupSig = ''));
+      },
+      { timeout: 1000 },
+    );
+  }
+
+  async function showCard(token: string) {
+    if (window !== window.top || card?.token === token) return;
+    try {
+      if (!activating) await activate();
+      await cs('cs:open', { kind: 'totp', token });
+    } catch {
+      return;
+    }
+    if (card?.token === token) return;
+    closeCard(false);
+    card = { token, fr: frame('twofa.html', token, 'Litewarden: add 2FA key'), h: 200, bar: false };
+    placeCard();
+  }
+
+  function placeCard() {
+    if (!card) return;
+    // Never over the QR code or the key: the user may still want to scan it with a phone.
+    const dx = setup ? setup.sx - scrollX : 0;
+    const dy = setup ? setup.sy - scrollY : 0;
+    const keep = [...(setup?.boxes ?? []), ...(setup?.keyBox ? [setup.keyBox] : [])].map((b) => ({ x: b.x + dx, y: b.y + dy, w: b.w, h: b.h, label: 'QR code' }));
+    const { pick } = placePrompt(null, card.h, [...protectedRects(null), ...keep], viewport());
+    const bar = pick.name.startsWith('slim bar');
+    if (bar !== card.bar) {
+      card.bar = bar;
+      card.fr.src = card.fr.src.replace(/#.*$/, `#${card.token}${bar ? ':bar' : ''}`);
+    }
+    put(card.fr, pick);
+  }
+
+  function closeCard(tell = true) {
+    if (!card) return;
+    const c = card;
+    card = null;
+    drop(c.fr, null);
+    if (tell) void cs('cs:closed', { token: c.token }).catch(() => {});
+  }
+
+  /** Type a 2FA code into the page's code field (one field, or a row of one-digit boxes). */
+  function typeCode(code: string): boolean {
+    const f = codeFields();
+    if (!f.length) return false;
+    if (f.length === 1) setValue(f[0]!, code);
+    else code.split('').forEach((c, i) => f[i] && setValue(f[i]!, c));
+    return true;
+  }
+
+  if (window === window.top) {
+    document.addEventListener('visibilitychange', () => checkSetup());
+    // Setup often appears after a click ("Turn on 2FA"): look again soon after one.
+    document.addEventListener('pointerdown', () => void (setupGap = 1500), { capture: true, passive: true });
+    // The QR code scrolled into view.
+    addEventListener('scroll', () => setup && !setup.boxes.length && !setup.uri && !setup.key && checkSetup(), { capture: true, passive: true });
   }
 
   // ---------- teach this site ----------
@@ -606,13 +705,16 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
   document.addEventListener('contextmenu', (e) => (rightClicked = e.composedPath()[0]), true);
 
   // ---------- messages from the worker ----------
-  chrome.runtime.onMessage.addListener((m: ToCs, sender) => {
+  chrome.runtime.onMessage.addListener((m: ToCs, sender, reply) => {
     if (sender.id !== chrome.runtime.id || !m || typeof m !== 'object' || !('lw' in m)) return;
     switch (m.lw) {
       case 'size':
         if (menu?.token === m.token) {
           menu.h = Math.max(120, Math.min(236, m.h));
           placeMenuFrame();
+        } else if (card?.token === m.token && !card.bar) {
+          card.h = Math.max(60, Math.min(420, m.h));
+          placeCard();
         } else if (prompt?.token === m.token && !prompt.bar) {
           // Placement works with the card's height; the slim bar's own height doesn't count (it would flip the
           // prompt back to the card, which doesn't fit, and back again).
@@ -623,6 +725,7 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
       case 'close':
         if (menu?.token === m.token) closeMenu(false);
         if (prompt?.token === m.token) closePrompt(false);
+        if (card?.token === m.token) closeCard(false);
         if (teach?.token === m.token) endTeach(true);
         break;
       case 'open-menu': {
@@ -642,6 +745,12 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
       case 'prompt':
         void showPrompt(m.token);
         break;
+      case 'totp':
+        void showCard(m.token);
+        break;
+      case 'otp-code':
+        if (window === window.top) reply({ filled: typeCode(m.code) });
+        break;
     }
   });
 
@@ -650,6 +759,7 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
   function scan() {
     scanTimer = 0;
     if (ctx.isInvalid) return;
+    checkSetup();
     if (activating) return sync();
     if (looksLikeLogin(document)) return void activate();
     // Web components hide their fields in shadow roots, which the cheap query can't see. That walk is the costly
@@ -668,7 +778,7 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
     }
   }
   let lastShadowWalk = 0;
-  const cost = { init: 0, scan: 0, idle: 0 };
+  const cost = { init: 0, scan: 0, idle: 0, twofa: 0 };
   /** Login forms inside open shadow roots (web components). Bounded so a huge page stays cheap. */
   function hasShadowLogin(): boolean {
     // Open shadow roots live on custom elements (names with a hyphen) in practice. XPath finds those natively,
@@ -698,6 +808,7 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
     closeMenu();
     endTeach(true);
     if (prompt) closePrompt(false);
+    closeCard(false);
   });
   ctx.onInvalidated(() => {
     mo.disconnect();

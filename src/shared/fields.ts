@@ -169,3 +169,16 @@ export function scopeOf(el: Element): Element {
   }
   return (el.getRootNode() as Document | ShadowRoot) instanceof ShadowRoot ? (el.getRootNode() as ShadowRoot).host : el.ownerDocument!.body ?? el;
 }
+
+/** Set a field's value the way typing would, so frameworks that track the value (React) notice the change. */
+export function setValue(el: HTMLInputElement, value: string) {
+  el.focus({ preventScroll: true });
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  if (setter) setter.call(el, value);
+  else el.value = value;
+  const opts = { bubbles: true, composed: true };
+  el.dispatchEvent(new KeyboardEvent('keydown', { ...opts, key: 'Unidentified' }));
+  el.dispatchEvent(new InputEvent('input', { ...opts, inputType: 'insertReplacementText', data: value }));
+  el.dispatchEvent(new KeyboardEvent('keyup', { ...opts, key: 'Unidentified' }));
+  el.dispatchEvent(new Event('change', opts));
+}

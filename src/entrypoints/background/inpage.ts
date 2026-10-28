@@ -12,19 +12,20 @@ import { getSettings, local, mem, type IndexItem, type PendingSave, type Setting
 import { copySecret } from './clipboard';
 import { fillFrame } from './fill';
 import * as S from './session';
+import { forgetTotpTab, onUnlockedTotp, openTotpSurface, twofaCs } from './twofa';
 
 const MAX_AGE = 10 * 60_000;
 
-const hostOf = (url: string) => {
+export const hostOf = (url: string) => {
   try {
     return new URL(url).hostname;
   } catch {
     return '';
   }
 };
-const siteName = (host: string) => host.replace(/^www\./, '');
+export const siteName = (host: string) => host.replace(/^www\./, '');
 
-function token(): string {
+export function token(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
@@ -36,13 +37,13 @@ function token(): string {
  * wiped the new menu's token (it then said it had expired and couldn't be closed).
  */
 let queue: Promise<unknown> = Promise.resolve();
-function serial<T>(fn: () => Promise<T>): Promise<T> {
+export function serial<T>(fn: () => Promise<T>): Promise<T> {
   const run = queue.then(fn, fn);
   queue = run.catch(() => {});
   return run;
 }
 
-async function editSurfaces(fn: (all: Record<string, Surface>) => void) {
+export async function editSurfaces(fn: (all: Record<string, Surface>) => void) {
   await serial(async () => {
     const all = await surfaces();
     fn(all);
@@ -50,7 +51,7 @@ async function editSurfaces(fn: (all: Record<string, Surface>) => void) {
   });
 }
 
-async function surfaces() {
+export async function surfaces() {
   const { surfaces: all } = await mem.get('surfaces');
   const now = Date.now();
   const live: Record<string, Surface> = {};
@@ -75,7 +76,7 @@ async function surface(t: string, sender: chrome.runtime.MessageSender): Promise
   return s;
 }
 
-async function dropSurface(t: string) {
+export async function dropSurface(t: string) {
   await editSurfaces((all) => void delete all[t]);
 }
 
@@ -209,7 +210,7 @@ async function promptData(t: string, error?: string): Promise<PromptData> {
   return { kind: p.kind, state: p.state, site: siteName(hostOf(p.url)), username: p.username, password: p.password, itemName: item?.name ?? null, folders, theme: settings.theme, server: account?.server ?? null, ...(error ? { error } : {}) };
 }
 
-function draftFrom(it: FullItem): Draft {
+export function draftFrom(it: FullItem): Draft {
   return { type: it.type, name: it.name, notes: it.notes, folderId: it.folderId, login: it.login ? { ...it.login, uris: [...it.login.uris] } : undefined };
 }
 
@@ -281,6 +282,7 @@ async function closePrompt(t: string, tabId: number) {
 
 /** After an unlock, prompts that were waiting ("Unlock to save") get their real answer. */
 export async function onUnlocked() {
+  await onUnlockedTotp().catch(() => {});
   const all = await pendings();
   const settings = await getSettings();
   for (const [t, p] of Object.entries(all)) {
@@ -322,7 +324,7 @@ export async function startTeach(tabId: number): Promise<{ ok: boolean }> {
 
 // ---------- settings that content scripts follow ----------
 
-async function patchSettings(patch: Partial<Settings>) {
+export async function patchSettings(patch: Partial<Settings>) {
   const { settings } = await local.get('settings');
   await local.set({ settings: { ...settings, ...patch } });
   await refreshAll();
@@ -413,6 +415,7 @@ export const csHandlers: CsHandlers = {
   'cs:open': async ({ kind, token: given }, sender) => {
     const s: Surface = { kind, tabId: sender.tab!.id!, frameId: sender.frameId!, url: sender.url!, created: Date.now() };
     if (kind === 'teach') s.teach = { step: 1, username: null, password: null, totp: null };
+    if (kind === 'totp') return openTotpSurface(given, s);
     if (kind === 'prompt') {
       const p = given ? (await pendings())[given] : null;
       if (!p || p.tabId !== s.tabId) throw new S.UserError('No prompt waiting.');
@@ -431,6 +434,7 @@ export const csHandlers: CsHandlers = {
     return { token: await addSurface(s) };
   },
   'cs:submitted': (c, sender) => submitted(c, sender),
+  'cs:twofa': (seen, sender) => twofaCs(seen, sender),
   'cs:userStep': async ({ username }, sender) => {
     const { stepUser } = await mem.get('stepUser');
     await mem.set({ stepUser: { ...(stepUser ?? {}), [sender.tab!.id!]: { host: hostOf(sender.url!), username, at: Date.now() } } });
@@ -480,6 +484,7 @@ export async function forgetTab(tabId: number) {
     for (const [k, p] of Object.entries(ps)) if (p.tabId === tabId) delete ps[k];
     await mem.set({ pendingSaves: ps });
   });
+  await forgetTotpTab(tabId);
   const { stepUser } = await mem.get('stepUser');
   if (stepUser?.[tabId]) {
     delete stepUser[tabId];

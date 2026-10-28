@@ -11,6 +11,7 @@ import {
   EyeOff,
   MousePointerClick,
   Save,
+  ScanLine,
   TextCursorInput,
   X,
   ChevronRight,
@@ -48,8 +49,8 @@ import type { Boot } from './boot';
 
 export const SOURCE_URL = 'https://github.com/Concept211/Litewarden';
 
-type Page = 'home' | 'autofill' | 'security' | 'keyboard' | 'shortcuts' | 'appearance' | 'sync' | 'account' | 'about' | 'iconsites' | 'neversites' | 'rules';
-const SUB: Partial<Record<Page, Page>> = { shortcuts: 'keyboard', iconsites: 'autofill', neversites: 'autofill', rules: 'autofill' };
+type Page = 'home' | 'autofill' | 'security' | 'keyboard' | 'shortcuts' | 'appearance' | 'sync' | 'account' | 'about' | 'iconsites' | 'neversites' | 'never2fa' | 'rules';
+const SUB: Partial<Record<Page, Page>> = { shortcuts: 'keyboard', iconsites: 'autofill', neversites: 'autofill', never2fa: 'autofill', rules: 'autofill' };
 
 function Row({ icon, title, desc, children, onClick }: { icon: ComponentChildren; title: string; desc: ComponentChildren; children?: ComponentChildren; onClick?: () => void }) {
   return (
@@ -100,7 +101,7 @@ const LIVE_TEXT: Record<LiveState['status'], string> = {
   off: 'Off. Litewarden checks on the timer below.',
 };
 
-const PAGES: Page[] = ['home', 'autofill', 'security', 'keyboard', 'shortcuts', 'appearance', 'sync', 'account', 'about', 'iconsites', 'neversites', 'rules'];
+const PAGES: Page[] = ['home', 'autofill', 'security', 'keyboard', 'shortcuts', 'appearance', 'sync', 'account', 'about', 'iconsites', 'neversites', 'never2fa', 'rules'];
 
 export function SettingsView({
   boot: b,
@@ -227,7 +228,7 @@ export function SettingsView({
   const liveWord = !s.liveSync ? 'Live updates off' : live?.status === 'connected' ? 'Live' : live?.status === 'connecting' ? 'Connecting' : 'Timer only';
 
   const CATS: Array<[Exclude<Page, 'home' | 'shortcuts'>, string, ComponentChildren, string]> = [
-    ['autofill', 'Autofill', <PencilLine />, `Field icon ${s.fieldIcon ? 'on' : 'off'}, save prompts ${s.savePrompt ? 'on' : 'off'}, 2FA copy ${s.copyTotpAfterFill ? 'on' : 'off'}`],
+    ['autofill', 'Autofill', <PencilLine />, `Field icon ${s.fieldIcon ? 'on' : 'off'}, save prompts ${s.savePrompt ? 'on' : 'off'}, 2FA copy ${s.copyTotpAfterFill ? 'on' : 'off'}, 2FA setup ${s.totpPrompt ? 'on' : 'off'}`],
     ['security', 'Security', <ShieldCheck />, `Locks after ${mins(s.lockMinutes)}${s.lockOnClose ? ' and on close' : ''}, PIN ${pinOn ? 'on' : 'off'}`],
     ['keyboard', 'Keyboard', <Keyboard />, 'Shortcuts and how to change them'],
     ['appearance', 'Appearance', <SunMoon />, `${s.theme === 'system' ? 'System' : s.theme === 'dark' ? 'Dark' : 'Light'} theme, ${POPUP_SIZES[s.popupSize].label.toLowerCase()} size, ${s.density}`],
@@ -235,7 +236,7 @@ export function SettingsView({
     ['account', 'Account', <UserRound />, `${b.account?.email ?? ''} on ${hostName}`],
     ['about', 'About', <Info />, `Version ${shownVersion}, GPLv3`],
   ];
-  const SUBTITLE: Partial<Record<Page, string>> = { shortcuts: 'All shortcuts', iconsites: 'Sites without the icon', neversites: 'Never asks to save', rules: 'Site rules' };
+  const SUBTITLE: Partial<Record<Page, string>> = { shortcuts: 'All shortcuts', iconsites: 'Sites without the icon', neversites: 'Never asks to save', never2fa: 'Never offers 2FA', rules: 'Site rules' };
   const title = page === 'home' ? 'Settings' : (SUBTITLE[page] ?? CATS.find(([k]) => k === page)![1]);
   const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
   const ruleCount = Object.keys(rules ?? {}).length;
@@ -262,13 +263,13 @@ export function SettingsView({
         {NOTE}
       </>
     );
-  else if (page === 'iconsites' || page === 'neversites') {
-    const key = page === 'iconsites' ? 'iconOffSites' : 'neverSaveSites';
+  else if (page === 'iconsites' || page === 'neversites' || page === 'never2fa') {
+    const key = page === 'iconsites' ? 'iconOffSites' : page === 'neversites' ? 'neverSaveSites' : 'neverTotpSites';
     const list = s[key];
     body = list.length ? (
       <div class="group" data-list={key}>
         {list.map((h) => (
-          <Row icon={<Favicon host={h} fallback={<Globe />} />} title={h} desc={page === 'iconsites' ? 'No icon in its login fields' : 'Litewarden never offers to save here'}>
+          <Row icon={<Favicon host={h} fallback={<Globe />} />} title={h} desc={page === 'iconsites' ? 'No icon in its login fields' : page === 'neversites' ? 'Litewarden never offers to save here' : 'Litewarden never offers to add a 2FA key here'}>
             <button class="ib" aria-label={`Remove ${h}`} title="Remove" onClick={() => void save({ [key]: list.filter((x) => x !== h) } as Partial<Settings>, 'Removed')}>
               <X />
             </button>
@@ -276,7 +277,7 @@ export function SettingsView({
         ))}
       </div>
     ) : (
-      <p class="about">{page === 'iconsites' ? 'Every site shows the icon. Use "Hide here" in the in-page menu to turn it off for one site.' : 'No sites. "Never for this site" on a save prompt adds one here.'}</p>
+      <p class="about">{page === 'iconsites' ? 'Every site shows the icon. Use "Hide here" in the in-page menu to turn it off for one site.' : page === 'neversites' ? 'No sites. "Never for this site" on a save prompt adds one here.' : 'No sites. "Never for this site" on the 2FA card adds one here.'}</p>
     );
   } else if (page === 'rules')
     body = ruleCount ? (
@@ -319,6 +320,14 @@ export function SettingsView({
           <Switch on={s.savePrompt} label="Offer to save logins" onChange={(v) => void save({ savePrompt: v }, v ? 'Turned on' : 'Turned off')} />
         </Row>
         <Row icon={<BellOff />} title="Sites that never ask to save" desc={s.neverSaveSites.length ? n(s.neverSaveSites.length, 'site', 'sites') : 'None'} onClick={() => setPage('neversites')}>
+          <span class="chev">
+            <ChevronRight />
+          </span>
+        </Row>
+        <Row icon={<ScanLine />} title="Offer to add 2FA keys" desc="When a site shows its 2FA setup (a QR code or a key), add the key to the login and type the code in.">
+          <Switch on={s.totpPrompt} label="Offer to add 2FA keys" onChange={(v) => void save({ totpPrompt: v }, v ? 'Turned on' : 'Turned off')} />
+        </Row>
+        <Row icon={<BellOff />} title="Sites that never offer 2FA" desc={s.neverTotpSites.length ? n(s.neverTotpSites.length, 'site', 'sites') : 'None'} onClick={() => setPage('never2fa')}>
           <span class="chev">
             <ChevronRight />
           </span>

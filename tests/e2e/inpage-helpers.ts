@@ -71,8 +71,8 @@ export async function clickIcon(p: Page, selector: string) {
   return ic;
 }
 
-/** One of our framed pages (menu.html, prompt.html, teach.html) once it has loaded and been placed. */
-export async function surface(p: Page, page: 'menu' | 'prompt' | 'teach', timeout = 8000): Promise<Frame> {
+/** One of our framed pages (menu.html, prompt.html, teach.html, twofa.html) once it has loaded and been placed. */
+export async function surface(p: Page, page: 'menu' | 'prompt' | 'teach' | 'twofa', timeout = 8000): Promise<Frame> {
   const end = Date.now() + timeout;
   for (;;) {
     const f = p.frames().find((x) => isPage(x.url(), page));
@@ -85,7 +85,7 @@ export async function surface(p: Page, page: 'menu' | 'prompt' | 'teach', timeou
   }
 }
 
-export const gone = async (p: Page, page: 'menu' | 'prompt' | 'teach') => !p.frames().some((x) => isPage(x.url(), page));
+export const gone = async (p: Page, page: 'menu' | 'prompt' | 'teach' | 'twofa') => !p.frames().some((x) => isPage(x.url(), page));
 function isPage(url: string, page: string) {
   return /^chrome-extension:/.test(url) && url.split(/[?#]/)[0]!.endsWith(`/${page}.html`);
 }
@@ -112,7 +112,7 @@ export async function protectedBoxes(p: Page, scope = 'form, .dlg, #root, main')
 export const overlaps = (a: Box, b: Box) => a.x < b.x + b.w - 0.5 && a.x + a.w > b.x + 0.5 && a.y < b.y + b.h - 0.5 && a.y + a.h > b.y + 0.5;
 
 /** Decrypted logins on the test server for a host, straight from the API (the truth, not the extension's copy). */
-export async function serverLogins(host: string): Promise<Array<{ id: string; name: string; username: string | null; password: string | null; deleted: boolean }>> {
+export async function serverLogins(host: string): Promise<Array<{ id: string; name: string; username: string | null; password: string | null; totp: string | null; notes: string | null; deleted: boolean }>> {
   const c = e2eCreds();
   const { api, userKey } = await loginAccount(serverUrl(VERSION), { ...c.main, kdf: { kdf: 0, kdfIterations: 600000, kdfMemory: null, kdfParallelism: null } });
   const sync = await api.sync();
@@ -121,7 +121,7 @@ export async function serverLogins(host: string): Promise<Array<{ id: string; na
     if (x.type !== 1) continue;
     const it = await decryptItem(C, x, { userKey, privateKeys: null, orgKeys: new Map(), orgKeyErrors: new Map() }).catch(() => null);
     if (!it?.login || !it.login.uris.some((u) => u.uri.includes(host))) continue;
-    out.push({ id: x.id, name: it.name, username: it.login.username, password: it.login.password, deleted: !!x.deletedDate });
+    out.push({ id: x.id, name: it.name, username: it.login.username, password: it.login.password, totp: it.login.totp, notes: it.notes, deleted: !!x.deletedDate });
   }
   return out;
 }
@@ -165,12 +165,12 @@ export async function pressOrExplain(p: Page, key: string, ms = 15_000) {
 }
 
 /** Create logins straight on the test server (as another device would). */
-export async function createLogins(items: Array<{ name: string; username: string; password: string; uri: string }>) {
+export async function createLogins(items: Array<{ name: string; username: string; password: string; uri: string; totp?: string }>) {
   const c = e2eCreds();
   const { api, userKey } = await loginAccount(serverUrl(VERSION), { ...c.main, kdf: { kdf: 0, kdfIterations: 600000, kdfMemory: null, kdfParallelism: null } });
   const userId = (await api.sync()).profile.id;
   for (const it of items) {
-    const body = await buildCipher({ type: 1, name: it.name, login: { username: it.username, password: it.password, totp: null, uris: [{ uri: it.uri, match: null }] } } as never, userKey, { encryptedFor: userId });
+    const body = await buildCipher({ type: 1, name: it.name, login: { username: it.username, password: it.password, totp: it.totp ?? null, uris: [{ uri: it.uri, match: null }] } } as never, userKey, { encryptedFor: userId });
     await api.createCipher(body as Record<string, unknown>);
   }
 }

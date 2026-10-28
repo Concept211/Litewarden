@@ -61,3 +61,10 @@ html.is-menu .app{height:auto;overflow:visible}
 .map .mono{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .saved p{margin:0;font-size:12px;color:var(--muted);line-height:1.45}
 .saved .acts{display:flex;gap:6px;justify-content:flex-end;margin-top:auto}.saved .acts .btn{height:30px;padding:0 12px}
+/* 2FA card */
+.t2-login{display:flex;flex-direction:column;gap:1px;padding:8px 10px;border-radius:10px;background:var(--raised);font-size:13px}
+.t2-login b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.t2-login span{font-size:12px;color:var(--muted)}
+.t2-hint{margin-top:8px;font-size:12px}
+.t2-warn{display:flex;gap:8px;align-items:flex-start;margin-top:8px;font-size:12.5px;line-height:1.4;padding:8px 10px;border-radius:10px;background:var(--warn);color:var(--warn-ink)}
+.t2-warn svg.lucide{width:15px;height:15px;flex:none;margin-top:1px}
+.conf .t .t2-code{display:inline;font-size:13px;color:var(--ink);letter-spacing:.04em}

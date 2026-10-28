@@ -59,6 +59,10 @@ export interface Settings {
   savePrompt: boolean;
   /** Hostnames where Litewarden never offers to save. */
   neverSaveSites: string[];
+  /** Offer to add the 2FA key when a page shows a 2FA setup (QR code or typed key). */
+  totpPrompt: boolean;
+  /** Hostnames where Litewarden never offers to add a 2FA key. */
+  neverTotpSites: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -80,6 +84,8 @@ export const DEFAULT_SETTINGS: Settings = {
   menuOnFocus: false,
   savePrompt: true,
   neverSaveSites: [],
+  totpPrompt: true,
+  neverTotpSites: [],
 };
 
 /** Popup sizes in CSS px (Chrome caps popups at 800 x 600). */
@@ -152,7 +158,7 @@ export interface LocalStore {
 
 /** One Litewarden surface drawn on a page (menu, save prompt, teach panel), known by a random token. */
 export interface Surface {
-  kind: 'menu' | 'prompt' | 'teach';
+  kind: 'menu' | 'prompt' | 'teach' | 'totp';
   tabId: number;
   /** Frame that holds the field (and our iframe). */
   frameId: number;
@@ -187,6 +193,24 @@ export interface PendingSave {
   /** After Save: what Undo restores. */
   undo?: { id: string; oldPassword: string | null } | null;
   state: 'ask' | 'saved' | 'never';
+}
+
+/** A 2FA key seen on a site's setup page, waiting for the user to add it. Memory only. */
+export interface PendingTotp {
+  tabId: number;
+  url: string;
+  /** An otpauth:// URI (from a QR code or link) or a bare base32 key (typed on the page). */
+  secret: string;
+  /** add: to an existing login (itemId, the best pick); new: the site has no login yet; locked: ask after unlock. */
+  kind: 'add' | 'new' | 'locked';
+  itemId: string | null;
+  created: number;
+  /** dismissed: "Not now" on the card; the popup still offers it while the page is open. */
+  state: 'ask' | 'added' | 'never' | 'dismissed';
+  /** After Add: whether the current code went into the page's code field. */
+  filled?: boolean;
+  /** After Add: what Undo restores (the old secret and notes, or a new login to remove). */
+  undo?: { id: string; old: string | null; notes?: string | null; created: boolean } | null;
 }
 
 /** State of the live connection to the notifications hub, shown in Settings > Sync. */
@@ -224,6 +248,8 @@ export interface SessionStore {
   surfaces?: Record<string, Surface>;
   /** Save prompts waiting for an answer, by token. */
   pendingSaves?: Record<string, PendingSave>;
+  /** 2FA keys seen on setup pages, by token. */
+  pendingTotps?: Record<string, PendingTotp>;
   /** Two-step logins: the username typed on page 1, by tab, for the password page. */
   stepUser?: Record<string, { host: string; username: string; at: number }>;
   /** Where the popup was when it closed, so opening it again lands there. Removed on lock and log out. */

@@ -3,7 +3,8 @@
 import type { Draft, FullItem, ServerInfo } from '../core';
 import type { Captured } from './fields';
 import type { SiteRule } from './rules';
-import type { IndexItem, PendingSave, Settings, TeachState } from './store';
+import type { SetupSeen } from './twofa';
+import type { IndexItem, PendingSave, PendingTotp, Settings, TeachState } from './store';
 
 export type Status = 'new' | 'locked' | 'unlocked';
 
@@ -70,6 +71,11 @@ export interface Api {
   /** From the popup: start "teach this site" on the page. */
   startTeach: [{ tabId: number }, { ok: boolean }];
   openPopup: [void, void];
+  /** The 2FA card on a setup page, and the popup's "Add 2FA" (which passes the tab instead of a token). */
+  totpData: [{ token: string }, TotpData];
+  totpAct: [{ token: string; act: 'add' | 'notnow' | 'never' | 'undo' | 'unlock'; itemId?: string | null; username?: string }, TotpData];
+  /** The popup: a 2FA key waiting on this tab's page, if any. */
+  totpForTab: [{ tabId: number }, (TotpData & { token: string }) | null];
   siteRules: [void, Record<string, SiteRule>];
   removeRule: [{ host: string }, void];
 }
@@ -100,11 +106,31 @@ export interface PromptData {
   error?: string;
 }
 
+export interface TotpData {
+  kind: PendingTotp['kind'];
+  state: PendingTotp['state'];
+  site: string;
+  /** The site's logins, best first; the one to add to is `itemId`. */
+  targets: Array<{ id: string; name: string; username: string | null; hasTotp: boolean }>;
+  itemId: string | null;
+  /** From the QR code: who the key is for. */
+  issuer: string | null;
+  account: string | null;
+  /** After Add, when the code couldn't go into the page: the code to type. */
+  code: string | null;
+  filled: boolean;
+  theme: Settings['theme'];
+  server: string | null;
+  error?: string;
+}
+
 /** Content script -> worker. Kept tiny: the page only ever learns what it shows. */
 export interface CsApi {
   'cs:hello': [{ top: boolean }, CsHello];
   /** A new surface. Prompts pass the pending-save token they were given, so the prompt frame finds its data. */
-  'cs:open': [{ kind: 'menu' | 'prompt' | 'teach'; token?: string }, { token: string; signIn?: boolean }];
+  'cs:open': [{ kind: 'menu' | 'prompt' | 'teach' | 'totp'; token?: string }, { token: string; signIn?: boolean }];
+  /** The top frame looks like a 2FA setup page. Answer: a card to show. */
+  'cs:twofa': [SetupSeen, { token: string } | null];
   'cs:submitted': [Captured, { token: string } | null];
   'cs:userStep': [{ username: string }, void];
   'cs:teachState': [{ token: string; state: TeachState }, void];
@@ -132,7 +158,11 @@ export type ToCs =
   | { lw: 'teach' }
   | { lw: 'teach-act'; token: string; act: 'back' | 'save' | 'cancel' | 'undo' | 'done' }
   | { lw: 'refresh' }
-  | { lw: 'prompt'; token: string };
+  | { lw: 'prompt'; token: string }
+  /** Show the 2FA card. */
+  | { lw: 'totp'; token: string }
+  /** Type this code into the page's 2FA code field. The answer says whether there was one. */
+  | { lw: 'otp-code'; code: string };
 
 export interface Folder {
   id: string;

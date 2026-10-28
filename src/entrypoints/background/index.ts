@@ -9,6 +9,7 @@ import { launch } from './launch';
 import { csHandlers, forgetTab, inpageHandlers, onUnlocked, openMenuAt, openMenuCommand, pushPrompt, refreshAll } from './inpage';
 import { armSyncAlarm, startLive, stopLive } from './live';
 import * as S from './session';
+import { forgetTotpTab, totpHandlers } from './twofa';
 
 
 type Handlers = { [K in keyof Api]: (data: Api[K][0], sender: chrome.runtime.MessageSender) => Promise<Api[K][1]> | Api[K][1] };
@@ -73,6 +74,7 @@ const handlers: Handlers = {
   liveState: async () => (await mem.get('live')).live ?? { status: 'off', detail: null, lastPush: null },
   popout: () => openPopout(),
   ...inpageHandlers,
+  ...totpHandlers,
 };
 
 // ---------- pop-out window ----------
@@ -223,6 +225,8 @@ export default defineBackground(() => {
   chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
     if (info.url || info.status === 'complete') if (tab.active && tab.url) void matchTab(tabId, tab.url).catch(() => {});
     if (info.status === 'complete') void pushPrompt(tabId).catch(() => {});
+    // Another site in the tab: a 2FA key offered on the old one goes.
+    if (info.url) void forgetTotpTab(tabId, info.url).catch(() => {});
   });
   chrome.tabs.onRemoved.addListener((tabId) => void forgetTab(tabId).catch(() => {}));
   chrome.tabs.onRemoved.addListener(async (tabId) => {

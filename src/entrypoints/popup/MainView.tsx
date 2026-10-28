@@ -3,11 +3,11 @@
 // Enter fills the selected login, a click fills, the stubs copy. Edit is a separate control.
 import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { AppWindow, CloudOff, Folder as FolderIcon, ShieldAlert, Keyboard, KeyRound, Lock, NotebookText, Pencil, Plus, RefreshCw, Search, Settings, SquareArrowOutUpRight, Timer, User, X } from 'lucide-preact';
+import { AppWindow, CloudOff, Folder as FolderIcon, ShieldAlert, Keyboard, KeyRound, Lock, NotebookText, Pencil, Plus, RefreshCw, ScanLine, Search, Settings, SquareArrowOutUpRight, Timer, User, X } from 'lucide-preact';
 import { SearchIndex, type Range, type SearchHit } from '../../core/search';
 import { secondsRemaining, totp } from '../../core/totp';
 import { launchUrl } from '../../core/uri';
-import { RemoteError, send, type FillResult, type Folder } from '../../shared/messages';
+import { RemoteError, send, type FillResult, type Folder, type TotpData } from '../../shared/messages';
 import { clipHash } from '../../shared/cliphash';
 import { kdfSignature } from '../../core/kdf';
 import { local, mem, type IndexItem } from '../../shared/store';
@@ -167,6 +167,13 @@ export function Main({
   const origin = site && tab ? new URL(tab.url).origin : null;
   const tabRef = useRef(tab);
   tabRef.current = tab;
+  /** A 2FA key on this tab's setup page, waiting to be added (the page's card may have been dismissed). */
+  const [tfa, setTfa] = useState<(TotpData & { token: string }) | null>(null);
+  const loadTfa = () => {
+    const t = tabRef.current;
+    if (t && /^https?:/i.test(t.url)) void send('totpForTab', { tabId: t.id }).then(setTfa).catch(() => setTfa(null));
+    else setTfa(null);
+  };
 
   // ----- start-up: focus, icons, auto-lock touch, matches when the worker hadn't computed them -----
   useEffect(() => {
@@ -180,6 +187,7 @@ export function Main({
     setTimeout(() => {
       void mem.get('index').then((r) => setIndex(r.index ?? []));
       loadFolders();
+      loadTfa();
     }, 0);
     const onStore = (ch: Record<string, chrome.storage.StorageChange>, area: string) => {
       if (area === 'session' && ch.index?.newValue) {
@@ -196,6 +204,7 @@ export function Main({
         const m = t && (ch.tabMatches.newValue as Record<string, { url: string; items?: IndexItem[] }>)[t.id];
         if (t && m && m.url === t.url && m.items) setSite0(m.items);
       }
+      if (area === 'session' && ch.pendingTotps) loadTfa();
       if (area === 'session' && ch.session && !ch.session.newValue) onLocked();
       if (area === 'session' && ch.notes?.newValue && notes) setNotes(ch.notes.newValue as Record<string, string>);
       if (area === 'local' && ch.lastSync) setSync((s) => ({ ...s, at: (ch.lastSync!.newValue as number) ?? s.at }));
@@ -215,7 +224,9 @@ export function Main({
         const cur = tabRef.current;
         if (!next || (cur && next.id === cur.id && next.url === cur.url)) return;
         setTab(next);
+        tabRef.current = next;
         setSel(0);
+        loadTfa();
         if (!/^https?:/i.test(next.url)) return setSite0([]);
         const { tabMatches } = await mem.get('tabMatches');
         const m = tabMatches?.[next.id];
@@ -378,6 +389,21 @@ export function Main({
     onOpen(item.id);
   }
 
+  /** Add the 2FA key from this tab's setup page to a login (null: a new login), and type the code into the page. */
+  async function addTotp(itemId: string | null) {
+    if (!tfa) return;
+    try {
+      const r = await send('totpAct', { token: tfa.token, act: 'add', itemId });
+      if (r.error) return show(r.error);
+      const t = r.targets.find((x) => x.id === r.itemId);
+      const who = t ? t.username || t.name : 'the new login';
+      setTfa(null);
+      show(r.filled ? `2FA added to ${who}. The code is typed into the page.` : `2FA added to ${who}. Type ${r.code ?? 'the code'} into the page.`);
+    } catch (e) {
+      show((e as RemoteError).message);
+    }
+  }
+
   async function popOut() {
     try {
       await send('popout', {});
@@ -538,6 +564,11 @@ export function Main({
           <button class={`stub${done === `${item.id}:totp` ? ' done' : ''}`} title="Copy 2FA code" onClick={() => copy(item, 'totp')}>
             <span class="code">{codes[item.id] ? `${codes[item.id]!.slice(0, 3)} ${codes[item.id]!.slice(3)}` : '··· ···'}</span>
             <span class={`ring${secs <= 5 ? ' low' : ''}`} style={{ '--t': secs / 30 }} />
+          </button>
+        ) : tfa?.kind === 'add' && tfa.targets.some((t) => t.id === item.id) ? (
+          <button class="stub add" title="Add the 2FA key from this page" onClick={() => void addTotp(item.id)}>
+            <Plus />
+            Add 2FA
           </button>
         ) : (
           <span class="stub none">No 2FA</span>
@@ -808,6 +839,22 @@ export function Main({
             </div>
           </div>
         )}
+        {tfa && site && (() => {
+          const t = tfa.targets.find((x) => x.id === tfa.itemId);
+          const who = t ? t.username || t.name : null;
+          return (
+            <div class="note det" id="tfa-note" role="status">
+              <ScanLine />
+              <div>
+                <b>2FA setup on this page</b>
+                <p>{tfa.kind === 'new' ? `Save its key as a new login for ${site}` : t?.hasTotp ? `${who} already has a 2FA key. Replace it only if you're setting up 2FA again.` : `Add its key to ${who}`}</p>
+              </div>
+              <button class="btn" onClick={() => void addTotp(tfa.kind === 'new' ? null : tfa.itemId)}>
+                {tfa.kind === 'new' ? 'Save' : t?.hasTotp ? 'Replace' : 'Add'}
+              </button>
+            </div>
+          );
+        })()}
         {body}
       </div>
       <div class="foot">

@@ -71,6 +71,8 @@ on self-hosted servers. Litewarden is a smaller client that does the everyday th
 - **Unlock** with a 6-digit PIN or your master password. Auto-lock after 15 minutes idle and when the browser
   closes, each with its own setting.
 - **2FA codes (TOTP)** built in, including Steam codes.
+- **2FA setup in one click.** When a site shows its 2FA setup (a QR code or a key to type), a card offers to add
+  the key to the site's login and types the current code into the page for you. The popup offers it too.
 - **Item view and editor** with a password generator, password history, website match types and the 2FA secret.
 - **Live sync** through your server's notifications hub, plus a sync timer and a sync button.
 - **Pop-out window** that stays open, three popup sizes, and light and dark themes.
