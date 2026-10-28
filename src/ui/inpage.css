@@ -68,3 +68,6 @@ html.is-menu .app{height:auto;overflow:visible}
 .t2-warn{display:flex;gap:8px;align-items:flex-start;margin-top:8px;font-size:12.5px;line-height:1.4;padding:8px 10px;border-radius:10px;background:var(--warn);color:var(--warn-ink)}
 .t2-warn svg.lucide{width:15px;height:15px;flex:none;margin-top:1px}
 .conf .t .t2-code{display:inline;font-size:13px;color:var(--ink);letter-spacing:.04em}
+
+.m-unlock{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.m-unlock kbd{font:11px var(--mono);border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:var(--ink)}

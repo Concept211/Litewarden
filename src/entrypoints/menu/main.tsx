@@ -24,6 +24,7 @@ function Menu() {
   const [busy, setBusy] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  const unlockBtn = useRef<HTMLButtonElement>(null);
   const { can, blocked } = useGuard(root);
 
   async function load() {
@@ -77,13 +78,15 @@ function Menu() {
   // Autofocus is blocked in a cross-origin frame; the page's content script focuses this frame instead, and the
   // filter box takes the focus from there.
   useEffect(() => {
-    const f = () => input.current?.focus();
+    // Locked: the Unlock button has the focus, so Enter unlocks.
+    const f = () => (data && data.status !== 'unlocked' ? unlockBtn.current : input.current)?.focus();
     if (document.hasFocus()) f();
     addEventListener('focus', f);
     return () => removeEventListener('focus', f);
   }, [data]);
 
   const close = () => void send('surfaceAct', { token, act: 'close' }).catch(() => {});
+  const unlock = () => void send('openPopup').catch(() => {});
 
   async function fill(id: string, force: boolean, ev: { isTrusted: boolean; type: string }) {
     if (busy || !can(ev)) return;
@@ -106,6 +109,10 @@ function Menu() {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       setSel((s) => Math.max(0, Math.min(items.length - 1, s + (e.key === 'ArrowDown' ? 1 : -1))));
+    }
+    if (e.key === 'Enter' && data && data.status !== 'unlocked') {
+      e.preventDefault();
+      return unlock();
     }
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -158,9 +165,12 @@ function Menu() {
           <b>Litewarden is locked</b>
           Unlock it to fill a login here.
           <br />
-          <button class="btn" onClick={(e) => can(e) && void send('openPopup').catch(() => {})}>
-            Unlock
-          </button>
+          <span class="m-unlock">
+            <button ref={unlockBtn} class="btn" onClick={(e) => can(e) && unlock()}>
+              Unlock
+            </button>
+            or press <kbd>Enter</kbd>
+          </span>
         </div>
       ) : (
         <div id="mlist" data-scroll role="listbox" aria-label={`Logins for ${data.site}`}>

@@ -412,6 +412,38 @@ test('open the menu on focus: not while the save card is up; the field icon stil
   }
 });
 
+test('locked menu: the Unlock button has the focus, so Enter opens the unlock popup', async ({ ctx, popup, sw }) => {
+  const s = await popup();
+  await s.click('button[aria-label="Lock"]');
+  await s.waitForSelector('#go');
+  await s.close();
+  const p = await page(ctx, C('stacked.html'));
+  await expect.poll(async () => (await icons(p)).filter((i) => i.locked).length).toBe(2);
+  await clickIcon(p, '#u');
+  const m = await surface(p, 'menu');
+  await expect(m.locator('.m-msg')).toContainText('Litewarden is locked');
+  await expect(m.locator('.m-unlock')).toHaveText(/Unlock\s*or press Enter/);
+  await expect(m.locator('.m-msg .btn')).toBeFocused();
+  await shot(p, 'inpage-menu-locked-light', 2);
+  // Headless Chromium has no toolbar to show the popup in: count the worker's calls to open it instead.
+  const w = await sw();
+  await w.evaluate(() => {
+    const g = globalThis as unknown as { __opened: number };
+    g.__opened = 0;
+    chrome.action.openPopup = (async () => void g.__opened++) as typeof chrome.action.openPopup;
+  });
+  await p.keyboard.press('Enter');
+  await expect.poll(() => w.evaluate(() => (globalThis as unknown as { __opened: number }).__opened)).toBe(1);
+  // Unlock the way the popup would, so the tests after this one start unlocked.
+  const u = await popup(p);
+  watchErrors(u, errors);
+  await u.fill('#pw', creds.main.password);
+  await u.keyboard.press('Enter');
+  await u.waitForSelector('#q', { timeout: 30_000 });
+  await u.close();
+  await p.close();
+});
+
 test('saving while locked: "Unlock to save", unlock, then save', async ({ ctx, popup }) => {
   const s = await popup();
   await s.click('button[aria-label="Lock"]');
