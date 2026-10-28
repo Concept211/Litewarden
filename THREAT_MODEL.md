@@ -82,6 +82,11 @@ What Litewarden does:
 - **Asks before filling into a frame from another site.** If the login form sits in an iframe whose origin differs
   from the page's, you get a confirmation naming that origin (setting "Ask before filling embedded forms", on by
   default).
+- **Cards and addresses fill only into the fields of the form you picked them for.** The card's number, name,
+  expiry and code go into the tab's card fields, never hidden ones. Card boxes in frames from another origin (a
+  payment company's, like Stripe's) get nothing until you agree once for that shop; the menu names the frames'
+  origins, and Litewarden remembers exactly those origins for that shop (Settings, Autofill, Payment frames). A new
+  origin on the same shop is asked about again.
 - **Refuses non-web pages.** No filling on `chrome://`, the Web Store, `file://` or other non-http(s) pages.
 - **Content scripts get a short, fixed message list.** They can say "a field exists", "a form was submitted", "open
   the menu", "save this teach rule" and a few more (`CsApi` in `src/shared/messages.ts`). They can't ask for a
@@ -93,12 +98,19 @@ What Litewarden does:
 - **Framed pages can't be preloaded or guessed.** `menu.html`, `prompt.html` and `teach.html` are the only
   web-accessible resources, served with `use_dynamic_url`, so their address changes per browser session
   (`wxt.config.ts`). Each frame also needs a one-time token the worker issued for that tab.
+- **The PIN typed in the in-page menu goes to the worker, not the page.** It's typed into the menu's extension
+  page, which the site can't read or type into, and it's checked with the same 5-try limit as the popup's PIN
+  (`menuUnlock` in `src/entrypoints/background/inpage.ts`). The master password is never asked for on a page.
 - **Save prompts can't be forged into saving.** The page can submit a form that triggers the prompt, but saving
   needs your trusted click or key press inside the prompt frame.
 
 Residual risk:
 - A page that you have unlocked Litewarden on and asked to fill gets that site's username and password. That's the
   point of filling. XSS on that site can read them from the form afterward.
+- A page can draw its own fake "Litewarden is locked" menu and collect the PIN you type into it. A PIN alone opens
+  nothing: it only unwraps the key stored in this browser, which the page can't read. Someone who has both your PIN
+  and this browser's storage could unlock, the same as with the popup's PIN. If that trade isn't for you, turn off
+  "Type the PIN in the page's menu" in Settings, Security.
 - The save prompt sees what you typed into a login form (that's how it offers to save). A hostile page could fake a
   "login form" to get a prompt shown; it still can't save without you.
 - `chrome.storage.local` is readable from content scripts by default. Litewarden closes that: the service worker

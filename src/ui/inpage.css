@@ -71,3 +71,15 @@ html.is-menu .app{height:auto;overflow:visible}
 
 .m-unlock{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
 .m-unlock kbd{font:11px var(--mono);border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:var(--ink)}
+/* PIN in the locked menu, cards and addresses */
+.m-pin{text-align:center}
+.m-pin .pin{gap:6px;margin:8px 0 4px}
+.m-pin .pin input{width:34px;height:40px;font-size:18px;border-radius:9px}
+.m-pin.err .pin input{border-color:var(--low)}
+.m-err{display:block;margin-top:4px;font-size:12px;color:var(--low)}
+[data-theme=dark] .m-err{color:var(--warn-ink)}
+.m-link{margin-top:4px;font-size:12px;font-weight:700;color:var(--accent-text)}
+.m-link:hover{text-decoration:underline}
+.m-sec{padding:6px 12px 2px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.m-row .pill{flex:none}
+.menu:has(.m-confirm) #mlist{max-height:96px}

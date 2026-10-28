@@ -5,12 +5,13 @@
 // the tab and frame that asked for it, so another page can't drive it.
 import type { Draft, FullItem } from '../../core';
 import { matchesPage, totp } from '../../core';
+import { expiredMMYY } from '../../core/cards';
 import type { Captured } from '../../shared/fields';
 import type { Api, CsApi, CsHello, MenuData, PromptData, ToCs } from '../../shared/messages';
 import type { SiteRule } from '../../shared/rules';
 import { getSettings, local, mem, type IndexItem, type PendingSave, type Settings, type Surface, type TeachState } from '../../shared/store';
 import { copySecret } from './clipboard';
-import { fillFrame } from './fill';
+import { fillForm, fillFrame } from './fill';
 import * as S from './session';
 import { forgetTotpTab, onUnlockedTotp, openTotpSurface, twofaCs } from './twofa';
 
@@ -89,12 +90,20 @@ export async function toCs(s: { tabId: number; frameId: number }, msg: ToCs) {
 async function menuData(t: string, sender: chrome.runtime.MessageSender): Promise<MenuData> {
   const s = await surface(t, sender);
   const [st, { index }, { recent }, { account }, settings] = await Promise.all([S.state(), mem.get('index'), local.get('recent'), local.get('account'), getSettings()]);
-  const base = { site: siteName(hostOf(s.url)), server: account?.server ?? null, theme: settings.theme, totp: {} };
+  const offer: MenuData['offer'] = s.offer ?? 'login';
+  const base = { site: siteName(hostOf(s.url)), server: account?.server ?? null, theme: settings.theme, totp: {}, offer, pin: st.pinEnabled && settings.pinInMenu };
   if (st.status !== 'unlocked' || !index) return { ...base, status: st.status, items: [] };
   const rank = new Map((recent ?? []).map((id, i) => [id, i]));
+  const byUse = (a: IndexItem, b: IndexItem) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999) || a.name.localeCompare(b.name);
+  if (offer !== 'login') {
+    // Every card (or identity): they aren't tied to a site. Expired cards go last.
+    const old = (it: IndexItem) => Number(!!it.exp && expiredMMYY(it.exp));
+    const items = index.filter((it) => it.type === (offer === 'card' ? 3 : 4)).sort((a, b) => old(a) - old(b) || byUse(a, b)).slice(0, 400);
+    return { ...base, status: 'unlocked', items };
+  }
   const items = index
     .filter((it: IndexItem) => it.type === 1 && it.uris.length && matchesPage(it.uris, s.url))
-    .sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999) || a.name.localeCompare(b.name))
+    .sort(byUse)
     .slice(0, 30);
   const secrets: Record<string, string> = {};
   for (const it of items.filter((i) => i.hasTotp).slice(0, 12)) {
@@ -104,17 +113,40 @@ async function menuData(t: string, sender: chrome.runtime.MessageSender): Promis
   return { ...base, status: 'unlocked', items, totp: secrets };
 }
 
-async function menuFill(t: string, id: string, force: boolean, sender: chrome.runtime.MessageSender) {
+async function menuFill(t: string, id: string, force: boolean, stay: boolean, sender: chrome.runtime.MessageSender) {
   const s = await surface(t, sender);
-  const r = await fillFrame(s.tabId, s.frameId, s.url, id, force);
+  const r = s.offer ? await formFill(s, id, force) : await fillFrame(s.tabId, s.frameId, s.url, id, force);
   if (r.outcome !== 'filled') return r;
-  await toCs(s, { lw: 'close', token: t });
-  await dropSurface(t);
-  if ((await getSettings()).copyTotpAfterFill) {
+  if (!stay) {
+    await toCs(s, { lw: 'close', token: t });
+    await dropSurface(t);
+  }
+  if (!s.offer && (await getSettings()).copyTotpAfterFill) {
     const it = await S.fullItem(id).catch(() => null);
     if (it?.login?.totp) await copySecret(await totp(it.login.totp)).catch(() => {});
   }
   return r;
+}
+
+/** A card or address from the menu. Payment frames from other origins: asked once per shop, then remembered. */
+async function formFill(s: Surface, id: string, force: boolean) {
+  const shop = hostOf((await chrome.tabs.get(s.tabId)).url ?? '');
+  const settings = await getSettings();
+  const allowed = settings.askFrames ? (settings.cardFrames[shop] ?? []) : ['*'];
+  const r = await fillForm(s.tabId, id, allowed, force || allowed[0] === '*');
+  if (r.outcome === 'filled' && force && r.frameOrigins?.length) {
+    const now = await getSettings();
+    const mine = new Set([...(now.cardFrames[shop] ?? []), ...r.frameOrigins]);
+    await patchSettings({ cardFrames: { ...now.cardFrames, [shop]: [...mine] } });
+  }
+  return r;
+}
+
+/** The PIN typed in the locked menu. Same tries and lockout as the popup's PIN. */
+async function menuUnlock(t: string, pin: string, sender: chrome.runtime.MessageSender) {
+  await surface(t, sender);
+  if (!(await getSettings()).pinInMenu) throw new S.UserError('Unlock in the toolbar popup.');
+  return S.unlockPin(pin);
 }
 
 // ---------- save / update prompt ----------
@@ -351,11 +383,12 @@ export async function openPopup() {
 
 // ---------- message handlers ----------
 
-type ExtHandlers = { [K in 'menuData' | 'menuFill' | 'surfaceAct' | 'promptData' | 'promptAct' | 'teachData' | 'teachAct' | 'startTeach' | 'openPopup' | 'siteRules' | 'removeRule']: (data: Api[K][0], sender: chrome.runtime.MessageSender) => Promise<Api[K][1]> };
+type ExtHandlers = { [K in 'menuData' | 'menuFill' | 'menuUnlock' | 'surfaceAct' | 'promptData' | 'promptAct' | 'teachData' | 'teachAct' | 'startTeach' | 'openPopup' | 'siteRules' | 'removeRule']: (data: Api[K][0], sender: chrome.runtime.MessageSender) => Promise<Api[K][1]> };
 
 export const inpageHandlers: ExtHandlers = {
   menuData: ({ token: t }, sender) => menuData(t, sender),
-  menuFill: ({ token: t, id, force }, sender) => menuFill(t, id, !!force, sender),
+  menuFill: ({ token: t, id, force, stay }, sender) => menuFill(t, id, !!force, !!stay, sender),
+  menuUnlock: ({ token: t, pin }, sender) => menuUnlock(t, pin, sender),
   surfaceAct: async ({ token: t, act, w, h }, sender) => {
     // A frame whose record is gone (expired, extension updated) can still close: ask every frame of its tab to drop
     // the frame with this token. Only the page's own content script holds that token, so nothing else reacts.
@@ -407,6 +440,7 @@ export const csHandlers: CsHandlers = {
     }
     return {
       icon: settings.fieldIcon && !settings.iconOffSites.includes(host),
+      forms: settings.fillForms,
       menuOnFocus: settings.menuOnFocus,
       locked: !session,
       rule: siteRules?.[host] ?? null,
@@ -414,8 +448,9 @@ export const csHandlers: CsHandlers = {
       theme: settings.theme,
     };
   },
-  'cs:open': async ({ kind, token: given }, sender) => {
+  'cs:open': async ({ kind, token: given, offer }, sender) => {
     const s: Surface = { kind, tabId: sender.tab!.id!, frameId: sender.frameId!, url: sender.url!, created: Date.now() };
+    if (kind === 'menu' && (offer === 'card' || offer === 'identity')) s.offer = offer;
     if (kind === 'teach') s.teach = { step: 1, username: null, password: null, totp: null };
     if (kind === 'totp') return openTotpSurface(given, s);
     if (kind === 'prompt') {
@@ -436,6 +471,13 @@ export const csHandlers: CsHandlers = {
     return { token: await addSurface(s) };
   },
   'cs:submitted': (c, sender) => submitted(c, sender),
+  'cs:menuUp': async ({ offer, w, h }, sender) => {
+    if (!sender.frameId || (offer !== 'card' && offer !== 'identity')) return { ok: false };
+    const r = (await chrome.tabs
+      .sendMessage(sender.tab!.id!, { lw: 'menu-up', url: sender.url!, w, h, offer } satisfies ToCs, { frameId: 0 })
+      .catch(() => null)) as { ok?: boolean } | null;
+    return { ok: !!r?.ok };
+  },
   'cs:twofa': (seen, sender) => twofaCs(seen, sender),
   'cs:userStep': async ({ username }, sender) => {
     const { stepUser } = await mem.get('stepUser');

@@ -24,9 +24,11 @@ export interface StateInfo {
 export interface FillResult {
   /** 'filled' | needs a decision from the user | nothing to fill */
   outcome: 'filled' | 'confirm-site' | 'confirm-frame' | 'no-fields' | 'blocked-page';
-  filled?: Array<'username' | 'password'>;
+  filled?: string[];
   /** Origin of the frame that holds the form, when it isn't the page's own origin. */
   frameOrigin?: string;
+  /** Cards and addresses: every other-origin frame that would get part of it (payment companies). */
+  frameOrigins?: string[];
 }
 
 /** Request type -> [payload, response] */
@@ -61,7 +63,10 @@ export interface Api {
   liveState: [void, import('./store').LiveState];
   // ----- in-page surfaces (menu, save prompt, teach panel): extension pages framed into a site -----
   menuData: [{ token: string }, MenuData];
-  menuFill: [{ token: string; id: string; force?: boolean }, FillResult];
+  /** `stay`: keep the menu open after filling (it shows "Unlocked and filled", then closes itself). */
+  menuFill: [{ token: string; id: string; force?: boolean; stay?: boolean }, FillResult];
+  /** The PIN typed in the locked in-page menu. */
+  menuUnlock: [{ token: string; pin: string }, { status: 'ok' }];
   /** Menu / prompt / panel tells its content script something (natural size, close, start teaching, hide here). */
   surfaceAct: [{ token: string; act: 'size' | 'close' | 'teach' | 'hide'; w?: number; h?: number }, void];
   promptData: [{ token: string }, PromptData];
@@ -82,6 +87,10 @@ export interface Api {
 
 export interface MenuData {
   status: Status;
+  /** Locked: the menu may take the PIN itself. */
+  pin: boolean;
+  /** What the menu lists: the site's logins, or all cards / identities on a checkout or address form. */
+  offer: 'login' | 'card' | 'identity';
   site: string;
   items: IndexItem[];
   /** id -> TOTP secret, for the live codes. */
@@ -128,7 +137,10 @@ export interface TotpData {
 export interface CsApi {
   'cs:hello': [{ top: boolean }, CsHello];
   /** A new surface. Prompts pass the pending-save token they were given, so the prompt frame finds its data. */
-  'cs:open': [{ kind: 'menu' | 'prompt' | 'teach' | 'totp'; token?: string }, { token: string; signIn?: boolean }];
+  'cs:open': [{ kind: 'menu' | 'prompt' | 'teach' | 'totp'; token?: string; offer?: 'card' | 'identity' }, { token: string; signIn?: boolean }];
+  /** A card or address field in a small frame (a payment company's): the top page opens the menu beside that frame.
+   * Answer: whether it did. */
+  'cs:menuUp': [{ offer: 'card' | 'identity'; w: number; h: number }, { ok: boolean }];
   /** The top frame looks like a 2FA setup page. Answer: a card to show. */
   'cs:twofa': [SetupSeen, { token: string } | null];
   'cs:submitted': [Captured, { token: string } | null];
@@ -141,6 +153,8 @@ export interface CsApi {
 
 export interface CsHello {
   icon: boolean;
+  /** Icons and menus on card and address fields too. */
+  forms: boolean;
   menuOnFocus: boolean;
   locked: boolean;
   rule: SiteRule | null;
@@ -155,6 +169,8 @@ export type ToCs =
   | { lw: 'close'; token: string }
   /** Alt+Shift+L opens on the focused field; `ctx` (the right-click item) on the field that was right-clicked. */
   | { lw: 'open-menu'; ctx?: boolean }
+  /** Top frame: open the menu beside the child frame showing `url` (about `w` x `h`), which holds a card field. */
+  | { lw: 'menu-up'; url: string; w: number; h: number; offer: 'card' | 'identity' }
   | { lw: 'teach' }
   | { lw: 'teach-act'; token: string; act: 'back' | 'save' | 'cancel' | 'undo' | 'done' }
   | { lw: 'refresh' }

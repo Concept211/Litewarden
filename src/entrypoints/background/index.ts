@@ -6,7 +6,7 @@ import { fenceStorage, getSettings, local, mem, type IndexItem, type Settings } 
 import { clearClipboard, rememberCopy } from './clipboard';
 import { fill } from './fill';
 import { launch } from './launch';
-import { csHandlers, forgetTab, inpageHandlers, onUnlocked, openMenuAt, openMenuCommand, pushPrompt, refreshAll } from './inpage';
+import { csHandlers, forgetTab, inpageHandlers, onUnlocked, openMenuAt, openMenuCommand, patchSettings, pushPrompt, refreshAll } from './inpage';
 import { armSyncAlarm, startLive, stopLive } from './live';
 import * as S from './session';
 import { forgetTotpTab, totpHandlers } from './twofa';
@@ -64,7 +64,7 @@ const handlers: Handlers = {
     if ('liveSync' in patch) await (next.liveSync ? startLive() : stopLive('off'));
     if ('syncMinutes' in patch) await armSyncAlarm();
     // Content scripts follow these (field icons, focus menu, save prompts).
-    if (['fieldIcon', 'iconOffSites', 'menuOnFocus', 'savePrompt', 'neverSaveSites', 'theme'].some((k) => k in patch)) await refreshAll();
+    if (['fieldIcon', 'iconOffSites', 'menuOnFocus', 'savePrompt', 'neverSaveSites', 'theme', 'fillForms'].some((k) => k in patch)) await refreshAll();
     return next;
   },
   getItem: ({ id }) => S.itemDetail(id),
@@ -182,15 +182,25 @@ export default defineBackground(() => {
   chrome.commands.onCommand.addListener((cmd) => {
     if (cmd === 'open-menu') void openMenuCommand();
   });
-  // Right-click in a field: "Fill with Litewarden" opens the in-page menu there. Chrome keeps the item across
-  // restarts, so it's made once per install or update.
+  // Right-click in a field: "Fill with Litewarden" opens the in-page menu there. Right-click on the page (the field
+  // icon too) or the toolbar button: "Show Litewarden icons in fields" hides or shows every field icon at once, for
+  // screenshots. Chrome keeps the items across restarts, so they're made once per install or update.
   chrome.runtime.onInstalled.addListener(() => {
-    chrome.contextMenus.removeAll(() =>
-      chrome.contextMenus.create({ id: 'open-menu', title: 'Fill with Litewarden', contexts: ['editable'], documentUrlPatterns: ['http://*/*', 'https://*/*'] }),
-    );
+    chrome.contextMenus.removeAll(() => {
+      chrome.contextMenus.create({ id: 'open-menu', title: 'Fill with Litewarden', contexts: ['editable'], documentUrlPatterns: ['http://*/*', 'https://*/*'] });
+      void getSettings().then((st) =>
+        chrome.contextMenus.create({ id: 'icons', type: 'checkbox', checked: st.fieldIcon, title: 'Show Litewarden icons in fields', contexts: ['page', 'frame', 'action'] }),
+      );
+    });
   });
   chrome.contextMenus.onClicked.addListener((info, tab) => {
     if (info.menuItemId === 'open-menu' && tab?.id != null) void openMenuAt(tab.id, info.frameId ?? 0);
+    if (info.menuItemId === 'icons') void patchSettings({ fieldIcon: !!info.checked });
+  });
+  // The checkbox follows the setting however it changed (Settings page, this menu, another window).
+  chrome.storage.onChanged.addListener((ch, area) => {
+    const next = area === 'local' ? (ch.settings?.newValue as Partial<Settings> | undefined) : undefined;
+    if (next && 'fieldIcon' in next) chrome.contextMenus.update('icons', { checked: !!next.fieldIcon }, () => void chrome.runtime.lastError);
   });
 
   chrome.alarms.onAlarm.addListener((a) => {

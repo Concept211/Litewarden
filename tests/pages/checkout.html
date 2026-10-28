@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Checkout</title><link rel="stylesheet" href="_base.css"><style>select,input[type=tel]{width:100%;box-sizing:border-box;height:38px;border:1px solid #8fa3b3;border-radius:3px;padding:0 8px;font-size:15px;background:#fff}.two{display:flex;gap:10px}.two>.f{flex:1}h2{font-size:17px;margin:4px 0 10px}</style></head><body>
+<header>Corner Market</header><main><form id="f" onsubmit="event.preventDefault();out.textContent=JSON.stringify(Object.fromEntries(new FormData(f)))">
+<h2>Shipping address</h2>
+<label for="sname">Full name</label><div class="f"><input id="sname" name="ship_full_name"></div>
+<label for="a1">Street address</label><div class="f"><input id="a1" name="ship_address1"></div>
+<label for="a2">Apt, suite (optional)</label><div class="f"><input id="a2" name="ship_address2"></div>
+<div class="two"><div class="f"><label for="city">City</label><input id="city" name="ship_city"></div>
+<div class="f"><label for="state">State</label><select id="state" name="ship_state"><option value="">Choose</option><option value="CA">California</option><option value="FL">Florida</option><option value="NY">New York</option></select></div></div>
+<div class="two"><div class="f"><label for="zip">ZIP</label><input id="zip" name="ship_zip"></div>
+<div class="f"><label for="country">Country</label><select id="country" name="ship_country"><option value="CA">Canada</option><option value="GB">United Kingdom</option><option value="US">United States</option></select></div></div>
+<label for="email">Email</label><div class="f"><input id="email" type="email" name="email"></div>
+<label for="phone">Phone</label><div class="f"><input id="phone" type="tel" name="phone"></div>
+<h2>Payment</h2>
+<label for="cc">Card number</label><div class="f"><input id="cc" name="cc" autocomplete="cc-number" inputmode="numeric"></div>
+<label for="ccname">Name on card</label><div class="f"><input id="ccname" name="ccname" autocomplete="cc-name"></div>
+<div class="two"><div class="f"><label for="exp">Expiry</label><input id="exp" name="exp" autocomplete="cc-exp" placeholder="MM / YY"></div>
+<div class="f"><label for="cvc">CVC</label><input id="cvc" name="cvc" autocomplete="cc-csc"></div></div>
+<button type="submit">Pay $48.00</button><pre id="out"></pre></form></main></body></html>

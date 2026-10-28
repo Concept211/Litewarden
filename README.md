@@ -67,6 +67,14 @@ on self-hosted servers. Litewarden is a smaller client that does the everyday th
   - Copies the login's 2FA code after filling, ready for the next page (you can turn this off).
 - **In-page menu.** A small icon inside login fields opens a menu of matching logins. It picks a spot below, beside
   or above the field where it covers nothing. Esc or a click outside closes it.
+  - Locked? Type your PIN right in the menu. If the site has one login, it fills the moment the PIN is right. The
+    master password always goes in the toolbar popup.
+- **Cards and addresses on forms.** Card and address fields on checkout and shipping pages get the icon too. Its menu
+  lists your cards (brand, last four digits, expiry, expired ones last) or your identities, and one Enter fills the
+  whole card or address: number, name, expiry in the shape the form wants, security code, street, city, state and
+  country menus, ZIP, email and phone.
+  - Card boxes inside a payment company's frames (Stripe, Braintree, Adyen) work too. Litewarden asks once per shop
+    before filling them and remembers the answer.
 - **Save and update prompts.** After you sign in with a new login or a changed password, a card next to the form
   offers to save it. "Never for this site" is one click.
 - **Teach this site.** If a site's fields aren't found, point at them once and Litewarden remembers.
@@ -140,9 +148,11 @@ A build loaded this way doesn't update itself. Pull and rebuild to get new versi
 | Where | Keys | What it does |
 |---|---|---|
 | Anywhere in Chrome | Ctrl+Shift+L | Open Litewarden with search ready |
-| In a login field | Alt+Shift+L | Open the in-page menu |
-| In a login field | Right-click, Fill with Litewarden | Open the in-page menu |
-| In-page menu, locked | Enter | Unlock |
+| In a login, card or address field | Alt+Shift+L | Open the in-page menu |
+| In a login, card or address field | Right-click, Fill with Litewarden | Open the in-page menu |
+| Any page, or the toolbar button | Right-click, Show Litewarden icons in fields | Hide or show the field icons (handy for screenshots) |
+| In-page menu, locked | the 6 PIN digits | Unlock (and fill, when the site has one login) |
+| In-page menu, locked without a PIN | Enter | Open the popup to unlock |
 | Popup | type | Search |
 | Popup | ↑ ↓, Enter | Move, fill the selected login |
 | Popup | Alt+← Alt+→ | Previous or next folder |
@@ -185,8 +195,13 @@ decrypts single items only when you open or fill them.
 **Which browsers?** Chrome, Brave, Edge and other Chromium browsers. Firefox isn't supported yet.
 
 **Passkeys, cards and identities?** Cards, identities, secure notes and custom fields can be created and edited in
-the popup. Filling cards and addresses into web forms isn't there yet, so copy them for now. Passkeys and SSH keys
-aren't supported yet.
+the popup, and the menu in a card or address field fills them into checkout and shipping forms. Passkeys and SSH
+keys aren't supported yet.
+
+**Is typing my PIN on a web page safe?** The menu is Litewarden's own page in a frame: the site can't read what you
+type there or type into it. The remaining risk is a site drawing a fake "locked" menu to collect your PIN, which is
+useless without the encrypted key stored in your browser. After 5 wrong PINs the PIN turns off. If you'd rather keep
+the PIN in the toolbar popup, turn off "Type the PIN in the page's menu" in Settings, Security.
 
 **Can I use it next to the official extension?** Yes, but turn off autofill in one of them so you don't get two
 menus in every login field.

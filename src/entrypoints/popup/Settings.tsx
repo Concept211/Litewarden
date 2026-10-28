@@ -5,6 +5,9 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import {
   ArrowLeft,
+  CreditCard,
+  Hash,
+  PanelTop,
   Bug,
   BellOff,
   Crosshair,
@@ -49,8 +52,8 @@ import type { Boot } from './boot';
 
 export const SOURCE_URL = 'https://github.com/Concept211/Litewarden';
 
-type Page = 'home' | 'autofill' | 'security' | 'keyboard' | 'shortcuts' | 'appearance' | 'sync' | 'account' | 'about' | 'iconsites' | 'neversites' | 'never2fa' | 'rules';
-const SUB: Partial<Record<Page, Page>> = { shortcuts: 'keyboard', iconsites: 'autofill', neversites: 'autofill', never2fa: 'autofill', rules: 'autofill' };
+type Page = 'home' | 'autofill' | 'security' | 'keyboard' | 'shortcuts' | 'appearance' | 'sync' | 'account' | 'about' | 'iconsites' | 'neversites' | 'never2fa' | 'rules' | 'payframes';
+const SUB: Partial<Record<Page, Page>> = { shortcuts: 'keyboard', iconsites: 'autofill', neversites: 'autofill', never2fa: 'autofill', rules: 'autofill', payframes: 'autofill' };
 
 function Row({ icon, title, desc, children, onClick }: { icon: ComponentChildren; title: string; desc: ComponentChildren; children?: ComponentChildren; onClick?: () => void }) {
   return (
@@ -101,7 +104,7 @@ const LIVE_TEXT: Record<LiveState['status'], string> = {
   off: 'Off. Litewarden checks on the timer below.',
 };
 
-const PAGES: Page[] = ['home', 'autofill', 'security', 'keyboard', 'shortcuts', 'appearance', 'sync', 'account', 'about', 'iconsites', 'neversites', 'never2fa', 'rules'];
+const PAGES: Page[] = ['home', 'autofill', 'security', 'keyboard', 'shortcuts', 'appearance', 'sync', 'account', 'about', 'iconsites', 'neversites', 'never2fa', 'rules', 'payframes'];
 
 export function SettingsView({
   boot: b,
@@ -236,10 +239,11 @@ export function SettingsView({
     ['account', 'Account', <UserRound />, `${b.account?.email ?? ''} on ${hostName}`],
     ['about', 'About', <Info />, `Version ${shownVersion}, GPLv3`],
   ];
-  const SUBTITLE: Partial<Record<Page, string>> = { shortcuts: 'All shortcuts', iconsites: 'Sites without the icon', neversites: 'Never asks to save', never2fa: 'Never offers 2FA', rules: 'Site rules' };
+  const SUBTITLE: Partial<Record<Page, string>> = { shortcuts: 'All shortcuts', iconsites: 'Sites without the icon', neversites: 'Never asks to save', never2fa: 'Never offers 2FA', rules: 'Site rules', payframes: 'Payment frames' };
   const title = page === 'home' ? 'Settings' : (SUBTITLE[page] ?? CATS.find(([k]) => k === page)![1]);
   const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
   const ruleCount = Object.keys(rules ?? {}).length;
+  const frameShops = Object.entries(s.cardFrames).filter(([, o]) => o.length);
   const NOTE = <p class="about">Works with Vaultwarden and Bitwarden servers. Not affiliated with Bitwarden, Inc. or the Vaultwarden project.</p>;
 
   let body: ComponentChildren;
@@ -279,7 +283,30 @@ export function SettingsView({
     ) : (
       <p class="about">{page === 'iconsites' ? 'Every site shows the icon. Use "Hide here" in the in-page menu to turn it off for one site.' : page === 'neversites' ? 'No sites. "Never for this site" on a save prompt adds one here.' : 'No sites. "Never for this site" on the 2FA card adds one here.'}</p>
     );
-  } else if (page === 'rules')
+  } else if (page === 'payframes')
+    body = frameShops.length ? (
+      <div class="group" data-list="cardFrames">
+        {frameShops.map(([h, origins]) => (
+          <Row icon={<Favicon host={h} fallback={<Globe />} />} title={h} desc={`Fills cards and addresses into frames from ${origins.map((o) => o.replace(/^https?:\/\//, '')).join(', ')}`}>
+            <button
+              class="ib"
+              aria-label={`Remove ${h}`}
+              title="Remove"
+              onClick={() => {
+                const next = { ...s.cardFrames };
+                delete next[h];
+                void save({ cardFrames: next }, 'Removed');
+              }}
+            >
+              <X />
+            </button>
+          </Row>
+        ))}
+      </div>
+    ) : (
+      <p class="about">No shops yet. When a shop's card boxes come from a payment company's frames (Stripe, Braintree, Adyen), the menu asks once before filling them, and the shop shows up here.</p>
+    );
+  else if (page === 'rules')
     body = ruleCount ? (
       <div class="group" data-list="rules">
         {Object.entries(rules!).map(([h, r]) => (
@@ -305,7 +332,7 @@ export function SettingsView({
   else if (page === 'autofill')
     body = (
       <div class="group">
-        <Row icon={<TextCursorInput />} title="Icon in login fields" desc="Click it to open the menu. Turn off to use only Alt+Shift+L and the toolbar button.">
+        <Row icon={<TextCursorInput />} title="Icon in login fields" desc="Click it to open the menu. Also on the right-click menu of any page and of the toolbar button, to hide the icons for a screenshot.">
           <Switch on={s.fieldIcon} label="Icon in login fields" onChange={(v) => void save({ fieldIcon: v }, v ? 'Turned on' : 'Turned off')} />
         </Row>
         <Row icon={<EyeOff />} title="Sites without the icon" desc={s.iconOffSites.length ? `${n(s.iconOffSites.length, 'site', 'sites')}. Remove one to bring the icon back there.` : 'None. "Hide here" in the menu adds a site.'} onClick={() => setPage('iconsites')}>
@@ -340,8 +367,19 @@ export function SettingsView({
         <Row icon={<Timer />} title="Copy the 2FA code after filling" desc="Ready to paste on the next page. Cleared with the clipboard.">
           <Switch on={s.copyTotpAfterFill} label="Copy the 2FA code after filling" onChange={(v) => void save({ copyTotpAfterFill: v }, v ? 'Turned on' : 'Turned off')} />
         </Row>
-        <Row icon={<Frame />} title="Ask before filling embedded forms" desc="For login forms loaded from another site inside the page.">
+        <Row icon={<Frame />} title="Ask before filling embedded forms" desc="For login forms, card boxes and addresses loaded from another site inside the page.">
           <Switch on={s.askFrames} label="Ask before filling embedded forms" onChange={(v) => void save({ askFrames: v }, v ? 'Turned on' : 'Turned off')} />
+        </Row>
+        <Row icon={<CreditCard />} title="Cards and addresses on forms" desc="The icon in card and address fields on checkout and shipping forms. Its menu fills a whole card or address.">
+          <Switch on={s.fillForms} label="Cards and addresses on forms" onChange={(v) => void save({ fillForms: v }, v ? 'Turned on' : 'Turned off')} />
+        </Row>
+        <Row icon={<Hash />} title="Fill the security code" desc="Off: the card fills without its code, and you type it.">
+          <Switch on={s.fillCardCode} label="Fill the security code" disabled={!s.fillForms} onChange={(v) => void save({ fillCardCode: v }, v ? 'Turned on' : 'Turned off')} />
+        </Row>
+        <Row icon={<PanelTop />} title="Payment frames" desc={frameShops.length ? n(frameShops.length, 'shop', 'shops') : 'None. The menu asks once per shop.'} onClick={() => setPage('payframes')}>
+          <span class="chev">
+            <ChevronRight />
+          </span>
         </Row>
         <div class="set stack">
           <span class="si">
@@ -407,6 +445,9 @@ export function SettingsView({
         </Row>
         <Row icon={<RotateCcw />} title="Keep the PIN after a restart" desc="Off: after the browser restarts, use the master password once. On: the PIN-wrapped key is stored on this device.">
           <Switch on={s.pinSurvivesRestart} label="Keep the PIN after a restart" disabled={!pinOn} onChange={(v) => void save({ pinSurvivesRestart: v }, v ? 'Turned on' : 'Turned off')} />
+        </Row>
+        <Row icon={<PanelTop />} title="Type the PIN in the page's menu" desc="When locked, the menu by a login field takes your PIN. Off: unlock in the toolbar popup. The master password always goes in the popup.">
+          <Switch on={s.pinInMenu} label="Type the PIN in the page's menu" disabled={!pinOn} onChange={(v) => void save({ pinInMenu: v }, v ? 'Turned on' : 'Turned off')} />
         </Row>
       </div>
     );

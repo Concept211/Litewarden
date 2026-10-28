@@ -1,0 +1,6 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Checkout with a payment company's frames</title><link rel="stylesheet" href="_base.css"><style>iframe{display:block;width:100%;height:40px;border:1px solid #8fa3b3;border-radius:3px;margin-bottom:12px}</style></head><body>
+<header>Corner Market</header><main><form id="f" onsubmit="event.preventDefault()">
+<label>Card</label><iframe id="fn" title="Secure card number input"></iframe>
+<label>Expiry and CVC</label><iframe id="fe" title="Secure expiry input"></iframe>
+<button type="submit">Pay $48.00</button></form></main>
+<script>const o=location.protocol+'//frames.example-lw.test:'+location.port;fn.src=o+'/pay-number.html';fe.src=o+'/pay-exp.html'</script></body></html>

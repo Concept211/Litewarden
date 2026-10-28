@@ -63,6 +63,14 @@ export interface Settings {
   totpPrompt: boolean;
   /** Hostnames where Litewarden never offers to add a 2FA key. */
   neverTotpSites: string[];
+  /** The locked in-page menu takes the PIN itself (the master password always goes to the toolbar popup). */
+  pinInMenu: boolean;
+  /** Icons and menus on card and address fields (checkout and shipping forms). */
+  fillForms: boolean;
+  /** Fill the card's security code with the rest of the card. */
+  fillCardCode: boolean;
+  /** Shop hostname -> origins of payment-company frames the user agreed to fill cards into there. */
+  cardFrames: Record<string, string[]>;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -86,6 +94,10 @@ export const DEFAULT_SETTINGS: Settings = {
   neverSaveSites: [],
   totpPrompt: true,
   neverTotpSites: [],
+  pinInMenu: true,
+  fillForms: true,
+  fillCardCode: true,
+  cardFrames: {},
 };
 
 /** Popup sizes in CSS px (Chrome caps popups at 800 x 600). */
@@ -169,6 +181,8 @@ export interface Surface {
   created: number;
   /** Teach panel: the steps so far, as the content script reports them. */
   teach?: TeachState;
+  /** Menu: what it offers. Logins when unset; cards on a card field, identities on an address field. */
+  offer?: 'card' | 'identity';
 }
 
 export interface TeachState {

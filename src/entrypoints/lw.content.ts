@@ -6,6 +6,7 @@
 // (the page can't read or script them); this script only places them so they cover nothing, and tells the
 // worker what the user submitted. Everything Litewarden draws lives in one closed shadow root.
 import { capture, inputs, isPassword, isUsernameCandidate, loginFields, looksLikeLogin, scopeOf, setValue, strongUser, visible, type Role } from '../shared/fields';
+import { addrPart, cardPart, formFields, looksLikeForm } from '../shared/forms';
 import type { CsApi, CsHello, ToCs } from '../shared/messages';
 import { placeMenu, placePanel, placePrompt, type Rect } from '../shared/place';
 import { refFor, resolve, type SiteRule } from '../shared/rules';
@@ -91,14 +92,32 @@ function protectedRects(near: Element | null): Array<Rect & { label: string }> {
   return out;
 }
 
+/** What a field's icon opens: logins, cards or addresses. */
+type Kind = Role | 'card' | 'address';
+const offerOf = (k: Kind | undefined) => (k === 'card' ? 'card' : k === 'address' ? 'identity' : undefined);
+
+/**
+ * The child frame that shows `url`: its src matches, and when several do, the one closest to the size it reports.
+ * Only frames in this document (a payment frame inside another frame keeps its menu to itself).
+ */
+function frameShowing(url: string, w: number, h: number): HTMLIFrameElement | null {
+  const strip = (u: string) => u.split('#')[0]!;
+  const all = Array.from(document.querySelectorAll('iframe')).filter((f) => {
+    const r = f.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && f.src && strip(f.src) === strip(url);
+  });
+  return all.sort((a, b) => Math.abs(a.clientWidth - w) + Math.abs(a.clientHeight - h) - (Math.abs(b.clientWidth - w) + Math.abs(b.clientHeight - h)))[0] ?? null;
+}
+
 function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolean }) {
   const t0 = performance.now();
   let conf: CsHello | null = null;
   let activating: Promise<void> | null = null;
   let host: HTMLElement | null = null;
   let shadow: ShadowRoot | null = null;
-  const icons = new Map<HTMLInputElement, { btn: HTMLButtonElement; role: Role; off: number }>();
-  let menu: { token: string; fr: HTMLIFrameElement; anchor: HTMLInputElement; h: number } | null = null;
+  const icons = new Map<HTMLInputElement, { btn: HTMLButtonElement; role: Kind; off: number }>();
+  /** The anchor is the field, or (for a card box in a payment company's frame) that frame. */
+  let menu: { token: string; fr: HTMLIFrameElement; anchor: HTMLElement; h: number } | null = null;
   let prompt: { token: string; fr: HTMLIFrameElement; form: Element | null; h: number; bar: boolean } | null = null;
   let teach: { token: string; fr: HTMLIFrameElement; step: TeachState['step']; map: Record<'username' | 'password' | 'totp', HTMLInputElement | null>; hover: HTMLDivElement | null; marks: HTMLDivElement[]; bar: boolean } | null = null;
   /** The 2FA card on a setup page. */
@@ -192,8 +211,8 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
   }
 
   // ---------- field icons ----------
-  function fieldsNow(): Array<{ el: HTMLInputElement; role: Role }> {
-    const found = loginFields();
+  function fieldsNow(): Array<{ el: HTMLInputElement; role: Kind }> {
+    const found: Array<{ el: HTMLInputElement; role: Kind }> = loginFields();
     const r: SiteRule | null = conf?.rule ?? null;
     if (r) {
       for (const [ref, role] of [
@@ -203,6 +222,29 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
         const el = resolve(ref);
         if (el && !found.some((f) => f.el === el)) found.push({ el, role });
       }
+    }
+    // The card and address scan reads every field: only on pages with a hint of one (one cheap query first).
+    if (!conf?.forms || !looksLikeForm(document)) return found;
+    // Cards: the number and the name on the card. Addresses: the name and the first street line. (The mockup's
+    // choice: one or two icons per form, not one in every box.)
+    const f = formFields();
+    const take = (list: Array<{ el: Element; part: string }>, parts: string[], role: Kind) => {
+      for (const part of parts) {
+        const hit = list.find((x) => x.part === part && x.el instanceof HTMLInputElement && x.el.getBoundingClientRect().width >= 60);
+        if (hit && !found.some((x) => x.el === hit.el)) found.push({ el: hit.el as HTMLInputElement, role });
+      }
+    };
+    // A shipping form's email isn't a sign-in: no login icon there.
+    const inAddr = new Set<Element>(f.addr.map((a) => a.el));
+    const out = found.filter((x) => !(x.role === 'username' && inAddr.has(x.el)));
+    found.length = 0;
+    found.push(...out);
+    take(f.card, ['number', 'name'], 'card');
+    take(f.addr, ['fullName', 'firstName', 'address1', 'street'], 'address');
+    // A card box in a payment company's own frame: the frame is the box, give it the icon even when it's narrow.
+    if (window !== window.top && !found.length) {
+      const n = f.card.find((x) => x.el instanceof HTMLInputElement);
+      if (n) found.push({ el: n.el as HTMLInputElement, role: 'card' });
     }
     return found;
   }
@@ -246,7 +288,7 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
           e.preventDefault();
           e.stopPropagation();
           if (menu?.anchor === el) return closeMenu();
-          void openMenu(el, true);
+          void openMenu(el, true, offerOf(icons.get(el)?.role));
         });
         btn.addEventListener('mousedown', (e) => e.preventDefault());
         shadow!.appendChild(btn);
@@ -291,15 +333,20 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
 
   // ---------- in-page menu ----------
   let menuSeq = 0;
-  async function openMenu(anchor: HTMLInputElement, focus: boolean) {
+  async function openMenu(anchor: HTMLElement, focus: boolean, offer?: 'card' | 'identity') {
     if (teach) return;
     // Focus and a click on the icon can both open a menu at once: only the latest one shows.
     const mine = ++menuSeq;
     await activate();
     closeMenu();
+    // A small frame (a payment company's card box) has no room for the menu: the top page shows it beside us.
+    if (offer && window !== window.top && innerHeight < 320) {
+      const up = await cs('cs:menuUp', { offer, w: innerWidth, h: innerHeight }).catch(() => ({ ok: false }));
+      if (up.ok || mine !== menuSeq) return;
+    }
     let token: string;
     try {
-      token = (await cs('cs:open', { kind: 'menu' })).token;
+      token = (await cs('cs:open', { kind: 'menu', ...(offer ? { offer } : {}) })).token;
     } catch {
       return;
     }
@@ -313,7 +360,7 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
 
   function placeMenuFrame() {
     if (!menu) return;
-    if (!menu.anchor.isConnected || !visible(menu.anchor)) return closeMenu();
+    if (!menu.anchor.isConnected || !(menu.anchor instanceof HTMLInputElement ? visible(menu.anchor) : visibleBox(menu.anchor))) return closeMenu();
     const { pick } = placeMenu(rectOf(menu.anchor), menu.h, protectedRects(menu.anchor), viewport());
     put(menu.fr, pick);
   }
@@ -695,7 +742,7 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
     if (!conf?.menuOnFocus || teach || prompt) return;
     const t = e.composedPath()[0];
     if (t === handedBack) return void (handedBack = null);
-    if (t instanceof HTMLInputElement && icons.has(t) && menu?.anchor !== t) void openMenu(t, false);
+    if (t instanceof HTMLInputElement && icons.has(t) && menu?.anchor !== t) void openMenu(t, false, offerOf(icons.get(t)?.role));
   }
 
   // Clicks on fields while teaching never reach the page.
@@ -732,7 +779,18 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
         break;
       case 'open-menu': {
         const a = m.ctx ? rightClicked : document.hasFocus() ? deepActive() : null;
-        if (a instanceof HTMLInputElement && (isPassword(a) || isUsernameCandidate(a))) void openMenu(a, true);
+        if (!(a instanceof HTMLInputElement)) break;
+        const known = icons.get(a)?.role;
+        // A card or address field (with the icon, or one the shortcut is used on) opens the cards or addresses.
+        const offer = known ? offerOf(known) : conf?.forms === false ? undefined : cardPart(a) ? 'card' : addrPart(a) && !isPassword(a) && !(isUsernameCandidate(a) && !addrPart(a)) ? 'identity' : undefined;
+        if (offer || isPassword(a) || isUsernameCandidate(a)) void openMenu(a, true, offer);
+        break;
+      }
+      case 'menu-up': {
+        if (window !== window.top) break;
+        const fr = frameShowing(m.url, m.w, m.h);
+        reply({ ok: !!fr });
+        if (fr) void openMenu(fr, true, m.offer);
         break;
       }
       case 'teach':
@@ -763,7 +821,7 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
     if (ctx.isInvalid) return;
     checkSetup();
     if (activating) return sync();
-    if (looksLikeLogin(document)) return void activate();
+    if (looksLikeLogin(document) || looksLikeForm(document)) return void activate();
     // Web components hide their fields in shadow roots, which the cheap query can't see. That walk is the costly
     // part, so it waits for an idle moment and never runs more than once every few seconds.
     if (Date.now() - lastShadowWalk > 3000) {

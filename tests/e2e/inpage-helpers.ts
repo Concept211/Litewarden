@@ -34,8 +34,15 @@ const attr = (n: CdpNode, k: string) => {
 };
 
 /** The Litewarden field icons drawn in the top document (closed shadow root), with their boxes. */
-export async function icons(p: Page): Promise<Array<Box & { locked: boolean }>> {
-  const cdp = await p.context().newCDPSession(p);
+export async function icons(p: Page, frame?: Frame): Promise<Array<Box & { locked: boolean }>> {
+  // A frame from another site runs in a process of its own (OOPIF): its icons are reached through its own session,
+  // and their boxes are in its viewport, so they're moved by where the frame sits on the page.
+  const off = frame ? await (await frame.frameElement()).evaluate((n) => {
+    const el = n as HTMLElement;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + el.clientLeft, y: r.top + el.clientTop };
+  }) : { x: 0, y: 0 };
+  const cdp = await p.context().newCDPSession(frame ?? p);
   try {
     const { root } = (await cdp.send('DOM.getDocument', { depth: -1, pierce: true })) as { root: CdpNode };
     const found: CdpNode[] = [];
@@ -51,7 +58,7 @@ export async function icons(p: Page): Promise<Array<Box & { locked: boolean }>> 
       try {
         const { model } = (await cdp.send('DOM.getBoxModel', { nodeId: n.nodeId })) as { model: { border: number[] } };
         const q = model.border;
-        out.push({ x: q[0]!, y: q[1]!, w: q[2]! - q[0]!, h: q[5]! - q[1]!, locked: (attr(n, 'class') ?? '').includes('locked') });
+        out.push({ x: q[0]! + off.x, y: q[1]! + off.y, w: q[2]! - q[0]!, h: q[5]! - q[1]!, locked: (attr(n, 'class') ?? '').includes('locked') });
       } catch {
         // hidden
       }
@@ -214,7 +221,7 @@ export async function serverItems(prefix: string) {
 }
 
 /** Create items of any type straight on the test server (as another device would), optionally in a folder. */
-export async function createItems(items: Array<{ type: number; name: string; folderId?: string; card?: Record<string, string>; identity?: Record<string, string>; notes?: string }>) {
+export async function createItems(items: Array<{ type: number; name: string; folderId?: string; card?: Record<string, string>; identity?: Record<string, string>; notes?: string; login?: { username: string; password: string; totp: null; uris: Array<{ uri: string; match: number | null }> } }>) {
   const c = e2eCreds();
   const { api, userKey } = await loginAccount(serverUrl(VERSION), { ...c.main, kdf: { kdf: 0, kdfIterations: 600000, kdfMemory: null, kdfParallelism: null } });
   const userId = (await api.sync()).profile.id;

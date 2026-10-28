@@ -1,0 +1,8 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Payment</title><link rel="stylesheet" href="_base.css"><style>select{height:38px;border:1px solid #8fa3b3;border-radius:3px;font-size:15px;background:#fff}.two{display:flex;gap:10px}</style></head><body>
+<header>Bike Shop</header><main><form id="f" onsubmit="event.preventDefault()">
+<label for="n">Card number</label><div class="f"><input id="n" name="cardnumber"></div>
+<label for="h">Name on card</label><div class="f"><input id="h" name="name_on_card"></div>
+<label>Expiration date</label><div class="f two"><select id="m" name="exp_month" aria-label="Expiration month"><option value="">Month</option><option value="1">01 - January</option><option value="2">02 - February</option><option value="8">08 - August</option><option value="12">12 - December</option></select>
+<select id="y" name="exp_year" aria-label="Expiration year"><option value="">Year</option><option>2029</option><option>2030</option><option>2031</option></select></div>
+<label for="v">CVV</label><div class="f"><input id="v" name="cvv" style="width:90px"></div>
+<button type="submit">Place order</button></form></main></body></html>
