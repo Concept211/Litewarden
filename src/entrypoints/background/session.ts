@@ -393,6 +393,18 @@ export function syncNow(report: boolean) {
   return syncing;
 }
 
+/**
+ * Writers of the local vault and index run one at a time. Each reads the index, changes it and writes it back, so two
+ * that overlap (two live pushes for items made at once on another device, or a push landing during a sync) would
+ * each write their own copy and the later one would drop the other's item.
+ */
+let localChain: Promise<unknown> = Promise.resolve();
+function oneAtATime<T>(fn: () => Promise<T>): Promise<T> {
+  const r = localChain.then(fn, fn);
+  localChain = r.catch(() => {});
+  return r;
+}
+
 async function doSync(report: boolean) {
   const a = await api();
   if (report) broadcast({ phase: 'sync', done: 0, total: 0 });
@@ -403,6 +415,10 @@ async function doSync(report: boolean) {
     await local.set({ lastSyncError: err instanceof Error ? err.message : String(err) });
     throw err;
   }
+  return oneAtATime(() => storeSync(data, report));
+}
+
+async function storeSync(data: SyncResponse, report: boolean) {
   const { vault: old } = await local.get('vault');
   const oldRev = new Map((old?.ciphers ?? []).map((c) => [c.id, c.revisionDate]));
   const changed = data.ciphers.filter((c) => oldRev.get(c.id) !== c.revisionDate).length + Math.max(0, (old?.ciphers.length ?? 0) - data.ciphers.length);
@@ -617,7 +633,8 @@ export async function applyCipherPush(id: string, removed: boolean): Promise<voi
 }
 
 /** Put one changed cipher into the local vault and the decrypted index without redoing the whole vault. */
-async function upsertLocal(c: Cipher) {
+const upsertLocal = (c: Cipher) => oneAtATime(() => upsertLocalNow(c));
+async function upsertLocalNow(c: Cipher) {
   const e = epoch();
   const v = await vault();
   const i = v.ciphers.findIndex((x) => x.id === c.id);
@@ -642,7 +659,8 @@ async function upsertLocal(c: Cipher) {
   await local.set({ vault: v });
 }
 
-async function removeLocal(id: string) {
+const removeLocal = (id: string) => oneAtATime(() => removeLocalNow(id));
+async function removeLocalNow(id: string) {
   const e = epoch();
   const v = await vault();
   v.ciphers = v.ciphers.filter((x) => x.id !== id);

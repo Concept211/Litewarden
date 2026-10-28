@@ -367,7 +367,7 @@ export interface Cipher {
   login?: { username: string | null; password: string | null; totp: string | null; uris: CipherUri[] | null; [k: string]: unknown } | null;
   card?: Record<string, string | null> | null;
   identity?: Record<string, string | null> | null;
-  fields?: Array<{ name: string | null; value: string | null; type: number }> | null;
+  fields?: Array<{ name: string | null; value: string | null; type: number; linkedId?: number | null }> | null;
   /** Everything else the server sends (password history, passkeys, attachments...), passed through on edit. */
   [k: string]: unknown;
 }

@@ -57,6 +57,8 @@ on self-hosted servers. Litewarden is a smaller client that does the everyday th
   - Copy buttons for username, password and the live 2FA code on every card.
   - Search across names, usernames, websites, notes and folders, with the matches highlighted.
   - Your folders as a row of chips under the search box. One click shows just that folder, and the choice sticks.
+  - Type buttons on the list's header (logins, cards, identities, notes) that combine with the folder: "Cards in
+    Work" is two clicks.
   - A list of recently used items, or everything A to Z on a fresh install.
 - **Autofill**
   - Reads `autocomplete` attributes first, then looks at labels and layout. Handles two-step logins (username page,
@@ -73,6 +75,9 @@ on self-hosted servers. Litewarden is a smaller client that does the everyday th
 - **2FA codes (TOTP)** built in, including Steam codes.
 - **2FA setup in one click.** When a site shows its 2FA setup (a QR code or a key to type), a card offers to add
   the key to the site's login and types the current code into the page for you. The popup offers it too.
+- **Every item type.** "+" makes a login, card, identity or secure note. Cards get a live card picture, the brand
+  read from the number, and a warning for a mistyped number or an expired card. Identities show the usual fields,
+  with the rest one click away. Custom fields (text, hidden, checkbox) can be edited on every item.
 - **Item view and editor** with a password generator, password history, website match types and the 2FA secret.
 - **Live sync** through your server's notifications hub, plus a sync timer and a sync button.
 - **Pop-out window** that stays open, three popup sizes, and light and dark themes.
@@ -137,9 +142,12 @@ A build loaded this way doesn't update itself. Pull and rebuild to get new versi
 | Anywhere in Chrome | Ctrl+Shift+L | Open Litewarden with search ready |
 | In a login field | Alt+Shift+L | Open the in-page menu |
 | In a login field | Right-click, Fill with Litewarden | Open the in-page menu |
+| In-page menu, locked | Enter | Unlock |
 | Popup | type | Search |
 | Popup | ↑ ↓, Enter | Move, fill the selected login |
 | Popup | Alt+← Alt+→ | Previous or next folder |
+| Popup | Alt+1 to Alt+4 | Show only logins, cards, identities or notes (again for every type) |
+| Popup | Alt+N | New item: then L, C, I or N |
 | Popup | Alt+U, Alt+P, Alt+T | Copy username, password, 2FA code |
 | Popup | Alt+E | Open the item |
 | Popup | Esc | Clear the search, then close |
@@ -176,8 +184,9 @@ decrypts single items only when you open or fill them.
 
 **Which browsers?** Chrome, Brave, Edge and other Chromium browsers. Firefox isn't supported yet.
 
-**Passkeys, cards and identities?** Passkeys aren't supported yet. Cards, identities and custom fields show up in
-the vault but can only be edited in the web vault for now.
+**Passkeys, cards and identities?** Cards, identities, secure notes and custom fields can be created and edited in
+the popup. Filling cards and addresses into web forms isn't there yet, so copy them for now. Passkeys and SSH keys
+aren't supported yet.
 
 **Can I use it next to the official extension?** Yes, but turn off autofill in one of them so you don't get two
 menus in every login field.

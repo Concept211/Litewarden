@@ -34,6 +34,8 @@ export interface Boot {
   popout: boolean;
   /** The list's folder filter (see LocalStore.listFolder). */
   listFolder: string;
+  /** The list's type filter (see LocalStore.listType). */
+  listType: number;
   /** The screen the popup was on when it closed, to open on again (see where.ts). */
   where: PopupScreen | null;
 }
@@ -61,7 +63,7 @@ export async function targetTab(): Promise<Tab | null> {
 
 export async function boot(): Promise<Boot> {
   const [l, m, tab] = await Promise.all([
-    local.get('account', 'settings', 'lastSync', 'lastSyncError', 'pinWrapped', 'kdfDismissed', 'listFolder'),
+    local.get('account', 'settings', 'lastSync', 'lastSyncError', 'pinWrapped', 'kdfDismissed', 'listFolder', 'listType'),
     // Small keys only: the full index (megabytes for a big vault) is read after the first paint.
     mem.get('session', 'indexCount', 'recentItems', 'tabMatches', 'pinWrapped', 'lockout', 'failures', 'popupWhere'),
     targetTab(),
@@ -88,6 +90,7 @@ export async function boot(): Promise<Boot> {
     kdfDismissed: !!l.account && l.kdfDismissed === kdfSignature(l.account.kdf),
     popout: isPopout(),
     listFolder: l.listFolder ?? 'all',
+    listType: l.listType ?? 0,
     where: unlocked ? pickScreen(m.popupWhere) : null,
   };
 }

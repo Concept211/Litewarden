@@ -6,11 +6,12 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { ArrowLeft, Copy, CornerDownLeft, ExternalLink, Eye, EyeOff, Plus, RefreshCw, ScanLine, Trash2, TriangleAlert, WandSparkles, X } from 'lucide-preact';
 import { CipherType, type FullItem, type ListUri } from '../../core/vault';
-import type { Draft } from '../../core/edit';
+import { autoName, CARD_KEYS, IDENTITY_KEYS, type Draft } from '../../core/edit';
 import { generatePassword, strength, GEN_MAX, GEN_MIN, type GenOptions } from '../../core/generator';
 import { secondsRemaining, totp } from '../../core/totp';
 import { iconDomain, launchUrl, parseLoose } from '../../core/uri';
 import { validateDraft } from '../../core/edit';
+import { CardForm, CardView, FieldsForm, FieldsView, IdentityForm, IdentityView, Kv, Switch } from './ItemForms';
 import { RemoteError, send, type Folder, type ItemDetail } from '../../shared/messages';
 import { clipHash } from '../../shared/cliphash';
 import { mem, type IndexItem, type PopupScreen } from '../../shared/store';
@@ -30,15 +31,6 @@ const MATCH: Array<[number | null, string]> = [
 ];
 const matchLabel = (m: number | null) => (m == null || m === 0 ? 'Base domain' : (MATCH.find(([k]) => k === m)?.[1] ?? 'Base domain'));
 
-const CARD_LABELS: Record<string, string> = { cardholderName: 'Cardholder', brand: 'Brand', number: 'Number', expMonth: 'Expires (month)', expYear: 'Expires (year)', code: 'Security code' };
-const SECRET_CARD = new Set(['number', 'code']);
-const ID_LABELS: Record<string, string> = {
-  title: 'Title', firstName: 'First name', middleName: 'Middle name', lastName: 'Last name', company: 'Company', email: 'Email', phone: 'Phone', username: 'Username',
-  address1: 'Address', address2: 'Address 2', address3: 'Address 3', city: 'City', state: 'State', postalCode: 'Postal code', country: 'Country',
-  ssn: 'Social Security number', passportNumber: 'Passport number', licenseNumber: 'License number',
-};
-const SECRET_ID = new Set(['ssn', 'passportNumber', 'licenseNumber']);
-
 const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : null);
 const host = (u: string) => u.replace(/^https?:\/\//, '');
 
@@ -49,33 +41,20 @@ function toDraft(it: FullItem): Draft {
     notes: it.notes,
     folderId: it.folderId,
     login: it.login ? { username: it.login.username, password: it.login.password, totp: it.login.totp, uris: it.login.uris.map((u) => ({ ...u })) } : undefined,
+    ...(it.type === CipherType.Card && { card: pick(CARD_KEYS, it.card) }),
+    ...(it.type === CipherType.Identity && { identity: pick(IDENTITY_KEYS, it.identity) }),
+    fields: (it.fields ?? []).map((f) => ({ name: f.name ?? '', value: f.value ?? '', type: f.type, linkedId: f.linkedId ?? null })),
   };
 }
 
+const pick = (keys: readonly string[], o: Record<string, string | null> | undefined) => Object.fromEntries(keys.map((k) => [k, o?.[k] ?? null])) as Record<string, string | null>;
+const NOUN: Record<number, string> = { [CipherType.Login]: 'login', [CipherType.SecureNote]: 'note', [CipherType.Card]: 'card', [CipherType.Identity]: 'identity' };
+/** Where the cursor goes when a form opens: the first thing you'd type. */
+const FIRST: Record<number, string> = { [CipherType.Card]: 'f-number', [CipherType.Identity]: 'f-firstName' };
+
 /** Just enough of an index entry for the header tile (favicon from the user's server, else a letter). */
-function tileItem(d: { type: number; name: string; uris: ListUri[] }): IndexItem {
-  return { id: '', type: d.type, orgId: null, folderId: null, name: d.name || '?', username: null, uris: d.uris, hasTotp: false, favorite: false, reprompt: 0, revisionDate: null, domain: d.type === CipherType.Login ? iconDomain(d.uris) : null, hosts: [] };
-}
-
-function Kv({ label, children, actions }: { label: ComponentChildren; children: ComponentChildren; actions?: ComponentChildren }) {
-  return (
-    <div class="kv">
-      <div class="k">
-        <small>{label}</small>
-        {children}
-      </div>
-      {actions}
-    </div>
-  );
-}
-
-function Switch({ on, label, onChange }: { on: boolean; label: string; onChange: (v: boolean) => void }) {
-  return (
-    <label class="sw">
-      <input type="checkbox" role="switch" aria-label={label} checked={on} onChange={(e) => onChange((e.currentTarget as HTMLInputElement).checked)} />
-      <i />
-    </label>
-  );
+function tileItem(d: { type: number; name: string; uris: ListUri[]; brand?: string | null }): IndexItem {
+  return { brand: d.brand ?? null, id: '', type: d.type, orgId: null, folderId: null, name: d.name || '?', username: null, uris: d.uris, hasTotp: false, favorite: false, reprompt: 0, revisionDate: null, domain: d.type === CipherType.Login ? iconDomain(d.uris) : null, hosts: [] };
 }
 
 export function ItemView({
@@ -103,8 +82,7 @@ export function ItemView({
   const [draft, setDraft] = useState<Draft | null>(null);
   const [baseline, setBaseline] = useState('');
   const [reveal, setReveal] = useState(false);
-  const [shown, setShown] = useState<Record<string, boolean>>({});
-  const [genOpen, setGenOpen] = useState(false);
+    const [genOpen, setGenOpen] = useState(false);
   const [gen, setGen] = useState<GenOptions>(b.settings.gen);
   const [genPw, setGenPw] = useState(() => generatePassword(b.settings.gen));
   const [folderList, setFolderList] = useState<Folder[]>([]);
@@ -138,13 +116,16 @@ export function ItemView({
       setDraft(resume.draft);
       setBaseline(resume.baseline ?? '');
     } else {
-      const dr: Draft = {
-        type: CipherType.Login,
-        name: prefill?.host ?? '',
-        notes: null,
-        folderId: null,
-        login: { username: b.settings.defaultUsername || b.account?.email || '', password: generatePassword(b.settings.gen), totp: null, uris: [{ uri: prefill?.origin ?? '', match: null }] },
-      };
+      const type = prefill?.type ?? CipherType.Login;
+      const base = { name: '', notes: null, folderId: prefill?.folderId ?? null, fields: [] };
+      const dr: Draft =
+        type === CipherType.Login
+          ? { ...base, type, name: prefill?.host ?? '', login: { username: b.settings.defaultUsername || b.account?.email || '', password: generatePassword(b.settings.gen), totp: null, uris: [{ uri: prefill?.origin ?? '', match: null }] } }
+          : type === CipherType.Card
+            ? { ...base, type, card: pick(CARD_KEYS, undefined) }
+            : type === CipherType.Identity
+              ? { ...base, type, identity: pick(IDENTITY_KEYS, undefined) }
+              : { ...base, type: CipherType.SecureNote };
       setDraft(dr);
       setBaseline(JSON.stringify(dr));
     }
@@ -233,7 +214,8 @@ export function ItemView({
 
   async function save() {
     if (!draft || busy) return;
-    const bad = validateDraft(draft);
+    const draft_ = { ...draft, name: autoName(draft) };
+    const bad = validateDraft(draft_);
     if (bad) {
       if (!draft.name.trim()) {
         setNameErr(bad);
@@ -244,7 +226,7 @@ export function ItemView({
     setBusy(true);
     setErr(null);
     try {
-      const r = await send('saveItem', { id, draft });
+      const r = await send('saveItem', { id, draft: draft_ });
       const host = b.account?.server ? b.account.server.replace(/^https?:\/\//, '') : 'the server';
       setId(r.id);
       await load(r.id);
@@ -322,10 +304,10 @@ export function ItemView({
   }, []);
   useEffect(() => {
     // Focus the name, unless the user already went to another field (typing must never land in the wrong one).
-    if (mode === 'edit')
+    if (mode === 'edit' && draft)
       setTimeout(() => {
         const a = document.activeElement;
-        if (!a || a === document.body || !a.closest('.body')) (document.getElementById('f-name') as HTMLInputElement | null)?.focus();
+        if (!a || a === document.body || !a.closest('.body')) (document.getElementById((isNew && FIRST[draft?.type ?? 0]) || 'f-name') as HTMLInputElement | null)?.focus();
       }, 0);
   }, [mode, !!draft]);
 
@@ -375,7 +357,7 @@ export function ItemView({
           <button class="ib" aria-label="Back" title="Back (Esc)" onClick={() => onBack()}>
             <ArrowLeft />
           </button>
-          <Tile item={tileItem({ type: it.type, name: it.name, uris: l?.uris ?? [] })} />
+          <Tile item={tileItem({ type: it.type, name: it.name, uris: l?.uris ?? [], brand: it.card?.brand })} />
           <h1>{it.name}</h1>
           {detail!.canEdit && (
             <button class="btn sec" onClick={() => setMode('edit')}>
@@ -472,35 +454,8 @@ export function ItemView({
               )}
             </>
           )}
-          {it.card && (
-            <div class="group">
-              {Object.entries(CARD_LABELS)
-                .filter(([k]) => it.card![k])
-                .map(([k, label]) => (
-                  <Kv label={label} actions={<button class="ib" aria-label={`Copy ${label}`} onClick={() => copy(it.card![k], label, SECRET_CARD.has(k))}><Copy /></button>}>
-                    <div class="mono">{SECRET_CARD.has(k) && !shown[k] ? '•'.repeat(Math.min(16, it.card![k]!.length)) : it.card![k]}</div>
-                  </Kv>
-                ))}
-            </div>
-          )}
-          {it.identity && (
-            <div class="group">
-              {Object.entries(ID_LABELS)
-                .filter(([k]) => it.identity![k])
-                .map(([k, label]) => (
-                  <Kv label={label} actions={<button class="ib" aria-label={`Copy ${label}`} onClick={() => copy(it.identity![k], label, SECRET_ID.has(k))}><Copy /></button>}>
-                    <div>{SECRET_ID.has(k) && !shown[k] ? '•'.repeat(Math.min(12, it.identity![k]!.length)) : it.identity![k]}</div>
-                  </Kv>
-                ))}
-            </div>
-          )}
-          {(it.card || it.identity) && (
-            <p class="meta">
-              <button class="link" onClick={() => setShown((s): Record<string, boolean> => (Object.keys(s).length ? {} : { number: true, code: true, ssn: true, passportNumber: true, licenseNumber: true }))}>
-                {Object.keys(shown).length ? 'Hide hidden fields' : 'Show hidden fields'}
-              </button>
-            </p>
-          )}
+          {it.type === CipherType.Card && it.card && <CardView card={it.card} copy={(v, w, sens) => void copy(v, w, sens)} />}
+          {it.type === CipherType.Identity && it.identity && <IdentityView identity={it.identity} copy={(v, w, sens) => void copy(v, w, sens)} />}
           {it.notes && (
             <>
               <div class="g-title">Notes</div>
@@ -516,19 +471,7 @@ export function ItemView({
               </div>
             </>
           )}
-          {it.fields && it.fields.length > 0 && (
-            <>
-              <div class="g-title">Custom fields</div>
-              <div class="group">
-                {it.fields.map((f, k) => (
-                  <Kv label={f.name || 'Field'} actions={f.value ? <button class="ib" aria-label={`Copy ${f.name ?? 'field'}`} onClick={() => copy(f.value, f.name || 'Field', f.type === 1)}><Copy /></button> : null}>
-                    <div class={f.type === 1 ? 'mono' : ''}>{f.type === 1 && !shown[`f${k}`] ? '••••••••' : f.type === 2 ? (f.value === 'true' ? 'Yes' : 'No') : f.value}</div>
-                  </Kv>
-                ))}
-              </div>
-              <p class="meta">Custom fields are shown here; change them in the web vault for now.</p>
-            </>
-          )}
+          {it.fields && it.fields.length > 0 && <FieldsView fields={it.fields} copy={(v, w, sens) => void copy(v, w, sens)} />}
           <p class="meta">{meta}</p>
         </div>
         {canFill && (
@@ -578,7 +521,11 @@ export function ItemView({
 
   // ----- edit / new -----
   const l = draft.login;
-  const title = isNew ? 'New login' : isLogin ? 'Edit login' : draft.type === CipherType.SecureNote ? 'Edit note' : 'Edit item';
+  const noun = NOUN[draft.type] ?? 'item';
+  const title = `${isNew ? 'New' : 'Edit'} ${noun}`;
+  const setName = (v: string) => (setDraft({ ...draft, name: v }), setNameErr(null));
+  const isCard = draft.type === CipherType.Card && !!draft.card;
+  const isId = draft.type === CipherType.Identity && !!draft.identity;
   return (
     <div class="scr item">
       <form
@@ -604,13 +551,19 @@ export function ItemView({
               <div>{err}</div>
             </div>
           )}
-          <label class={`field${nameErr ? ' err' : ''}`}>
-            <span class="l">Name</span>
-            <span class="inp">
-              <input id="f-name" value={draft.name} maxLength={1000} onInput={(e) => (setDraft({ ...draft, name: (e.currentTarget as HTMLInputElement).value }), setNameErr(null))} />
-            </span>
-            {nameErr && <span class="f-msg">{nameErr}</span>}
-          </label>
+          {isCard ? (
+            <CardForm card={draft.card!} name={draft.name} nameErr={nameErr} onName={setName} onCard={(p) => setDraft((d) => (d?.card ? { ...d, card: { ...d.card, ...p } } : d))} />
+          ) : isId ? (
+            <IdentityForm identity={draft.identity!} name={draft.name} nameErr={nameErr} onName={setName} onId={(p) => setDraft((d) => (d?.identity ? { ...d, identity: { ...d.identity, ...p } } : d))} />
+          ) : (
+            <label class={`field${nameErr ? ' err' : ''}`}>
+              <span class="l">Name</span>
+              <span class="inp">
+                <input id="f-name" value={draft.name} maxLength={1000} onInput={(e) => setName((e.currentTarget as HTMLInputElement).value)} />
+              </span>
+              {nameErr && <span class="f-msg">{nameErr}</span>}
+            </label>
+          )}
           {l && (
             <>
               <label class="field">
@@ -718,7 +671,6 @@ export function ItemView({
               </div>
             </>
           )}
-          {!isLogin && draft.type !== CipherType.SecureNote && <div class="note">Card and identity details can be changed in the web vault for now. Name, folder and notes can be changed here.</div>}
           <label class="field">
             <span class="l">Folder</span>
             <select class="sel full" id="f-folder" value={draft.folderId ?? ''} onChange={(e) => setDraft({ ...draft, folderId: (e.currentTarget as HTMLSelectElement).value || null })}>
@@ -731,13 +683,14 @@ export function ItemView({
           <label class="field">
             <span class="l">Notes</span>
             <span class="inp ta">
-              <textarea id="f-notes" value={draft.notes ?? ''} rows={4} onInput={(e) => setDraft({ ...draft, notes: (e.currentTarget as HTMLTextAreaElement).value })} />
+              <textarea id="f-notes" value={draft.notes ?? ''} rows={draft.type === CipherType.SecureNote ? 10 : 4} onInput={(e) => setDraft({ ...draft, notes: (e.currentTarget as HTMLTextAreaElement).value })} />
             </span>
           </label>
+          {draft.fields && <FieldsForm fields={draft.fields} onChange={(fields) => setDraft((d) => (d ? { ...d, fields } : d))} />}
           {!isNew && (
             <button type="button" class="danger-link" onClick={() => setSheet('delete')}>
               <Trash2 />
-              Delete this {isLogin ? 'login' : 'item'}
+              Delete this {noun}
             </button>
           )}
         </div>
@@ -767,7 +720,7 @@ export function ItemView({
             <div class="h-head">
               <b>Discard your changes?</b>
             </div>
-            <p>{isNew ? 'This login hasn’t been saved yet.' : 'The item stays as it was before you opened the editor.'}</p>
+            <p>{isNew ? `This ${noun} hasn’t been saved yet.` : 'The item stays as it was before you opened the editor.'}</p>
             <div class="c-actions">
               <button class="btn sec" onClick={() => setSheet(null)}>
                 Keep editing

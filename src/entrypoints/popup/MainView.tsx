@@ -3,7 +3,9 @@
 // Enter fills the selected login, a click fills, the stubs copy. Edit is a separate control.
 import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { AppWindow, CloudOff, Folder as FolderIcon, ShieldAlert, Keyboard, KeyRound, Lock, NotebookText, Pencil, Plus, RefreshCw, ScanLine, Search, Settings, SquareArrowOutUpRight, Timer, User, X } from 'lucide-preact';
+import { AppWindow, CloudOff, CreditCard, Folder as FolderIcon, Hash, IdCard, ShieldAlert, Keyboard, KeyRound, Lock, NotebookText, Pencil, Plus, RefreshCw, ScanLine, Search, Settings, SquareArrowOutUpRight, StickyNote, Timer, User, X } from 'lucide-preact';
+import type { ComponentType } from 'preact';
+import { expiredMMYY } from '../../core/cards';
 import { SearchIndex, type Range, type SearchHit } from '../../core/search';
 import { secondsRemaining, totp } from '../../core/totp';
 import { launchUrl } from '../../core/uri';
@@ -105,11 +107,21 @@ function Rail({ chips, pick, onPick }: { chips: Chip[]; pick: string; onPick: (k
   );
 }
 
-/** What the new-login form starts from: the site in the tab, if any. */
+/** What the new-item form starts from: the site in the tab, if any, the type picked from "+", and the folder. */
 export interface NewPrefill {
   host: string | null;
   origin: string | null;
+  type?: number;
+  folderId?: string | null;
 }
+
+/** Item types in the "+" menu and the list's type buttons, in that order. Alt+1 to Alt+4 pick them. */
+const TYPES: Array<{ t: number; one: string; many: string; menu: string; key: string; Icon: ComponentType }> = [
+  { t: 1, one: 'login', many: 'Logins', menu: 'Login', key: 'l', Icon: KeyRound },
+  { t: 3, one: 'card', many: 'Cards', menu: 'Card', key: 'c', Icon: CreditCard },
+  { t: 4, one: 'identity', many: 'Identities', menu: 'Identity', key: 'i', Icon: IdCard },
+  { t: 2, one: 'note', many: 'Notes', menu: 'Secure note', key: 'n', Icon: StickyNote },
+];
 
 /** Kept by App while an item or Settings is open, so coming back lands where you were. */
 export interface MainKeep {
@@ -158,6 +170,17 @@ export function Main({
     setSel(0);
     void local.set({ listFolder: f });
   };
+  const [kind, setKindRaw] = useState(b.listType);
+  /** Pick a type, or the same one again for every type. */
+  const setKind = (t: number) => {
+    const next = kindRef.current === t ? 0 : t;
+    kindRef.current = next;
+    setKindRaw(next);
+    setSel(0);
+    void local.set({ listType: next });
+  };
+  const kindRef = useRef(kind);
+  const [newMenu, setNewMenu] = useState<number | null>(null);
   const loadFolders = () => void send('folders').then(setFolders).catch(() => {});
   const { toast, show, hide } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -256,8 +279,18 @@ export function Main({
   useEffect(() => {
     if (folders && pick !== 'all' && pick !== 'none' && !folderName.has(pick)) setPick('all');
   }, [folders]);
-  const inPick = (it: IndexItem) => pick === 'all' || (pick === 'none' ? !it.folderId : it.folderId === pick);
+  const inFolder = (it: IndexItem) => pick === 'all' || (pick === 'none' ? !it.folderId : it.folderId === pick);
+  const inPick = (it: IndexItem) => inFolder(it) && (!kind || it.type === kind);
   const pickName = pick === 'all' ? null : pick === 'none' ? 'No folder' : (folderName.get(pick) ?? 'Folder');
+  const kindMeta = TYPES.find((x) => x.t === kind) ?? null;
+  /** What the list shows, in words: "Cards in Work", "Work", "Cards", or null for everything. */
+  const viewName = kindMeta ? (pickName ? `${kindMeta.many} in ${pickName}` : kindMeta.many) : pickName;
+  // How many of each type the picked folder holds; a type with none is dimmed (not hidden, so nothing shifts).
+  const typeCounts = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const it of index ?? []) if (inFolder(it)) m.set(it.type, (m.get(it.type) ?? 0) + 1);
+    return m;
+  }, [index, pick]);
   const chips: Chip[] = folders?.length
     ? [
         { key: 'all', label: 'All', n: count },
@@ -267,12 +300,13 @@ export function Main({
     : [];
 
   const matches = site0;
-  const siteItems = site0 ?? [];
+  const showSite = !kind || kind === 1;
+  const siteItems = showSite ? (site0 ?? []) : [];
   const recentItems = useMemo(() => {
-    if (pick !== 'all') return [];
+    if (pick !== 'all' || kind) return [];
     const skip = new Set(siteItems.map((i) => i.id));
     return b.recentItems.filter((x) => !skip.has(x.id)).slice(0, 5);
-  }, [siteItems, pick]);
+  }, [siteItems, pick, kind]);
 
   // ----- search (built on first keystroke; notes load then too) -----
   const searchIndex = useMemo(() => {
@@ -283,10 +317,10 @@ export function Main({
   useEffect(() => {
     if (query.trim() && notes == null) void mem.get('notes').then((r) => setNotes(r.notes ?? {}));
   }, [query]);
-  const hits = useMemo(() => (searchIndex && query.trim() ? searchIndex.search(query).filter((h) => inPick(h.doc.item)) : []), [searchIndex, query, pick]);
+  const hits = useMemo(() => (searchIndex && query.trim() ? searchIndex.search(query).filter((h) => inPick(h.doc.item)) : []), [searchIndex, query, pick, kind]);
 
   // Below this site's cards and the recents: every item A to Z (virtualized), so the popup is never a void.
-  const allItems = useMemo(() => (pick === 'all' ? (index ?? []) : (index ?? []).filter(inPick)), [index, pick]);
+  const allItems = useMemo(() => (pick === 'all' && !kind ? (index ?? []) : (index ?? []).filter(inPick)), [index, pick, kind]);
   const flat: Entry[] = query.trim() ? hits.slice(0, 60).map((h) => ({ item: h.doc.item, hit: h })) : [...siteItems, ...recentItems, ...allItems].map((item) => ({ item }));
   const selIdx = Math.min(sel, flat.length - 1);
 
@@ -318,7 +352,7 @@ export function Main({
     setTimeout(() => setDone((d) => (d === key ? null : d)), 1200);
   };
 
-  async function copy(item: IndexItem, field: 'username' | 'password' | 'totp') {
+  async function copy(item: IndexItem, field: 'username' | 'password' | 'totp' | 'number' | 'code') {
     try {
       let value: string | null;
       if (field === 'totp') {
@@ -327,21 +361,22 @@ export function Main({
         secrets.current[item.id] = secret;
         value = await totp(secret);
       } else value = (await send('getSecret', { id: item.id, field })).value;
-      if (!value) return show(field === 'username' ? 'This login has no username.' : 'This login has no password.');
+      const what = { username: 'username', password: 'password', totp: '2FA code', number: 'number', code: 'security code' }[field];
+      if (!value) return show(`This ${item.type === 3 ? 'card' : 'login'} has no ${what}.`);
       await navigator.clipboard.writeText(value);
       flash(`${item.id}:${field}`);
       if (field === 'username') return show('Username copied');
       await send('clipboardCopied', { hash: await clipHash(value) });
       const s = b.settings.clipboardSeconds;
-      show(field === 'password' ? 'Password copied' : `Code ${value.slice(0, 3)} ${value.slice(3)} copied`, s);
+      show(field === 'totp' ? `Code ${value.slice(0, 3)} ${value.slice(3)} copied` : `${what[0]!.toUpperCase()}${what.slice(1)} copied`, s);
     } catch (e) {
       show((e as Error).message);
     }
   }
 
   async function fill(item: IndexItem, opts: { force?: boolean; allowFrame?: boolean } = {}) {
+    if (item.type !== 1) return open(item);
     if (!tab) return show('No page to fill. Open the site first.');
-    if (item.type !== 1) return show('Only logins can be filled. Use the copy buttons instead.');
     let r: FillResult;
     try {
       r = await send('fill', { tabId: tab.id, id: item.id, ...opts });
@@ -454,11 +489,29 @@ export function Main({
     setPick(chips[(i + d + chips.length) % chips.length]!.key);
   }
 
-  const live = useRef({ help, confirm, flat, selIdx, query, fill, copy, open, launch, stepFolder });
-  live.current = { help, confirm, flat, selIdx, query, fill, copy, open, launch, stepFolder };
+  const live = useRef({ help, confirm, flat, selIdx, query, fill, copy, open, launch, stepFolder, newMenu, startNew, setKind });
+  live.current = { help, confirm, flat, selIdx, query, fill, copy, open, launch, stepFolder, newMenu, startNew, setKind };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const { help, confirm, flat, selIdx, query, fill, copy, open, launch, stepFolder } = live.current;
+      const { help, confirm, flat, selIdx, query, fill, copy, open, launch, stepFolder, newMenu, startNew, setKind } = live.current;
+      // The "+" menu: arrows and Enter, or a type's letter. Nothing typed reaches the search box while it's open.
+      if (newMenu != null) {
+        e.preventDefault();
+        const byKey = TYPES.findIndex((x) => x.key === e.key.toLowerCase());
+        if (e.key === 'Escape') return setNewMenu(null);
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') return setNewMenu((newMenu + (e.key === 'ArrowDown' ? 1 : TYPES.length - 1)) % TYPES.length);
+        if (e.key === 'Enter') return startNew(TYPES[newMenu]!.t);
+        if (byKey >= 0 && !e.altKey && !e.ctrlKey && !e.metaKey) return startNew(TYPES[byKey]!.t);
+        return;
+      }
+      if (e.altKey && /^n$/i.test(e.key)) {
+        e.preventDefault();
+        return setNewMenu(0);
+      }
+      if (e.altKey && /^[1-4]$/.test(e.key)) {
+        e.preventDefault();
+        return setKind(TYPES[Number(e.key) - 1]!.t);
+      }
       if (help && (e.key === 'Escape' || e.key === '?')) {
         e.preventDefault();
         return setHelp(false);
@@ -581,7 +634,9 @@ export function Main({
     const { item, hit } = e;
     const login = item.type === 1;
     const go = login ? launchUrl(item.uris)?.hostname.replace(/^www\./, '') : undefined;
-    const sub = login ? [item.username, item.hosts[0]].filter(Boolean) : [item.subtitle ?? (item.type === 3 ? 'Card' : item.type === 2 ? 'Note' : 'Identity')];
+    const isCard = item.type === 3;
+    const old = isCard && item.exp ? expiredMMYY(item.exp) : false;
+    const sub = login ? [item.username, item.hosts[0]].filter(Boolean) : [item.subtitle ?? (isCard ? 'Card' : item.type === 2 ? 'Note' : 'Identity')];
     const r = hit?.ranges;
     const notesOnly = !!(r && r.notes.length && !r.name.length && !r.username.length && !r.url.size && notes?.[item.id]);
     const snip = notesOnly ? notesSnippet(notes![item.id]!, r!.notes) : null;
@@ -610,6 +665,7 @@ export function Main({
             ) : (
               <>
                 {sub[0]}
+                {isCard && item.exp && (old ? <span class="bad"> · expired {item.exp}</span> : ` · ${item.exp}`)}
                 {fd && ' · '}
                 {fd}
               </>
@@ -642,6 +698,16 @@ export function Main({
             )}
           </span>
         )}
+        {isCard && (
+          <span style={{ display: 'contents' }} onClick={(ev) => ev.stopPropagation()}>
+            <button class={`ib${done === `${item.id}:number` ? ' done' : ''}`} title="Copy card number" aria-label="Copy card number" onClick={() => copy(item, 'number')}>
+              <Hash />
+            </button>
+            <button class={`ib${done === `${item.id}:code` ? ' done' : ''}`} title="Copy security code" aria-label="Copy security code" onClick={() => copy(item, 'code')}>
+              <KeyRound />
+            </button>
+          </span>
+        )}
         <button
           class="ib"
           title="Open and edit (Alt E)"
@@ -656,6 +722,33 @@ export function Main({
       </div>
     );
   };
+
+  /** New item of a type, in the folder the list shows. A login starts from the site in the tab. */
+  function startNew(t: number) {
+    setNewMenu(null);
+    const folderId = pick !== 'all' && pick !== 'none' ? pick : null;
+    onNew(t === 1 ? { host: site, origin, folderId } : { host: null, origin: null, type: t, folderId });
+  }
+
+  // The four type buttons on the list's header line (mockup filters A): never scroll, add no height.
+  const typeButtons = (
+    <span class="types" role="group" aria-label="Show one type">
+      {TYPES.map(({ t, many, Icon }, k) => {
+        const n = typeCounts.get(t) ?? 0;
+        return (
+          <button
+            class={`ib${kind === t ? ' on' : ''}${!n && kind !== t ? ' dim' : ''}`}
+            aria-pressed={kind === t}
+            title={`${kind === t ? 'Showing' : 'Show only'} ${many.toLowerCase()}${pickName ? ` in ${pickName}` : ''} (${n}) · Alt ${k + 1}`}
+            aria-label={many}
+            onClick={() => (setKind(t), inputRef.current?.focus())}
+          >
+            <Icon />
+          </button>
+        );
+      })}
+    </span>
+  );
 
   const confirmGo = confirm ? launchUrl(confirm.item.uris)?.hostname.replace(/^www\./, '') : undefined;
   const server = b.account?.server.replace(/^https?:\/\//, '') ?? '';
@@ -676,11 +769,12 @@ export function Main({
   } else if (query.trim()) {
     body = hits.length ? (
       <>
-        <div class="sec">
+        <div class="sec typed">
           <span>
-            {hits.length.toLocaleString()} {hits.length === 1 ? 'match' : 'matches'} <span class="q">for “{query.trim()}”{pickName ? ` in ${pickName}` : ''}</span>
+            {hits.length.toLocaleString()} {kindMeta ? (hits.length === 1 ? kindMeta.one : kindMeta.many.toLowerCase()) : hits.length === 1 ? 'match' : 'matches'} <span class="q">for “{query.trim()}”{pickName ? ` in ${pickName}` : ''}</span>
           </span>
           <span>{hits.length > 60 ? 'top 60' : ''}</span>
+          {typeButtons}
         </div>
         <div class="list">{flat.map((e, i) => row(e, i))}</div>
       </>
@@ -696,6 +790,11 @@ export function Main({
               Search all folders
             </button>
           )}
+          {kindMeta && (
+            <button class="btn" onClick={() => (setKind(kind), inputRef.current?.focus())}>
+              Search every type
+            </button>
+          )}
           <button class="btn sec" onClick={() => (setQuery(''), inputRef.current?.focus())}>
             Clear search
           </button>
@@ -705,7 +804,7 @@ export function Main({
   } else {
     body = (
       <>
-        {site && (
+        {site && showSite && (
           <>
             <div class="sec">
               <span>
@@ -734,24 +833,35 @@ export function Main({
             <div class="list">{recentItems.map((item, k) => row({ item }, siteItems.length + k))}</div>
           </>
         )}
-        {pickName && !allItems.length && index && (
+        {index && (viewName || allItems.length > 0) && (
           <>
-            <div class="sec">
-              <span>{pickName}</span>
-              <span>0</span>
+            <div class="sec typed">
+              <span>{viewName ?? 'All items'}</span>
+              <span>{allItems.length.toLocaleString()}</span>
+              {typeButtons}
             </div>
-            <div class="empty">
-              <h3>{pick === 'none' ? 'Every item is in a folder' : `${pickName} is empty`}</h3>
-              <p>Move items here from the item editor (Folder) or the web vault.</p>
-            </div>
+            {!allItems.length && (
+              <div class="empty">
+                <h3>{kindMeta ? `No ${kindMeta.many.toLowerCase()}${pickName ? ` in ${pickName}` : ' yet'}` : pick === 'none' ? 'Every item is in a folder' : `${pickName} is empty`}</h3>
+                {kindMeta ? (
+                  <div class="nm-acts">
+                    <button class="btn" onClick={() => startNew(kindMeta.t)}>
+                      <Plus />
+                      New {kindMeta.one}
+                    </button>
+                    <button class="btn sec" onClick={() => setKind(kind)}>
+                      Show every type
+                    </button>
+                  </div>
+                ) : (
+                  <p>Move items here from the item editor (Folder) or the web vault.</p>
+                )}
+              </div>
+            )}
           </>
         )}
         {allItems.length > 0 && (
           <>
-            <div class="sec">
-              <span>{pickName ?? 'All items'}</span>
-              <span>{allItems.length.toLocaleString()}</span>
-            </div>
             <VList
               count={allItems.length}
               offset={siteItems.length + recentItems.length}
@@ -774,7 +884,7 @@ export function Main({
           <input
             id="q"
             ref={inputRef}
-            placeholder={pickName ? `Search ${pickName}` : count ? `Search ${count.toLocaleString()} items` : 'Search'}
+            placeholder={viewName ? `Search ${kindMeta ? viewName[0]!.toLowerCase() + viewName.slice(1) : viewName}` : count ? `Search ${count.toLocaleString()} items` : 'Search'}
             aria-label="Search vault"
             autocomplete="off"
             spellcheck={false}
@@ -790,7 +900,7 @@ export function Main({
             </button>
           )}
         </label>
-        <button class="ib" title="New login" aria-label="New login" onClick={() => onNew({ host: site, origin })}>
+        <button class={`ib${newMenu != null ? ' on' : ''}`} title="New item (Alt N)" aria-label="New item" aria-haspopup="menu" aria-expanded={newMenu != null} onClick={() => setNewMenu(newMenu == null ? 0 : null)}>
           <Plus />
         </button>
         {!b.popout && (
@@ -799,6 +909,19 @@ export function Main({
           </button>
         )}
       </div>
+      {newMenu != null && (
+        <div class="newmenu-scrim" onClick={() => setNewMenu(null)}>
+          <div class="newmenu" role="menu" aria-label="New item" onClick={(e) => e.stopPropagation()}>
+            {TYPES.map(({ t, menu, key, Icon }, k) => (
+              <button role="menuitem" class={`it${newMenu === k ? ' sel' : ''}`} onMouseEnter={() => setNewMenu(k)} onClick={() => startNew(t)}>
+                <Icon />
+                {menu}
+                <kbd>{key.toUpperCase()}</kbd>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {chips.length > 0 && <Rail chips={chips} pick={pick} onPick={(k) => (setPick(k), inputRef.current?.focus())} />}
       <div id="list">
         {sync.err && (

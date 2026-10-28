@@ -26,7 +26,7 @@ const handlers: Handlers = {
   touch: () => S.touch(),
   getSecret: async ({ id, field }) => {
     const it = await S.fullItem(id);
-    const v = field === 'username' ? it.login?.username : field === 'password' ? it.login?.password : it.login?.totp;
+    const v = field === 'number' || field === 'code' ? it.card?.[field] : field === 'username' ? it.login?.username : field === 'password' ? it.login?.password : it.login?.totp;
     await S.recordUse(id);
     return { value: v ?? null };
   },

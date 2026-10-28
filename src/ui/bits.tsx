@@ -3,7 +3,8 @@
 // honest clipboard countdown, busy buttons and the 6-box code input.
 import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { CreditCard, NotebookText, StickyNote } from 'lucide-preact';
+import { CreditCard, IdCard, StickyNote } from 'lucide-preact';
+import { brandKey } from '../core/cards';
 import { serverUrls } from '../core/api';
 import { parseLoose } from '../core/uri';
 import type { IndexItem } from '../shared/store';
@@ -105,8 +106,26 @@ function useIcon(domain: string | null): string {
   return domain ? (icons[domain] ?? '') : '';
 }
 
+/** A card's brand, drawn (no image files): Visa, Mastercard, Amex, Discover, a short name for the rest. */
+export function BrandMark({ brand, class: cls = '' }: { brand: string | null | undefined; class?: string }) {
+  const k = brandKey(brand);
+  const text: Partial<Record<string, string>> = { visa: 'VISA', amex: 'AMEX', diners: 'DC', jcb: 'JCB', unionpay: 'UP' };
+  if (k === 'other')
+    return (
+      <span class={`tile ${cls}`} aria-hidden="true">
+        <CreditCard />
+      </span>
+    );
+  return (
+    <span class={`tile bt bt-${k} ${cls}`} title={brand ?? ''} aria-hidden="true">
+      {text[k] ? <b>{text[k]}</b> : <i />}
+    </span>
+  );
+}
+
 export function Tile({ item }: { item: IndexItem }) {
   const src = useIcon(item.type === 1 ? item.domain : null);
+  if (item.type === 3) return <BrandMark brand={item.brand} />;
   if (src)
     return (
       <span class="tile fav">
@@ -115,7 +134,7 @@ export function Tile({ item }: { item: IndexItem }) {
     );
   return (
     <span class="tile" aria-hidden="true">
-      {item.type === 3 ? <CreditCard /> : item.type === 2 ? <StickyNote /> : item.type === 4 ? <NotebookText /> : (item.name.trim()[0] ?? '?').toUpperCase()}
+      {item.type === 2 ? <StickyNote /> : item.type === 4 ? <IdCard /> : (item.name.trim()[0] ?? '?').toUpperCase()}
     </span>
   );
 }

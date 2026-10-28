@@ -144,7 +144,7 @@ describe('vault', () => {
     expect(byId.a).toMatchObject({ name: 'Alpha', username: 'user-a', hasTotp: true, uris: [{ uri: 'https://a.example.com', match: null }] });
     expect(byId.b!.orgId).toBe('org1');
     expect(byId.c!.name).toBe('Item key');
-    expect(byId.f!.subtitle).toBe('Visa •••• 1111');
+    expect(byId.f!.subtitle).toBe('Visa •1111');
     expect(failures.map((f) => f.id)).toEqual(['d']);
     // list stage never holds secrets
     expect(JSON.stringify(items)).not.toMatch(/pw-a|JBSWY3DP|note Alpha/);

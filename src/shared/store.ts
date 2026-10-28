@@ -154,6 +154,8 @@ export interface LocalStore {
   siteRules?: Record<string, SiteRule>;
   /** The popup list's folder filter: 'all', 'none' (items in no folder) or a folder id. Stays until changed. */
   listFolder?: string;
+  /** The list's type filter (1 logins, 2 notes, 3 cards, 4 identities), 0 for every type. */
+  listType?: number;
 }
 
 /** One Litewarden surface drawn on a page (menu, save prompt, teach panel), known by a random token. */
@@ -259,7 +261,7 @@ export interface SessionStore {
 /** A popup screen to come back to: a Settings page, or an item (open, being edited, or new). */
 export type PopupScreen =
   | { settings: string }
-  | { item: string | null; prefill?: { host: string | null; origin: string | null }; mode: 'view' | 'edit'; draft?: Draft; baseline?: string };
+  | { item: string | null; prefill?: { host: string | null; origin: string | null; type?: number; folderId?: string | null }; mode: 'view' | 'edit'; draft?: Draft; baseline?: string };
 
 export interface PopupWhere {
   screen: PopupScreen;

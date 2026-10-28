@@ -44,7 +44,7 @@ export interface Api {
   sync: [void, { count: number; changed: number }];
   /** Re-arm the auto-lock timer (popup open, any action). */
   touch: [void, void];
-  getSecret: [{ id: string; field: 'username' | 'password' | 'totp' }, { value: string | null }];
+  getSecret: [{ id: string; field: 'username' | 'password' | 'totp' | 'number' | 'code' }, { value: string | null }];
   getTotpSecrets: [{ ids: string[] }, Record<string, string>];
   clipboardCopied: [{ seconds?: number; hash?: string }, void];
   fill: [{ tabId: number; id: string; force?: boolean; allowFrame?: boolean }, FillResult];

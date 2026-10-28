@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Turn an edited item back into a server request. Starts from the stored (encrypted) cipher and only replaces what
-// the editor changed, so anything Litewarden doesn't edit yet (custom fields, passkeys, card details, password
-// history) goes back to the server untouched.
+// the editor changed, so anything Litewarden doesn't edit (passkeys, attachments, SSH keys, and any part a caller
+// leaves out of the draft) goes back to the server untouched.
 import type { Cipher } from './api';
 import { b64encode, buf, utf8 } from './bytes';
+import { cardLabel } from './cards';
 import type { Crypto, SymKey } from './crypto/types';
 import { CipherType, cipherKey, type Keys, type ListUri } from './vault';
 
@@ -14,6 +15,29 @@ export interface Draft {
   folderId: string | null;
   favorite?: boolean;
   login?: { username: string | null; password: string | null; totp: string | null; uris: ListUri[] };
+  /** Left out: the stored card, identity or custom fields go back as they were. */
+  card?: Record<string, string | null>;
+  identity?: Record<string, string | null>;
+  fields?: FieldDraft[];
+}
+
+/** A custom field. Type 0 text, 1 hidden, 2 checkbox ("true" / "false"), 3 linked (to a login or card part). */
+export interface FieldDraft {
+  name: string;
+  value: string;
+  type: number;
+  linkedId?: number | null;
+}
+
+export const CARD_KEYS = ['cardholderName', 'brand', 'number', 'expMonth', 'expYear', 'code'] as const;
+export const IDENTITY_KEYS = ['title', 'firstName', 'middleName', 'lastName', 'address1', 'address2', 'address3', 'city', 'state', 'postalCode', 'country', 'company', 'email', 'phone', 'ssn', 'username', 'passportNumber', 'licenseNumber'] as const;
+
+/** The name a card or identity gets when the user leaves it empty: "Visa •4242", "Alex Rivera". */
+export function autoName(d: Draft): string {
+  if (d.name.trim()) return d.name;
+  if (d.type === CipherType.Card && d.card) return cardLabel(d.card.brand, d.card.number);
+  if (d.type === CipherType.Identity && d.identity) return [d.identity.firstName, d.identity.lastName].filter((x) => x?.trim()).join(' ') || (d.identity.email ?? '').trim() || (d.identity.company ?? '').trim();
+  return d.name;
 }
 
 /** Bitwarden clients drop a URI whose checksum doesn't match, so every written URI gets a fresh one. */
@@ -92,6 +116,19 @@ export async function encryptDraft(c: Crypto, d: Draft, keys: Keys, o: EncryptOp
     body.login = login;
   } else if (d.type === CipherType.SecureNote) {
     body.secureNote = (orig?.secureNote as unknown) ?? { type: 0 };
+  }
+  // Every key is written (null when empty), on top of what was stored, so nothing the server added is lost.
+  const encObj = async (keys: readonly string[], vals: Record<string, string | null>, prev: unknown) => {
+    const out: Record<string, unknown> = { ...((prev as Record<string, unknown> | null) ?? {}) };
+    for (const k of keys) out[k] = await e(vals[k]);
+    return out;
+  };
+  if (d.type === CipherType.Card && d.card) body.card = await encObj(CARD_KEYS, d.card, orig?.card);
+  if (d.type === CipherType.Identity && d.identity) body.identity = await encObj(IDENTITY_KEYS, d.identity, orig?.identity);
+  if (!orig) for (const k of ['login', 'card', 'identity', 'secureNote'] as const) if (!(k in body)) body[k] = null;
+  if (d.fields) {
+    const kept = d.fields.filter((f) => f.name.trim() || f.value.trim() || f.type === 3);
+    body.fields = await Promise.all(kept.map(async (f) => ({ name: await e(f.name.trim()), value: f.type === 3 ? null : await e(f.value), type: f.type, linkedId: f.type === 3 ? (f.linkedId ?? null) : null })));
   }
   return body;
 }

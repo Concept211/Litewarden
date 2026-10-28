@@ -5,6 +5,7 @@ import type { AccountKeys, Cipher, CipherUri, SyncResponse } from './api';
 import { encTypeOf } from './crypto/encstring';
 import type { Crypto, Kdf, PrivateKeys, SymKey } from './crypto/types';
 import { UnsupportedKeyFormat } from './errors';
+import { cardLabel, showExpiry } from './cards';
 
 export const CipherType = { Login: 1, SecureNote: 2, Card: 3, Identity: 4, SshKey: 5 } as const;
 
@@ -84,8 +85,12 @@ export interface ListItem {
   favorite: boolean;
   reprompt: number;
   revisionDate: string | null;
-  /** Card brand + last 4, for the subtitle of card items. */
+  /** The list's second line for cards ("Visa •4242 · 08/28") and identities ("Alex Rivera · Miami, FL"). */
   subtitle?: string | null;
+  /** Cards: the stored brand, for the brand mark. */
+  brand?: string | null;
+  /** Cards: the expiry as MM/YY, for "expired" in the list. */
+  exp?: string | null;
 }
 
 export async function decryptListItem(c: Crypto, cipher: Cipher, keys: Keys): Promise<ListItem> {
@@ -111,9 +116,16 @@ export async function decryptListItem(c: Crypto, cipher: Cipher, keys: Keys): Pr
       await Promise.all((cipher.login.uris ?? []).map(async (u: CipherUri) => ({ uri: (await d(u.uri)) ?? '', match: u.match ?? null })))
     ).filter((u) => u.uri);
   } else if (cipher.type === CipherType.Card && cipher.card) {
-    const brand = await d(cipher.card.brand);
-    const num = await d(cipher.card.number);
-    item.subtitle = [brand, num ? `•••• ${num.slice(-4)}` : null].filter(Boolean).join(' ') || null;
+    const [brand, num, month, year] = await Promise.all([d(cipher.card.brand), d(cipher.card.number), d(cipher.card.expMonth), d(cipher.card.expYear)]);
+    item.brand = brand;
+    item.exp = showExpiry(month, year) || null;
+    item.subtitle = cardLabel(brand, num) || null;
+  } else if (cipher.type === CipherType.Identity && cipher.identity) {
+    const i = cipher.identity;
+    const [first, last, city, state, email] = await Promise.all([d(i.firstName), d(i.lastName), d(i.city), d(i.state), d(i.email)]);
+    const who = [first, last].filter(Boolean).join(' ');
+    const where = [city, state].filter(Boolean).join(', ');
+    item.subtitle = [who || email, where].filter(Boolean).join(' · ') || null;
   }
   return item;
 }
@@ -152,7 +164,7 @@ export interface FullItem {
   login?: { username: string | null; password: string | null; totp: string | null; uris: ListUri[] };
   card?: Record<string, string | null>;
   identity?: Record<string, string | null>;
-  fields?: Array<{ name: string | null; value: string | null; type: number }>;
+  fields?: Array<{ name: string | null; value: string | null; type: number; linkedId?: number | null }>;
 }
 
 export async function decryptItem(c: Crypto, cipher: Cipher, keys: Keys): Promise<FullItem> {
@@ -184,6 +196,6 @@ export async function decryptItem(c: Crypto, cipher: Cipher, keys: Keys): Promis
   if (card) out.card = card;
   const identity = await decObj(cipher.identity);
   if (identity) out.identity = identity;
-  if (cipher.fields) out.fields = await Promise.all(cipher.fields.map(async (f) => ({ name: await d(f.name), value: await d(f.value), type: f.type })));
+  if (cipher.fields) out.fields = await Promise.all(cipher.fields.map(async (f) => ({ name: await d(f.name), value: await d(f.value), type: f.type, linkedId: f.linkedId ?? null })));
   return out;
 }

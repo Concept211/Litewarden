@@ -9,6 +9,8 @@ export const HELP: Array<[string, Array<[string, string]>]> = [
       ['↑ ↓', 'Move'],
       ['Enter', 'Fill the selected login'],
       ['Alt ← →', 'Previous or next folder'],
+      ['Alt 1-4', 'Only logins, cards, identities or notes'],
+      ['Alt N', 'New item (then L, C, I or N)'],
       ['Alt U', 'Copy username'],
       ['Alt P', 'Copy password'],
       ['Alt T', 'Copy 2FA code'],

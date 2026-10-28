@@ -541,7 +541,8 @@ test('2FA secret: the scan button reads the setup QR code showing on the page', 
       }, src),
     );
   const p = await popup(page);
-  await p.click('button[aria-label="New login"]');
+  await p.click('button[aria-label="New item"]');
+  await p.keyboard.press('Enter'); // Login is first in the menu
   await expect(p.locator('.hdr h1')).toHaveText('New login');
   const scan = async () => {
     // The scan reads the tab the popup is over, which has to be the one showing (as it is under the real popup).

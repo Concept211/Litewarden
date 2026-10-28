@@ -198,3 +198,60 @@ export async function ensureFolders(): Promise<{ crypto: string; rental: string 
   await api.req('PUT', '/api/ciphers/move', { json: { ids: [ids['Frames · Carol']], folderId: rental } });
   return { crypto, rental };
 }
+
+/** Every live item on the test server whose name starts with `prefix`, decrypted (any type). */
+export async function serverItems(prefix: string) {
+  const c = e2eCreds();
+  const { api, userKey } = await loginAccount(serverUrl(VERSION), { ...c.main, kdf: { kdf: 0, kdfIterations: 600000, kdfMemory: null, kdfParallelism: null } });
+  const sync = await api.sync();
+  const out = [];
+  for (const x of sync.ciphers) {
+    if (x.deletedDate) continue;
+    const it = await decryptItem(C, x, { userKey, privateKeys: null, orgKeys: new Map(), orgKeyErrors: new Map() }).catch(() => null);
+    if (it?.name.startsWith(prefix)) out.push(it);
+  }
+  return out;
+}
+
+/** Create items of any type straight on the test server (as another device would), optionally in a folder. */
+export async function createItems(items: Array<{ type: number; name: string; folderId?: string; card?: Record<string, string>; identity?: Record<string, string>; notes?: string }>) {
+  const c = e2eCreds();
+  const { api, userKey } = await loginAccount(serverUrl(VERSION), { ...c.main, kdf: { kdf: 0, kdfIterations: 600000, kdfMemory: null, kdfParallelism: null } });
+  const userId = (await api.sync()).profile.id;
+  for (const it of items) {
+    const body = (await buildCipher({ notes: null, ...it } as never, userKey, { encryptedFor: userId })) as Record<string, unknown>;
+    if (it.folderId) body.folderId = it.folderId;
+    await api.createCipher(body);
+  }
+}
+
+/** A folder on the main e2e account by name (made if missing), for tests that shouldn't touch the shared ones. */
+export async function ensureFolder(name: string): Promise<string> {
+  const c = e2eCreds();
+  const { api, userKey } = await loginAccount(serverUrl(VERSION), { ...c.main, kdf: { kdf: 0, kdfIterations: 600000, kdfMemory: null, kdfParallelism: null } });
+  const sync = await api.sync();
+  for (const f of sync.folders ?? []) if ((await C.decryptString(f.name, userKey).catch(() => null)) === name) return f.id;
+  return (await api.req<{ id: string }>('POST', '/api/folders', { json: { name: await C.encryptString(name, userKey) } })).id;
+}
+
+/** Delete (for good) the test server's items whose names match, left over from earlier runs. */
+export async function deleteItems(match: RegExp): Promise<number> {
+  const c = e2eCreds();
+  const { api, userKey } = await loginAccount(serverUrl(VERSION), { ...c.main, kdf: { kdf: 0, kdfIterations: 600000, kdfMemory: null, kdfParallelism: null } });
+  const sync = await api.sync();
+  let n = 0;
+  for (const x of sync.ciphers) {
+    const name = await C.decryptString(x.name, userKey).catch(() => null);
+    if (!name || !match.test(name)) continue;
+    await api.req('DELETE', `/api/ciphers/${encodeURIComponent(x.id)}`);
+    n++;
+  }
+  return n;
+}
+
+/** Delete a folder on the main e2e account by name, if it's there (its items move to "No folder"). */
+export async function deleteFolder(name: string) {
+  const c = e2eCreds();
+  const { api, userKey } = await loginAccount(serverUrl(VERSION), { ...c.main, kdf: { kdf: 0, kdfIterations: 600000, kdfMemory: null, kdfParallelism: null } });
+  for (const f of (await api.sync()).folders ?? []) if ((await C.decryptString(f.name, userKey).catch(() => null)) === name) await api.req('DELETE', `/api/folders/${encodeURIComponent(f.id)}`);
+}

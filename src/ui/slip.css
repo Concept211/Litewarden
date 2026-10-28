@@ -57,6 +57,18 @@ svg.lucide{width:16px;height:16px;stroke-width:1.9}
 .tile{width:28px;height:28px;border-radius:8px;background:var(--raised);display:grid;place-items:center;font-weight:800;font-size:13px;flex:none}
 .tile.fav{background:#fff;box-shadow:inset 0 0 0 1px var(--line)}
 [data-theme=dark] .tile.fav{box-shadow:none}
+/* card brand marks (BrandMark): white chip with the brand, drawn in CSS */
+.tile.bt{background:#fff;box-shadow:inset 0 0 0 1px var(--line);overflow:hidden}
+[data-theme=dark] .tile.bt{box-shadow:none}
+.tile.bt b{font:italic 900 9.5px/1 "Hanken Grotesk",sans-serif;letter-spacing:-.02em;color:#1a1f71}
+.tile.bt-amex{background:#1f72cd}.tile.bt-amex b{color:#fff;font-style:normal;font-size:7px;letter-spacing:.02em}
+.tile.bt-diners b,.tile.bt-jcb b,.tile.bt-unionpay b{font-style:normal;font-size:8px;color:#334}
+.tile.bt i{position:relative;width:20px;height:13px}
+.tile.bt i::before,.tile.bt i::after{content:"";position:absolute;top:0;width:13px;height:13px;border-radius:50%}
+.tile.bt-mastercard i::before{left:0;background:#eb001b}.tile.bt-mastercard i::after{right:0;background:#f79e1b;mix-blend-mode:multiply}
+.tile.bt-maestro i::before{left:0;background:#0099df}.tile.bt-maestro i::after{right:0;background:#eb001b;mix-blend-mode:multiply}
+.tile.bt-discover i{width:12px;height:12px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ffb15e,#f26b1d)}
+.tile.bt-discover i::before,.tile.bt-discover i::after{display:none}
 .tile img{width:18px;height:18px;display:block}
 .row .tile img,.m-row .tile img{width:16px;height:16px}
 .tile svg.lucide{width:14px;height:14px}
@@ -341,3 +353,49 @@ button.link{padding:0;font-size:inherit}
 [data-density=compact] .stub{height:26px}
 [data-density=compact] .card{margin-bottom:6px}
 .c-top .ib{width:30px;height:30px;flex:none}
+
+/* item types (mockups item-types): the list's type buttons, the "+" menu, card picture, type forms, custom fields */
+.sec.typed{align-items:center;justify-content:flex-start;gap:6px;min-height:28px;margin-top:2px;margin-bottom:4px}
+.sec.typed .types{margin-left:auto;display:flex;gap:1px;font:inherit}
+.types .ib{width:28px;height:28px;border-radius:8px}
+.types .ib svg.lucide{width:15px;height:15px}
+.types .ib.on{background:var(--accent);color:var(--accent-ink)}
+.types .ib.dim{opacity:.35}
+.top .ib.on{background:var(--raised);color:var(--ink)}
+.newmenu-scrim{position:absolute;inset:0;z-index:9}
+.newmenu{position:absolute;right:44px;top:46px;width:200px;background:var(--surface);border:1.5px solid var(--line);border-radius:12px;box-shadow:0 10px 28px rgb(var(--shadow-c)/.22);padding:4px}
+.newmenu .it{display:flex;align-items:center;gap:10px;width:100%;height:38px;padding:0 10px;border-radius:9px;font-weight:600;font-size:13.5px;color:var(--ink);text-align:left}
+.newmenu .it.sel{background:var(--accent-tint)}
+.newmenu .it svg.lucide{width:17px;height:17px;color:var(--muted)}
+.newmenu kbd{margin-left:auto;font:10.5px var(--mono);color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+.row .un .bad,.pill.bad{color:var(--warn-ink)}
+[data-theme=light] .row .un .bad{color:var(--low)}
+.pill.bad{background:var(--warn)}
+.cardface{position:relative;height:122px;border-radius:14px;padding:12px 14px;color:#fff;background:linear-gradient(135deg,#1252a3,#0b2f63 70%);box-shadow:0 6px 18px rgb(13 60 119/.25);display:flex;flex-direction:column;font-family:var(--mono)}
+.cardface.cf-amex{background:linear-gradient(135deg,#2a7fd4,#0f3f78 70%)}
+.cardface.cf-mastercard,.cardface.cf-maestro{background:linear-gradient(135deg,#3b3f4a,#17191f 70%)}
+.cardface.cf-discover{background:linear-gradient(135deg,#f08a3c,#a8460f 70%)}
+.cardface.cf-empty{background:linear-gradient(135deg,#8a94a6,#5d6676)}
+[data-theme=dark] .cardface{box-shadow:none}
+.cf-brand{position:absolute;right:14px;top:11px;font:italic 800 15px "Hanken Grotesk",sans-serif;letter-spacing:.02em}
+.cf-chip{width:28px;height:20px;border-radius:5px;background:linear-gradient(135deg,#f3d58a,#c9a24a);margin-top:2px}
+.cf-num{font-size:14px;letter-spacing:.12em;margin-top:auto}
+.cf-bot{display:flex;justify-content:space-between;gap:10px;font-size:11px;margin-top:8px;text-transform:uppercase;opacity:.92}
+.cf-bot span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cf-bot small{display:block;font-size:8.5px;opacity:.7;letter-spacing:.06em}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.three{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr) minmax(0,1fr);gap:8px}
+.two>*,.three>*{min-width:0}
+.body>.two,.body>.three{margin-top:12px}
+.body>.three{margin-top:8px}
+input.masked{-webkit-text-security:disc}
+.kv .k .addr{white-space:pre-line;line-height:1.4}
+.add-chips{display:flex;flex-wrap:wrap;gap:6px}
+.add-chip{height:28px;padding:0 10px;border-radius:999px;border:1.5px dashed var(--line);display:inline-flex;align-items:center;gap:5px;font-weight:600;font-size:12.5px;color:var(--accent-text)}
+.add-chip:hover{border-color:var(--accent);background:var(--accent-tint)}
+.add-chip svg.lucide{width:13px;height:13px}
+.cf{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr) 30px;gap:6px;align-items:center;padding:7px 6px 7px 8px}
+.cf .inp{height:36px;min-width:0}
+.cf .ib{width:30px;height:30px}
+.cf-fixed{display:flex;align-items:center;min-height:36px;font-size:12.5px;padding-left:4px}
+.cf-adds{display:flex;flex-wrap:wrap;column-gap:2px}
