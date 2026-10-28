@@ -167,13 +167,13 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
         submitHooked = true;
         document.addEventListener('submit', (e) => onSubmit(e.target as Element), true);
         document.addEventListener('click', onClick, true);
+        document.addEventListener('keydown', onKey, true); // Enter submits too
       }
       conf = await cs('cs:hello', { top: window === window.top });
       mount();
       sync();
       addEventListener('scroll', onScroll, { capture: true, passive: true });
       addEventListener('resize', onResize, { passive: true });
-      document.addEventListener('keydown', onKey, true);
       document.addEventListener('focusin', onFocus, true);
       document.addEventListener('pointerdown', onPointer, true);
       addEventListener('popstate', () => closeMenu());
@@ -685,6 +685,8 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
       const t = e.composedPath()[0];
       if (t instanceof HTMLInputElement && t.form?.querySelector('input[type=password]')) onSubmit(t);
       else if (t instanceof HTMLInputElement && isPassword(t)) onSubmit(t);
+      // Two-step page 1 (Google): Enter in the username field, no password on the page yet.
+      else if (t instanceof HTMLInputElement && isUsernameCandidate(t) && t.value) onSubmit(t);
     }
   }
 

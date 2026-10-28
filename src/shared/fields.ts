@@ -132,6 +132,8 @@ export interface Captured {
   current: string | null;
   /** The password came from a "new password" field (signup or change-password). */
   isNew: boolean;
+  /** No username field: the one email address the page shows by the password field, if any. */
+  shown?: string;
 }
 
 /**
@@ -158,7 +160,36 @@ export function capture(from: Element): Captured | null {
     const hidden = all.find((i) => (i.type === 'hidden' || !visible(i)) && (ac(i).includes('username') || ac(i).includes('email')) && i.value);
     user = hidden?.value ?? '';
   }
-  return { username: user.trim(), password, current: news.length && cur && cur !== news[0] ? cur.value : null, isNew: news.length > 0 };
+  const shown = user ? '' : shownEmail(pwEl);
+  return { username: user.trim(), password, current: news.length && cur && cur !== news[0] ? cur.value : null, isNew: news.length > 0, ...(shown && { shown }) };
+}
+
+const EMAIL = /^[^\s@]{1,64}@[^\s@]+\.[a-z]{2,}$/i;
+
+/**
+ * The account a password page names in text but not in a field (Google after "Choose an account": the address sits
+ * above the password box). Looks outward from the field a few levels, skipping footers, menus and links; exactly one
+ * distinct address counts, more than one means none.
+ */
+function shownEmail(pw: HTMLInputElement): string {
+  const doc = pw.ownerDocument;
+  const tagged = [...doc.querySelectorAll('[data-email]')].map((e) => e.getAttribute('data-email')!.trim()).filter((v) => EMAIL.test(v));
+  if (new Set(tagged.map((v) => v.toLowerCase())).size === 1) return tagged[0]!;
+  let n: Element | null = pw.parentElement;
+  for (let i = 0; n && i < 10; i++, n = n.parentElement) {
+    const found = new Set<string>();
+    const w = doc.createTreeWalker(n, 4); // text nodes
+    for (let t = w.nextNode(); t; t = w.nextNode()) {
+      const v = t.nodeValue!.trim();
+      const el = t.parentElement;
+      // Not a footer's or a menu's "contact us" address, or any link.
+      if (v.length < 100 && EMAIL.test(v) && el?.getClientRects().length && !el.closest('footer, nav, aside, a, [role=contentinfo]')) found.add(v.toLowerCase());
+    }
+    if (found.size > 1) return '';
+    if (found.size === 1) return [...found][0]!;
+    if (n === doc.body) break;
+  }
+  return '';
 }
 
 /** The element that holds a login without a <form>: the nearest ancestor with a password field and a button. */

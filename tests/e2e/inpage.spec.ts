@@ -213,6 +213,31 @@ test('save prompt: a new login, after the form navigates; it lands on the server
   await p.close();
 });
 
+test('Google-style two-page sign-in: the save card has the username (Enter, "Next" button, account chooser)', async ({ ctx }) => {
+  // Google: Enter on the email page is caught by script (no submit), "Next" is type=button, the page swaps in place,
+  // and after "Choose an account" the address is only text above the password box. The footer has another address.
+  const cases = [
+    { host: 'genter', q: '?nochip=1', user: `enter-${RUN}@gmail.test`, go: (p: Page) => p.press('#identifierId', 'Enter') },
+    { host: 'gnext', q: '?nochip=1', user: `next-${RUN}@gmail.test`, go: (p: Page) => p.click('#identifierNext span') },
+    { host: 'gpick', q: '?chooser=1', user: 'bob-pick@gmail.test', go: (p: Page) => p.click('.tile[data-identifier^=bob] div >> nth=1') },
+  ];
+  for (const c of cases) {
+    const p = await page(ctx, SAVE(c.host, `google-signin.html${c.q}`));
+    if (!c.q.includes('chooser')) await p.fill('#identifierId', c.user);
+    await c.go(p);
+    await expect.poll(async () => (await icons(p)).length).toBe(1); // the password page is ready, as a user would see it
+    await p.fill('#pw', `G-${c.host}-Pa55`);
+    await p.click('#passwordNext span');
+    await p.waitForURL(/welcome\.html/);
+    const f = await surface(p, 'prompt');
+    await expect(f.locator('input[aria-label=Username]'), c.host).toHaveValue(c.user);
+    await p.waitForTimeout(600); // past the card's click guard
+    await f.locator('button[aria-label="Not now"]').click();
+    await expect.poll(() => gone(p, 'prompt')).toBe(true);
+    await p.close();
+  }
+});
+
 test('a site with many saved logins: submitting one that exists gives no prompt', async ({ ctx, popup }) => {
   // Regression: the save check only looked at the first 40 logins for the site (by name), so an existing login
   // further down the list got a "Save login" prompt.

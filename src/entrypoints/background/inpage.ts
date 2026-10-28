@@ -172,6 +172,8 @@ async function submitted(c: Captured, sender: chrome.runtime.MessageSender): Pro
     const { stepUser } = await mem.get('stepUser');
     const prev = stepUser?.[tabId];
     if (prev && prev.host === hostOf(url) && Date.now() - prev.at < MAX_AGE) c = { ...c, username: prev.username };
+    // Or the account the password page names (picked from the site's account list, never typed).
+    else if (c.shown) c = { ...c, username: c.shown };
   }
   // The same submit often arrives twice (click on the button, then the form's submit event).
   const all = await pendings();

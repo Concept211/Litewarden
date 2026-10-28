@@ -1,0 +1,32 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Sign in - Google Accounts</title><link rel="stylesheet" href="_base.css">
+<style>.tile{display:block;padding:8px;border:1px solid #ccc;margin:4px 0;cursor:pointer}.chip{font-size:13px;margin:6px 0}</style></head><body>
+<!-- Mimics Google's two-page sign-in: no real form submit, "Next" is type=button, Enter is caught by script, the page
+     swaps in place, and the password page shows the address only as text. ?chooser=1 starts at "Choose an account"; ?nochip=1 leaves the address off the password page. -->
+<header>Sign in</header>
+<main><form novalidate onsubmit="event.preventDefault()"><div id="view"></div></form></main>
+<footer><small>Help: support@google-lw.test</small></footer>
+<script>
+const q = new URLSearchParams(location.search);
+const view = document.getElementById('view');
+let email = '';
+function identifier() {
+  view.innerHTML = '<label for="identifierId">Email or phone</label><div class="f"><input type="email" id="identifierId" name="identifier" autocomplete="username webauthn"></div>' +
+    '<div id="identifierNext"><button type="button" class="VfPpkd-LgbsSe"><div class="ripple"></div><span>Next</span></button></div>';
+  const i = document.getElementById('identifierId');
+  const next = () => { email = i.value; history.pushState({}, '', (location.search ? location.search + '&' : '?') + 'step=pwd'); setTimeout(password, 50); };
+  i.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); next(); } });
+  view.querySelector('button').addEventListener('click', next);
+}
+function chooser() {
+  view.innerHTML = '<p>Choose an account</p>' + ['ann-pick@gmail.test', 'bob-pick@gmail.test'].map((a) => `<div class="tile" role="link" data-identifier="${a}"><div>${a.split('-')[0]}</div><div>${a}</div></div>`).join('');
+  view.querySelectorAll('.tile').forEach((t) => t.addEventListener('click', () => { email = t.dataset.identifier; history.pushState({}, '', (location.search ? location.search + '&' : '?') + 'step=pwd'); setTimeout(password, 50); }));
+}
+function password() {
+  const chip = q.get('nochip') ? '' : '<div class="chip"><div><div>' + email + '</div></div></div>';
+  view.innerHTML = '<p>Welcome</p>' + chip +
+    '<label for="pw">Enter your password</label><div class="f"><input type="password" id="pw" name="Passwd" autocomplete="current-password"></div>' +
+    '<div id="passwordNext"><button type="button"><span>Next</span></button></div>';
+  view.querySelector('button').addEventListener('click', () => { location.href = 'welcome.html'; });
+}
+q.get('chooser') ? chooser() : identifier();
+</script></body></html>
