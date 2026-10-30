@@ -2,7 +2,7 @@
 // Settings, r4 variant B: a list of categories, then one page per category. Every setting has an icon and a
 // one-line description, and takes effect the moment it changes.
 import type { ComponentChildren } from 'preact';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import {
   ArrowLeft,
   CreditCard,
@@ -166,7 +166,8 @@ export function SettingsView({
   // ref so two quick presses walk up two levels.
   const at = useRef({ page, sheet });
   at.current = { page, sheet };
-  useEffect(() => {
+  // Attached before the screen paints, so a key pressed the moment it shows isn't lost.
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       e.preventDefault();

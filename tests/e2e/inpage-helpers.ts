@@ -221,7 +221,7 @@ export async function serverItems(prefix: string) {
 }
 
 /** Create items of any type straight on the test server (as another device would), optionally in a folder. */
-export async function createItems(items: Array<{ type: number; name: string; folderId?: string; card?: Record<string, string>; identity?: Record<string, string>; notes?: string; login?: { username: string; password: string; totp: null; uris: Array<{ uri: string; match: number | null }> } }>) {
+export async function createItems(items: Array<{ type: number; name: string; folderId?: string; card?: Record<string, string>; identity?: Record<string, string>; notes?: string; reprompt?: number; secureNote?: { type: number }; fields?: Array<{ name: string; value: string; type: number }>; login?: { username: string; password: string; totp: null; uris: Array<{ uri: string; match: number | null }> } }>) {
   const c = e2eCreds();
   const { api, userKey } = await loginAccount(serverUrl(VERSION), { ...c.main, kdf: { kdf: 0, kdfIterations: 600000, kdfMemory: null, kdfParallelism: null } });
   const userId = (await api.sync()).profile.id;

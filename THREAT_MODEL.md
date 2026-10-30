@@ -15,7 +15,7 @@ File references point at the source as of version 0.1.0.
 |---|---|---|
 | Master password | Typed into the popup, used once to derive keys, then dropped | Never stored, never sent. Only the derived hash goes to the server at login. |
 | User key (decrypts the vault) and organization keys | `chrome.storage.session` while unlocked (`Session` in `src/shared/store.ts`) | Memory only by default. See "Lock when the browser closes" below for the one setting that puts it on disk. |
-| Decrypted list index (names, usernames, URLs, notes for search) | `chrome.storage.session` (`index`, `notes`, `recentItems`, `tabMatches`) | Memory only. Passwords and 2FA secrets are not in the index; they're decrypted one at a time when you fill or copy. |
+| Decrypted list index (names, usernames, URLs, notes for search, a wallet's network and public address) | `chrome.storage.session` (`index`, `notes`, `recentItems`, `tabMatches`) | Memory only. Passwords, 2FA secrets, card numbers, private keys and seed phrases are not in the index, and neither are the notes of re-prompt items; they're decrypted one at a time when you open, fill or copy. |
 | Encrypted vault copy | `chrome.storage.local` (`vault`) | Encrypted exactly as the server stores it. |
 | Access and refresh tokens | `chrome.storage.local` (`tokens`) | Let the extension talk to your server without your password. |
 | PIN-wrapped user key | `chrome.storage.session` by default; `chrome.storage.local` only if "Keep the PIN after a restart" is on | Wrapped with a key derived from the PIN through your account's KDF (`pinKey` in `src/entrypoints/background/session.ts`). |
@@ -177,6 +177,21 @@ the extension files. What Litewarden does to limit the damage:
   server also rate-limits logins.
 - Passwords are masked until you press reveal. Copied secrets are cleared from the clipboard after 30 seconds by
   default.
+- **Master password re-prompt.** For an item with Bitwarden's "Master password re-prompt" on (new crypto wallets
+  have it on), the service worker hands out none of its secrets until the master password is typed for it: the item
+  page gets only its name, folder and, for a wallet, the network and public address (`lockedView`); copying a secret,
+  filling (from the popup, the in-page menu or "open and fill") and saving an edit are refused (`needsReprompt`,
+  `assertConfirmed` in `src/entrypoints/background/session.ts`). The password is checked on this computer by
+  unwrapping the user key, with the same 5-tries-then-a-minute limit as unlocking. A PIN doesn't answer it. The answer
+  lasts 5 minutes for that item, and only in the worker's memory, so a lock or a worker restart forgets it. Saving an
+  item from the popup counts as an answer, since the user just had its secrets in front of them. An unsaved edit of
+  such an item, kept for when the popup opens again, stays behind the same box, and its notes are left out of search.
+  Residual risk: this is the same kind of guard as in the official apps, not extra encryption. The item is encrypted
+  with the same key as the rest of the vault, so anyone who can run code in the unlocked extension can still read it.
+  The page-side prompts that write to a login (update its password after a sign-in, add a 2FA key) don't ask for the
+  master password: they change the item without showing anything from it, the same as for other items.
+- Crypto wallets are never filled into web pages, so a fake "enter your recovery phrase" page can't get one from
+  Litewarden. Wallet seed phrases shown in the popup hide again after a minute.
 
 The clipboard clear checks before it clears. When Litewarden copies a password or code it keeps a SHA-256 of the
 text (in `chrome.storage.session`, not the text). When the timer fires, the offscreen document pastes the current
@@ -226,8 +241,10 @@ Litewarden can't clear those.
 - A scan of the built package finds no `eval`, no `new Function` and no remote script tags. The only hosts named in
   the code are Bitwarden cloud's (used only if you pick it), GitHub links, and placeholder examples.
 - Dependencies are pinned to exact versions in `package.json`; the runtime ones are Preact, @preact/signals,
-  hash-wasm (Argon2), tldts (public suffix list), lucide-preact (icons), jsQR (reads a 2FA setup QR code) and two
-  Fontsource font packages.
+  hash-wasm (Argon2), tldts (public suffix list), lucide-preact (icons), jsQR (reads a 2FA setup QR code), two
+  Fontsource font packages, and for the wallet form only (loaded when it opens) @noble/curves and @noble/hashes
+  (secp256k1 and Keccak, to check a 0x key against its address) and @scure/bip39 (the seed phrase word list). The
+  network logos are SVG files from web3icons (MIT), checked for scripts and outside references when imported.
 - The 2FA scan button takes one screenshot of the visible tab, only when you click it, and decodes it inside the
   popup. To know where to look, it asks the page for the positions of its images, canvases and SVGs (positions
   only, nothing else). The image isn't stored or sent anywhere.

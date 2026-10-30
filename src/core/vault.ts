@@ -6,6 +6,7 @@ import { encTypeOf } from './crypto/encstring';
 import type { Crypto, Kdf, PrivateKeys, SymKey } from './crypto/types';
 import { UnsupportedKeyFormat } from './errors';
 import { cardLabel, showExpiry } from './cards';
+import { networkById, shortAddress, walletOf, walletPart } from './wallet';
 
 export const CipherType = { Login: 1, SecureNote: 2, Card: 3, Identity: 4, SshKey: 5 } as const;
 
@@ -91,6 +92,8 @@ export interface ListItem {
   brand?: string | null;
   /** Cards: the expiry as MM/YY, for "expired" in the list. */
   exp?: string | null;
+  /** Secure notes that hold a crypto wallet: the network and the public address. Never the key or phrase. */
+  wallet?: { network: string | null; address: string | null };
 }
 
 export async function decryptListItem(c: Crypto, cipher: Cipher, keys: Keys): Promise<ListItem> {
@@ -126,6 +129,21 @@ export async function decryptListItem(c: Crypto, cipher: Cipher, keys: Keys): Pr
     const who = [first, last].filter(Boolean).join(' ');
     const where = [city, state].filter(Boolean).join(', ');
     item.subtitle = [who || email, where].filter(Boolean).join(' · ') || null;
+  } else if (cipher.type === CipherType.SecureNote && cipher.fields?.length) {
+    // Field names, plus the plain-text network and address. Hidden values stay encrypted until the item is opened.
+    const fields = await Promise.all(
+      cipher.fields.map(async (f) => {
+        const name = await d(f.name).catch(() => null);
+        const part = walletPart(name, f.type);
+        const open = f.type === 0 && (part === 'network' || part === 'address');
+        return { name, type: f.type, value: open ? await d(f.value).catch(() => null) : null };
+      }),
+    );
+    const w = walletOf(fields);
+    if (w) {
+      item.wallet = { network: w.network, address: w.address };
+      item.subtitle = [networkById(w.network)?.name ?? w.network, shortAddress(w.address)].filter(Boolean).join(' · ') || 'Wallet';
+    }
   }
   return item;
 }

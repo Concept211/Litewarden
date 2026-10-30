@@ -14,6 +14,8 @@ export interface Draft {
   notes: string | null;
   folderId: string | null;
   favorite?: boolean;
+  /** Bitwarden's "master password re-prompt": 1 asks for the master password before showing secrets. Left out: kept. */
+  reprompt?: number;
   login?: { username: string | null; password: string | null; totp: string | null; uris: ListUri[] };
   /** Left out: the stored card, identity or custom fields go back as they were. */
   card?: Record<string, string | null>;
@@ -83,7 +85,7 @@ export async function encryptDraft(c: Crypto, d: Draft, keys: Keys, o: EncryptOp
     organizationId: orig?.organizationId ?? null,
     folderId: d.folderId,
     favorite: d.favorite ?? orig?.favorite ?? false,
-    reprompt: orig?.reprompt ?? 0,
+    reprompt: d.reprompt ?? orig?.reprompt ?? 0,
     key: orig?.key ?? null,
     name: await c.encryptString(d.name.trim(), key),
     notes: await e(d.notes),

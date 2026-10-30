@@ -2,13 +2,14 @@
 // Main popup (Slip): this site's logins as cards on top, recents below, search over everything.
 // Enter fills the selected login, a click fills, the stubs copy. Edit is a separate control.
 import type { ComponentChildren } from 'preact';
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { AppWindow, CloudOff, CreditCard, Folder as FolderIcon, Hash, IdCard, ShieldAlert, Keyboard, KeyRound, Lock, NotebookText, Pencil, Plus, RefreshCw, ScanLine, Search, Settings, SquareArrowOutUpRight, StickyNote, Timer, User, X } from 'lucide-preact';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { AppWindow, CloudOff, Copy, CreditCard, Folder as FolderIcon, Hash, IdCard, ShieldAlert, Keyboard, KeyRound, Lock, NotebookText, Pencil, Plus, RefreshCw, ScanLine, Search, Settings, SquareArrowOutUpRight, StickyNote, Timer, User, Wallet, X } from 'lucide-preact';
 import type { ComponentType } from 'preact';
 import { expiredMMYY } from '../../core/cards';
 import { SearchIndex, type Range, type SearchHit } from '../../core/search';
 import { secondsRemaining, totp } from '../../core/totp';
 import { launchUrl } from '../../core/uri';
+import { networkById, WALLET_KIND } from '../../core/wallet';
 import { RemoteError, send, type FillResult, type Folder, type TotpData } from '../../shared/messages';
 import { clipHash } from '../../shared/cliphash';
 import { kdfSignature } from '../../core/kdf';
@@ -115,13 +116,16 @@ export interface NewPrefill {
   folderId?: string | null;
 }
 
-/** Item types in the "+" menu and the list's type buttons, in that order. Alt+1 to Alt+4 pick them. */
+/** Item types in the "+" menu and the list's type buttons, in that order. Alt+1 to Alt+5 pick them. A wallet is a
+ * secure note underneath (see core/wallet.ts), but it gets a type of its own here. */
 const TYPES: Array<{ t: number; one: string; many: string; menu: string; key: string; Icon: ComponentType }> = [
   { t: 1, one: 'login', many: 'Logins', menu: 'Login', key: 'l', Icon: KeyRound },
   { t: 3, one: 'card', many: 'Cards', menu: 'Card', key: 'c', Icon: CreditCard },
   { t: 4, one: 'identity', many: 'Identities', menu: 'Identity', key: 'i', Icon: IdCard },
   { t: 2, one: 'note', many: 'Notes', menu: 'Secure note', key: 'n', Icon: StickyNote },
+  { t: WALLET_KIND, one: 'wallet', many: 'Wallets', menu: 'Wallet', key: 'w', Icon: Wallet },
 ];
+const kindOf = (it: IndexItem) => (it.wallet ? WALLET_KIND : it.type);
 
 /** Kept by App while an item or Settings is open, so coming back lands where you were. */
 export interface MainKeep {
@@ -280,7 +284,7 @@ export function Main({
     if (folders && pick !== 'all' && pick !== 'none' && !folderName.has(pick)) setPick('all');
   }, [folders]);
   const inFolder = (it: IndexItem) => pick === 'all' || (pick === 'none' ? !it.folderId : it.folderId === pick);
-  const inPick = (it: IndexItem) => inFolder(it) && (!kind || it.type === kind);
+  const inPick = (it: IndexItem) => inFolder(it) && (!kind || kindOf(it) === kind);
   const pickName = pick === 'all' ? null : pick === 'none' ? 'No folder' : (folderName.get(pick) ?? 'Folder');
   const kindMeta = TYPES.find((x) => x.t === kind) ?? null;
   /** What the list shows, in words: "Cards in Work", "Work", "Cards", or null for everything. */
@@ -288,7 +292,7 @@ export function Main({
   // How many of each type the picked folder holds; a type with none is dimmed (not hidden, so nothing shifts).
   const typeCounts = useMemo(() => {
     const m = new Map<number, number>();
-    for (const it of index ?? []) if (inFolder(it)) m.set(it.type, (m.get(it.type) ?? 0) + 1);
+    for (const it of index ?? []) if (inFolder(it)) m.set(kindOf(it), (m.get(kindOf(it)) ?? 0) + 1);
     return m;
   }, [index, pick]);
   const chips: Chip[] = folders?.length
@@ -311,7 +315,9 @@ export function Main({
   // ----- search (built on first keystroke; notes load then too) -----
   const searchIndex = useMemo(() => {
     if (!query.trim() || !index) return null;
-    const docs: Doc[] = index.map((it) => ({ id: it.id, name: it.name, username: it.username ?? it.subtitle ?? null, urls: it.hosts, notes: notes?.[it.id] ?? null, folder: it.folderId ? (folderName.get(it.folderId) ?? null) : null, favorite: it.favorite, item: it }));
+    // A wallet is found by its network and its full address (the list shows it shortened).
+    const second = (it: IndexItem) => (it.wallet ? [networkById(it.wallet.network)?.name ?? it.wallet.network, it.wallet.address].filter(Boolean).join(' ') || null : (it.username ?? it.subtitle ?? null));
+    const docs: Doc[] = index.map((it) => ({ id: it.id, name: it.name, username: second(it), urls: it.hosts, notes: notes?.[it.id] ?? null, folder: it.folderId ? (folderName.get(it.folderId) ?? null) : null, favorite: it.favorite, item: it }));
     return new SearchIndex(docs);
   }, [index, notes, folderName, !!query.trim()]);
   useEffect(() => {
@@ -370,8 +376,18 @@ export function Main({
       const s = b.settings.clipboardSeconds;
       show(field === 'totp' ? `Code ${value.slice(0, 3)} ${value.slice(3)} copied` : `${what[0]!.toUpperCase()}${what.slice(1)} copied`, s);
     } catch (e) {
+      // Asks for the master password: the item's page has the box for it.
+      if ((e as RemoteError).name === 'RepromptNeeded') return open(item);
       show((e as Error).message);
     }
+  }
+
+  /** A wallet's public address, straight from the list (it isn't a secret, so the clipboard isn't cleared). */
+  async function copyAddress(item: IndexItem) {
+    if (!item.wallet?.address) return show('This wallet has no address saved.');
+    await navigator.clipboard.writeText(item.wallet.address);
+    flash(`${item.id}:address`);
+    show('Address copied');
   }
 
   async function fill(item: IndexItem, opts: { force?: boolean; allowFrame?: boolean } = {}) {
@@ -388,6 +404,7 @@ export function Main({
     setConfirm(null);
     if (r.outcome === 'blocked-page') return show("Litewarden can't fill on this page. Browser pages and the Chrome Web Store are off limits.");
     if (r.outcome === 'no-fields') return setConfirm({ item, kind: 'nofields' });
+    if (r.outcome === 'reprompt') return open(item);
     let copied = false;
     if (item.hasTotp && b.settings.copyTotpAfterFill) {
       try {
@@ -415,6 +432,7 @@ export function Main({
       if (b.popout) return show(`Opening ${r.host}`);
       window.close();
     } catch (e) {
+      if ((e as RemoteError).name === 'RepromptNeeded') return open(item);
       show((e as RemoteError).message);
     }
   }
@@ -491,7 +509,8 @@ export function Main({
 
   const live = useRef({ help, confirm, flat, selIdx, query, fill, copy, open, launch, stepFolder, newMenu, startNew, setKind });
   live.current = { help, confirm, flat, selIdx, query, fill, copy, open, launch, stepFolder, newMenu, startNew, setKind };
-  useEffect(() => {
+  // Attached before the screen paints, so a key pressed the moment it shows isn't lost.
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const { help, confirm, flat, selIdx, query, fill, copy, open, launch, stepFolder, newMenu, startNew, setKind } = live.current;
       // The "+" menu: arrows and Enter, or a type's letter. Nothing typed reaches the search box while it's open.
@@ -508,7 +527,7 @@ export function Main({
         e.preventDefault();
         return setNewMenu(0);
       }
-      if (e.altKey && /^[1-4]$/.test(e.key)) {
+      if (e.altKey && /^[1-5]$/.test(e.key)) {
         e.preventDefault();
         return setKind(TYPES[Number(e.key) - 1]!.t);
       }
@@ -635,6 +654,7 @@ export function Main({
     const login = item.type === 1;
     const go = login ? launchUrl(item.uris)?.hostname.replace(/^www\./, '') : undefined;
     const isCard = item.type === 3;
+    const wallet = item.wallet;
     const old = isCard && item.exp ? expiredMMYY(item.exp) : false;
     const sub = login ? [item.username, item.hosts[0]].filter(Boolean) : [item.subtitle ?? (isCard ? 'Card' : item.type === 2 ? 'Note' : 'Identity')];
     const r = hit?.ranges;
@@ -698,6 +718,13 @@ export function Main({
             )}
           </span>
         )}
+        {wallet && (
+          <span style={{ display: 'contents' }} onClick={(ev) => ev.stopPropagation()}>
+            <button class={`ib${done === `${item.id}:address` ? ' done' : ''}`} title="Copy address" aria-label="Copy address" onClick={() => void copyAddress(item)}>
+              <Copy />
+            </button>
+          </span>
+        )}
         {isCard && (
           <span style={{ display: 'contents' }} onClick={(ev) => ev.stopPropagation()}>
             <button class={`ib${done === `${item.id}:number` ? ' done' : ''}`} title="Copy card number" aria-label="Copy card number" onClick={() => copy(item, 'number')}>
@@ -730,7 +757,7 @@ export function Main({
     onNew(t === 1 ? { host: site, origin, folderId } : { host: null, origin: null, type: t, folderId });
   }
 
-  // The four type buttons on the list's header line (mockup filters A): never scroll, add no height.
+  // The type buttons on the list's header line (mockup filters A): never scroll, add no height.
   const typeButtons = (
     <span class="types" role="group" aria-label="Show one type">
       {TYPES.map(({ t, many, Icon }, k) => {

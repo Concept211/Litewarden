@@ -25,6 +25,7 @@ const handlers: Handlers = {
   sync: () => S.syncNow(false),
   touch: () => S.touch(),
   getSecret: async ({ id, field }) => {
+    if (field !== 'username') await S.assertConfirmed(id);
     const it = await S.fullItem(id);
     const v = field === 'number' || field === 'code' ? it.card?.[field] : field === 'username' ? it.login?.username : field === 'password' ? it.login?.password : it.login?.totp;
     await S.recordUse(id);
@@ -33,6 +34,7 @@ const handlers: Handlers = {
   getTotpSecrets: async ({ ids }) => {
     const out: Record<string, string> = {};
     for (const id of ids.slice(0, 40)) {
+      if (await S.needsReprompt(id).catch(() => true)) continue;
       const it = await S.fullItem(id).catch(() => null);
       if (it?.login?.totp) out[id] = it.login.totp;
     }
@@ -45,7 +47,10 @@ const handlers: Handlers = {
     if (s > 0) await chrome.alarms.create('clipclear', { when: Date.now() + s * 1000 });
   },
   fill: async ({ tabId, id, force, allowFrame }) => fill(tabId, id, force, allowFrame || !(await getSettings()).askFrames),
-  launch: ({ id, tabId }) => launch(id, tabId),
+  launch: async ({ id, tabId }) => {
+    await S.assertConfirmed(id);
+    return launch(id, tabId);
+  },
   matchTab: ({ tabId, url }) => matchTab(tabId, url),
   setPin: ({ pin }) => S.setPin(pin),
   setSettings: async (patch) => {
@@ -68,8 +73,15 @@ const handlers: Handlers = {
     return next;
   },
   getItem: ({ id }) => S.itemDetail(id),
+  confirmItem: ({ id, password }) => S.confirmItem(id, password),
   folders: () => S.folders(),
-  saveItem: ({ id, draft }) => S.saveItem(id, draft),
+  saveItem: async ({ id, draft }) => {
+    // An edit starts from the item's secrets, so a re-prompt item must have been opened with the master password.
+    if (id) await S.assertConfirmed(id);
+    const r = await S.saveItem(id, draft);
+    S.markConfirmed(r.id);
+    return r;
+  },
   trashItem: ({ id }) => S.trashItem(id),
   liveState: async () => (await mem.get('live')).live ?? { status: 'off', detail: null, lastPush: null },
   popout: () => openPopout(),

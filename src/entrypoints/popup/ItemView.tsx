@@ -3,7 +3,7 @@
 // edit with the generator inline; new logins start with the default username and a generated password.
 // A failed save never loses the edit: the form stays open with an error that says what to do.
 import type { ComponentChildren } from 'preact';
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { ArrowLeft, Copy, CornerDownLeft, ExternalLink, Eye, EyeOff, Plus, RefreshCw, ScanLine, Trash2, TriangleAlert, WandSparkles, X } from 'lucide-preact';
 import { CipherType, type FullItem, type ListUri } from '../../core/vault';
 import { autoName, CARD_KEYS, IDENTITY_KEYS, type Draft } from '../../core/edit';
@@ -12,6 +12,8 @@ import { secondsRemaining, totp } from '../../core/totp';
 import { iconDomain, launchUrl, parseLoose } from '../../core/uri';
 import { validateDraft } from '../../core/edit';
 import { CardForm, CardView, FieldsForm, FieldsView, IdentityForm, IdentityView, Kv, Switch } from './ItemForms';
+import { AddressCard, newWalletFields, RepromptBox, WalletForm, WalletSecrets } from './Wallet';
+import { WALLET_KIND, walletOf, type Wallet } from '../../core/wallet';
 import { RemoteError, send, type Folder, type ItemDetail } from '../../shared/messages';
 import { clipHash } from '../../shared/cliphash';
 import { mem, type IndexItem, type PopupScreen } from '../../shared/store';
@@ -34,12 +36,13 @@ const matchLabel = (m: number | null) => (m == null || m === 0 ? 'Base domain' :
 const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : null);
 const host = (u: string) => u.replace(/^https?:\/\//, '');
 
-function toDraft(it: FullItem): Draft {
+function toDraft(it: FullItem, reprompt: number): Draft {
   return {
     type: it.type,
     name: it.name,
     notes: it.notes,
     folderId: it.folderId,
+    reprompt,
     login: it.login ? { username: it.login.username, password: it.login.password, totp: it.login.totp, uris: it.login.uris.map((u) => ({ ...u })) } : undefined,
     ...(it.type === CipherType.Card && { card: pick(CARD_KEYS, it.card) }),
     ...(it.type === CipherType.Identity && { identity: pick(IDENTITY_KEYS, it.identity) }),
@@ -49,12 +52,14 @@ function toDraft(it: FullItem): Draft {
 
 const pick = (keys: readonly string[], o: Record<string, string | null> | undefined) => Object.fromEntries(keys.map((k) => [k, o?.[k] ?? null])) as Record<string, string | null>;
 const NOUN: Record<number, string> = { [CipherType.Login]: 'login', [CipherType.SecureNote]: 'note', [CipherType.Card]: 'card', [CipherType.Identity]: 'identity' };
+/** A wallet's own fields are shown by the wallet parts of the page; the custom fields list gets the rest. */
+const otherFields = <T,>(fields: T[], w: Wallet | null) => (w ? fields.filter((_, i) => !Object.values(w.at).includes(i)) : fields);
 /** Where the cursor goes when a form opens: the first thing you'd type. */
 const FIRST: Record<number, string> = { [CipherType.Card]: 'f-number', [CipherType.Identity]: 'f-firstName' };
 
 /** Just enough of an index entry for the header tile (favicon from the user's server, else a letter). */
-function tileItem(d: { type: number; name: string; uris: ListUri[]; brand?: string | null }): IndexItem {
-  return { brand: d.brand ?? null, id: '', type: d.type, orgId: null, folderId: null, name: d.name || '?', username: null, uris: d.uris, hasTotp: false, favorite: false, reprompt: 0, revisionDate: null, domain: d.type === CipherType.Login ? iconDomain(d.uris) : null, hosts: [] };
+function tileItem(d: { type: number; name: string; uris: ListUri[]; brand?: string | null; wallet?: Wallet | null }): IndexItem {
+  return { ...(d.wallet && { wallet: { network: d.wallet.network, address: d.wallet.address } }), brand: d.brand ?? null, id: '', type: d.type, orgId: null, folderId: null, name: d.name || '?', username: null, uris: d.uris, hasTotp: false, favorite: false, reprompt: 0, revisionDate: null, domain: d.type === CipherType.Login ? iconDomain(d.uris) : null, hosts: [] };
 }
 
 export function ItemView({
@@ -101,7 +106,9 @@ export function ItemView({
     try {
       const d = await send('getItem', { id: which });
       setDetail(d);
-      const dr = toDraft(d.item);
+      // Locked by its re-prompt: the page shows the master password box, never an editor built from a partial item.
+      if (d.locked && !edits) setMode('view');
+      const dr = toDraft(d.item, d.reprompt);
       setDraft(edits ?? dr);
       setBaseline(JSON.stringify(dr));
       setLoadErr(null);
@@ -117,7 +124,7 @@ export function ItemView({
       setBaseline(resume.baseline ?? '');
     } else {
       const type = prefill?.type ?? CipherType.Login;
-      const base = { name: '', notes: null, folderId: prefill?.folderId ?? null, fields: [] };
+      const base = { name: '', notes: null, folderId: prefill?.folderId ?? null, fields: [], reprompt: 0 };
       const dr: Draft =
         type === CipherType.Login
           ? { ...base, type, name: prefill?.host ?? '', login: { username: b.settings.defaultUsername || b.account?.email || '', password: generatePassword(b.settings.gen), totp: null, uris: [{ uri: prefill?.origin ?? '', match: null }] } }
@@ -125,7 +132,9 @@ export function ItemView({
             ? { ...base, type, card: pick(CARD_KEYS, undefined) }
             : type === CipherType.Identity
               ? { ...base, type, identity: pick(IDENTITY_KEYS, undefined) }
-              : { ...base, type: CipherType.SecureNote };
+              : type === WALLET_KIND
+                ? { ...base, type: CipherType.SecureNote, fields: newWalletFields(), reprompt: 1 }
+                : { ...base, type: CipherType.SecureNote };
       setDraft(dr);
       setBaseline(JSON.stringify(dr));
     }
@@ -184,6 +193,7 @@ export function ItemView({
       if (r.outcome === 'confirm-frame') return show('The form is inside a frame from another site. Fill it from the main list to confirm.');
       if (r.outcome === 'blocked-page') return show("Litewarden can't fill on this page.");
       if (r.outcome === 'no-fields') return show('No login form found on this page. Use the copy buttons instead.');
+      if (r.outcome === 'reprompt') return show('Type your master password first.');
       if (b.popout) return show(`Filled ${detail?.item.login?.username ?? ''}`);
       window.close();
     } catch (e) {
@@ -235,7 +245,8 @@ export function ItemView({
       setReveal(false);
       show(`Saved to ${host}`);
     } catch (e) {
-      setErr((e as RemoteError).message);
+      if ((e as RemoteError).name === 'RepromptNeeded') setDetail((d) => d && { ...d, locked: true });
+      else setErr((e as RemoteError).message);
       bodyRef.current?.scrollTo({ top: 0 });
     } finally {
       setBusy(false);
@@ -259,7 +270,7 @@ export function ItemView({
   function leaveEdit() {
     if (dirty) return setSheet('discard');
     if (isNew) return onBack();
-    if (detail) setDraft(toDraft(detail.item));
+    if (detail) setDraft(toDraft(detail.item, detail.reprompt));
     setErr(null);
     setNameErr(null);
     setGenOpen(false);
@@ -281,7 +292,8 @@ export function ItemView({
   // ----- keyboard -----
   const live = useRef({ mode, sheet, dirty, save, leaveEdit, onBack });
   live.current = { mode, sheet, dirty, save, leaveEdit, onBack };
-  useEffect(() => {
+  // Attached before the screen paints, so a key pressed the moment it shows isn't lost.
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const L = live.current;
       if (e.key === 'Escape') {
@@ -348,8 +360,12 @@ export function ItemView({
 
   if (mode === 'view' && it) {
     const l = it.login;
+    const locked = detail!.locked;
+    const wallet = it.type === CipherType.SecureNote ? walletOf(it.fields) : null;
+    const noun = wallet ? 'wallet' : (NOUN[it.type] ?? 'item');
+    const unlock = () => void load(it.id);
     const meta = [detail!.folderName ? `Folder: ${detail!.folderName}` : 'No folder', detail!.revisionDate && `Edited ${fmtDate(detail!.revisionDate)}`, detail!.creationDate && `Created ${fmtDate(detail!.creationDate)}`].filter(Boolean).join(' · ');
-    const canFill = isLogin && !!tab && !!tabHost;
+    const canFill = isLogin && !locked && !!tab && !!tabHost;
     const go = l ? launchUrl(l.uris)?.hostname.replace(/^www\./, '') : undefined;
     return (
       <div class="scr item">
@@ -357,9 +373,9 @@ export function ItemView({
           <button class="ib" aria-label="Back" title="Back (Esc)" onClick={() => onBack()}>
             <ArrowLeft />
           </button>
-          <Tile item={tileItem({ type: it.type, name: it.name, uris: l?.uris ?? [], brand: it.card?.brand })} />
+          <Tile item={tileItem({ type: it.type, name: it.name, uris: l?.uris ?? [], brand: it.card?.brand, wallet })} />
           <h1>{it.name}</h1>
-          {detail!.canEdit && (
+          {detail!.canEdit && !locked && (
             <button class="btn sec" onClick={() => setMode('edit')}>
               Edit
             </button>
@@ -372,6 +388,18 @@ export function ItemView({
                 In <b>{detail!.orgName}</b>.{detail!.canEdit ? ' Changes are shared with the organization.' : " You can view it but not change it."}
               </div>
             </div>
+          )}
+          {wallet && <AddressCard wallet={wallet} copy={(v, w, sens) => void copy(v, w, sens)} />}
+          {locked ? (
+            <RepromptBox
+              id={it.id}
+              closed={!!wallet}
+              title={wallet ? 'Private key and seed phrase' : 'Asks for your master password'}
+              text={wallet ? 'Hidden. Type your master password to show or copy them.' : `This ${noun} asks for your master password before showing, copying or filling it.`}
+              onDone={unlock}
+            />
+          ) : (
+            wallet && <WalletSecrets wallet={wallet} copy={(v, w, sens) => void copy(v, w, sens)} />
           )}
           {l && (
             <>
@@ -471,7 +499,7 @@ export function ItemView({
               </div>
             </>
           )}
-          {it.fields && it.fields.length > 0 && <FieldsView fields={it.fields} copy={(v, w, sens) => void copy(v, w, sens)} />}
+          {!locked && otherFields(it.fields ?? [], wallet).length > 0 && <FieldsView fields={otherFields(it.fields ?? [], wallet)} copy={(v, w, sens) => void copy(v, w, sens)} />}
           <p class="meta">{meta}</p>
         </div>
         {canFill && (
@@ -521,11 +549,28 @@ export function ItemView({
 
   // ----- edit / new -----
   const l = draft.login;
-  const noun = NOUN[draft.type] ?? 'item';
+  const draftWallet = draft.type === CipherType.SecureNote ? walletOf(draft.fields) : null;
+  const noun = draftWallet ? 'wallet' : (NOUN[draft.type] ?? 'item');
   const title = `${isNew ? 'New' : 'Edit'} ${noun}`;
   const setName = (v: string) => (setDraft({ ...draft, name: v }), setNameErr(null));
   const isCard = draft.type === CipherType.Card && !!draft.card;
   const isId = draft.type === CipherType.Identity && !!draft.identity;
+  // An edit kept from earlier (or a save after the confirmation ran out) on a re-prompt item: the editor holds its
+  // secrets, so it stays behind the master password too. The edit itself is kept.
+  if (!isNew && detail?.locked)
+    return (
+      <div class="scr item">
+        <div class="hdr">
+          <button type="button" class="ib" aria-label="Back" title="Back (Esc)" onClick={() => onBack()}>
+            <ArrowLeft />
+          </button>
+          <h1>{title}</h1>
+        </div>
+        <div class="body" ref={bodyRef}>
+          <RepromptBox id={id!} title="Type your master password" text={`Your changes to this ${noun} are kept. Type your master password to see them and save.`} onDone={() => void load(id!, draft)} />
+        </div>
+      </div>
+    );
   return (
     <div class="scr item">
       <form
@@ -551,7 +596,9 @@ export function ItemView({
               <div>{err}</div>
             </div>
           )}
-          {isCard ? (
+          {draftWallet ? (
+            <WalletForm fields={draft.fields ?? []} name={draft.name} nameErr={nameErr} onName={setName} onFields={(fields) => setDraft((d) => (d ? { ...d, fields } : d))} />
+          ) : isCard ? (
             <CardForm card={draft.card!} name={draft.name} nameErr={nameErr} onName={setName} onCard={(p) => setDraft((d) => (d?.card ? { ...d, card: { ...d.card, ...p } } : d))} />
           ) : isId ? (
             <IdentityForm identity={draft.identity!} name={draft.name} nameErr={nameErr} onName={setName} onId={(p) => setDraft((d) => (d?.identity ? { ...d, identity: { ...d.identity, ...p } } : d))} />
@@ -680,13 +727,25 @@ export function ItemView({
               ))}
             </select>
           </label>
+          <div class="swrow">
+            <div>
+              <b>Ask for master password</b>
+              <small>Before showing, copying or filling its secrets</small>
+            </div>
+            <Switch on={draft.reprompt === 1} label="Ask for master password" onChange={(v) => setDraft((d) => (d ? { ...d, reprompt: v ? 1 : 0 } : d))} />
+          </div>
           <label class="field">
             <span class="l">Notes</span>
             <span class="inp ta">
               <textarea id="f-notes" value={draft.notes ?? ''} rows={draft.type === CipherType.SecureNote ? 10 : 4} onInput={(e) => setDraft({ ...draft, notes: (e.currentTarget as HTMLTextAreaElement).value })} />
             </span>
           </label>
-          {draft.fields && <FieldsForm fields={draft.fields} onChange={(fields) => setDraft((d) => (d ? { ...d, fields } : d))} />}
+          {draft.fields && (
+            <FieldsForm
+              fields={otherFields(draft.fields, draftWallet)}
+              onChange={(others) => setDraft((d) => (d ? { ...d, fields: [...(d.fields ?? []).filter((_, i) => !!draftWallet && Object.values(draftWallet.at).includes(i)), ...others] } : d))}
+            />
+          )}
           {!isNew && (
             <button type="button" class="danger-link" onClick={() => setSheet('delete')}>
               <Trash2 />
@@ -730,7 +789,7 @@ export function ItemView({
                 onClick={() => {
                   setSheet(null);
                   if (isNew) return onBack();
-                  if (detail) setDraft(toDraft(detail.item));
+                  if (detail) setDraft(toDraft(detail.item, detail.reprompt));
                   setErr(null);
                   setGenOpen(false);
                   setMode('view');

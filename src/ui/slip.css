@@ -399,3 +399,40 @@ input.masked{-webkit-text-security:disc}
 .cf .ib{width:30px;height:30px}
 .cf-fixed{display:flex;align-items:center;min-height:36px;font-size:12.5px;padding-left:4px}
 .cf-adds{display:flex;flex-wrap:wrap;column-gap:2px}
+/* crypto wallets (mockup wallet A): network logo tiles, the address card, the locked box, the seed phrase grid */
+.tile.coin{background:none;border-radius:50%;overflow:hidden}
+.tile.coin img,.row .tile.coin img,.m-row .tile.coin img{width:100%;height:100%}
+.addr-card{position:relative;border-radius:16px;padding:13px 16px 12px;color:#fff;box-shadow:0 8px 22px rgb(20 30 60/.22)}
+.addr-card .t{display:flex;align-items:center;gap:8px;font-weight:800;font-size:13px;padding-right:36px}
+.addr-card .t .tile{width:22px;height:22px;box-shadow:0 0 0 1.5px rgb(255 255 255/.55)}
+.addr-card .t .tile:not(.coin){background:rgb(255 255 255/.2);color:#fff}
+.addr-card small{display:block;font-size:9.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;opacity:.75;margin-top:12px}
+.addr-card .a{font:13px/1.45 var(--mono);word-break:break-all;margin-top:3px;color:rgb(255 255 255/.75)}
+.addr-card .a b{color:#fff;font-weight:700}
+.addr-card .a b:last-child{white-space:nowrap}
+.addr-card .a.none{font-family:inherit;color:rgb(255 255 255/.75)}
+.addr-card>.ib{position:absolute;right:8px;top:7px;color:#fff}
+.addr-card>.ib:hover{background:rgb(255 255 255/.16)}
+.lockbox{border:1.5px dashed var(--line);border-radius:var(--r-card);padding:13px 14px;display:flex;flex-direction:column;gap:10px;background:var(--surface);margin-top:10px}
+.lockbox .h{display:flex;align-items:center;gap:8px;font-weight:800;font-size:13px}
+.lockbox .h svg.lucide{width:17px;height:17px;color:var(--accent-text);flex:none}
+.lockbox p{margin:0;font-size:12px;color:var(--muted);line-height:1.45}
+.lockbox .acts{display:flex;gap:6px;align-items:center}
+.lockbox>.btn{align-self:flex-start}
+.lockbox .f-msg{margin-top:-4px}
+.seed{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;padding:10px}
+.seed span{display:flex;align-items:center;gap:5px;height:28px;padding:0 7px;border-radius:8px;background:var(--raised);font:12px var(--mono);min-width:0;overflow:hidden;white-space:nowrap}
+.seed span i{font-style:normal;color:var(--muted);font-size:10px;min-width:14px;text-align:right;flex:none}
+.seed-bar{display:flex;align-items:center;gap:6px;padding:0 10px 10px;font-size:11.5px;color:var(--muted)}
+.seed-bar .btn{height:28px;padding:0 10px;font-size:12px}
+.seed-bar .timer{margin-left:auto;display:inline-flex;align-items:center;gap:4px}
+.seed-bar .timer svg.lucide{width:13px;height:13px}
+.f-hint{display:flex;align-items:center;gap:4px;font-size:11.5px;color:var(--muted);margin:5px 2px 0;line-height:1.35}
+.f-hint svg.lucide{width:13px;height:13px;flex:none}
+.f-hint.ok{color:var(--ok)}
+.net-pick{display:flex;align-items:center;gap:8px}
+.net-pick .tile{width:26px;height:26px}
+.net-pick .sel{flex:1;min-width:0}
+textarea.masked{-webkit-text-security:disc}
+.swrow{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:1.5px solid var(--line);border-radius:12px;font-size:12.5px;line-height:1.35;margin-bottom:12px}
+.swrow>div{flex:1;min-width:0}.swrow small{display:block;color:var(--muted);font-size:11.5px}

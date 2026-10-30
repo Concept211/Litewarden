@@ -45,7 +45,7 @@ async function open(popup: (t?: Page, o?: { theme?: 'light' | 'dark' }) => Promi
 
 async function newItem(p: Page, key: string) {
   await p.click('button[aria-label="New item"]');
-  await expect(p.locator('.newmenu .it')).toHaveText([/Login\s*L/, /Card\s*C/, /Identity\s*I/, /Secure note\s*N/]);
+  await expect(p.locator('.newmenu .it')).toHaveText([/Login\s*L/, /Card\s*C/, /Identity\s*I/, /Secure note\s*N/, /Wallet\s*W/]);
   await expect(p.locator('.newmenu .it.sel')).toHaveText(/Login/);
   await p.keyboard.press(key);
   await expect(p.locator('.newmenu')).toHaveCount(0);

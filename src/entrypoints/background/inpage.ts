@@ -106,7 +106,7 @@ async function menuData(t: string, sender: chrome.runtime.MessageSender): Promis
     .sort(byUse)
     .slice(0, 30);
   const secrets: Record<string, string> = {};
-  for (const it of items.filter((i) => i.hasTotp).slice(0, 12)) {
+  for (const it of items.filter((i) => i.hasTotp && !(i.reprompt === 1 && !S.isConfirmed(i.id))).slice(0, 12)) {
     const full = await S.fullItem(it.id).catch(() => null);
     if (full?.login?.totp) secrets[it.id] = full.login.totp;
   }

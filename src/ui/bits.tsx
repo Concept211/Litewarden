@@ -3,10 +3,11 @@
 // honest clipboard countdown, busy buttons and the 6-box code input.
 import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { CreditCard, IdCard, StickyNote } from 'lucide-preact';
+import { CreditCard, IdCard, StickyNote, Wallet } from 'lucide-preact';
 import { brandKey } from '../core/cards';
 import { serverUrls } from '../core/api';
 import { parseLoose } from '../core/uri';
+import { networkById } from '../core/wallet';
 import type { IndexItem } from '../shared/store';
 import { mem } from '../shared/store';
 
@@ -123,9 +124,24 @@ export function BrandMark({ brand, class: cls = '' }: { brand: string | null | u
   );
 }
 
+/** A wallet's network logo (bundled with the extension), or a wallet icon for a network we don't know. */
+export function Coin({ network, class: cls = '' }: { network: string | null | undefined; class?: string }) {
+  const n = networkById(network);
+  return n ? (
+    <span class={`tile coin ${cls}`} title={n.name} aria-hidden="true">
+      <img src={`/coins/${n.id}.svg`} alt="" />
+    </span>
+  ) : (
+    <span class={`tile ${cls}`} aria-hidden="true">
+      <Wallet />
+    </span>
+  );
+}
+
 export function Tile({ item }: { item: IndexItem }) {
   const src = useIcon(item.type === 1 ? item.domain : null);
   if (item.type === 3) return <BrandMark brand={item.brand} />;
+  if (item.wallet) return <Coin network={item.wallet.network} />;
   if (src)
     return (
       <span class="tile fav">

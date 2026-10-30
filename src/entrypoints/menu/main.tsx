@@ -152,6 +152,7 @@ function Menu() {
     else if (r.outcome === 'no-fields')
       setMsg(offer === 'login' ? 'No login fields found here. Use "Wrong fields?" to point at them.' : `No ${offer === 'card' ? 'card' : 'address'} fields found here to fill.`);
     else if (r.outcome === 'blocked-page') setMsg("Litewarden can't fill on this page.");
+    else if (r.outcome === 'reprompt') setMsg(`This ${offer === 'login' ? 'login' : offer === 'card' ? 'card' : 'address'} asks for your master password. Open Litewarden from the toolbar, open the item and type it there, then fill again.`);
   }
 
   async function fill(id: string, force: boolean, ev: { isTrusted: boolean; type: string }) {

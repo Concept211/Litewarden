@@ -35,7 +35,7 @@ export function Switch({ on, label, onChange }: { on: boolean; label: string; on
 const dots = (s: string, max = 16) => '•'.repeat(Math.min(max, s.length));
 const val = (e: Event) => (e.currentTarget as HTMLInputElement).value;
 
-function EyeBtn({ on, what, onClick }: { on: boolean; what: string; onClick: () => void }) {
+export function EyeBtn({ on, what, onClick }: { on: boolean; what: string; onClick: () => void }) {
   return (
     <button type="button" class="ib" aria-label={`${on ? 'Hide' : 'Show'} ${what}`} title={`${on ? 'Hide' : 'Show'} ${what}`} onClick={onClick}>
       {on ? <EyeOff /> : <Eye />}
@@ -43,7 +43,7 @@ function EyeBtn({ on, what, onClick }: { on: boolean; what: string; onClick: () 
   );
 }
 
-function CopyBtn({ what, onClick }: { what: string; onClick: () => void }) {
+export function CopyBtn({ what, onClick }: { what: string; onClick: () => void }) {
   return (
     <button type="button" class="ib" aria-label={`Copy ${what.toLowerCase()}`} title={`Copy ${what.toLowerCase()}`} onClick={onClick}>
       <Copy />

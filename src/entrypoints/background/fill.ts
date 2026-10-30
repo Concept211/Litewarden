@@ -7,7 +7,7 @@ import type { FillResult } from '../../shared/messages';
 import type { CardData, IdentityData } from '../../shared/forms';
 import type { SiteRule } from '../../shared/rules';
 import { getSettings, local } from '../../shared/store';
-import { fullItem, recordUse } from './session';
+import { fullItem, needsReprompt, recordUse } from './session';
 
 interface Probe {
   /** 2 = has a password field, 1 = username-only (two-step login), 0 = nothing to fill */
@@ -42,6 +42,7 @@ export async function fill(tabId: number, id: string, force = false, allowFrame:
   const tab = await chrome.tabs.get(tabId);
   const url = tab.url ?? '';
   if (!/^https?:\/\//i.test(url)) return { outcome: 'blocked-page' };
+  if (await needsReprompt(id)) return { outcome: 'reprompt' };
   const item = await fullItem(id);
   if (!item.login) return { outcome: 'no-fields' };
   if (!force && !matchesPage(item.login.uris, url)) return { outcome: 'confirm-site' };
@@ -69,6 +70,7 @@ export async function fill(tabId: number, id: string, force = false, allowFrame:
 
 /** Fill into one known frame: the in-page menu's frame, where the user clicked the field icon. */
 export async function fillFrame(tabId: number, frameId: number, frameUrl: string, id: string, force = false): Promise<FillResult> {
+  if (await needsReprompt(id)) return { outcome: 'reprompt' };
   const item = await fullItem(id);
   if (!item.login) return { outcome: 'no-fields' };
   if (!force && !matchesPage(item.login.uris, frameUrl)) return { outcome: 'confirm-site' };
@@ -101,6 +103,7 @@ export async function fillForm(tabId: number, id: string, allowed: string[], for
   const tab = await chrome.tabs.get(tabId);
   const url = tab.url ?? '';
   if (!/^https?:\/\//i.test(url)) return { outcome: 'blocked-page' };
+  if (await needsReprompt(id)) return { outcome: 'reprompt' };
   const item = await fullItem(id);
   const kind = item.type === 3 && item.card ? 'card' : item.type === 4 && item.identity ? 'identity' : null;
   if (!kind) return { outcome: 'no-fields' };

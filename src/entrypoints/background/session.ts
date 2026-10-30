@@ -34,6 +34,7 @@ import {
   type SyncResponse,
   type Tokens,
 } from '../../core';
+import { walletOf } from '../../core/wallet';
 import type { Folder, ItemDetail, Progress, StateInfo } from '../../shared/messages';
 import { dropKey, seal, unseal, type Sealed } from '../../shared/vaultkey';
 import { getSettings, local, mem, type Account, type IndexItem, type Session, type SessionStore } from '../../shared/store';
@@ -46,6 +47,9 @@ export class LockedOut extends LitewardenError {
 }
 export class WrongPin extends LitewardenError {
   override name = 'WrongPin';
+}
+export class RepromptNeeded extends LitewardenError {
+  override name = 'RepromptNeeded';
 }
 
 const PW_TRIES = 5;
@@ -221,7 +225,8 @@ async function startSession(userKey: SymKey, orgKeys: Record<string, string> = {
   onLockChange?.(true);
 }
 
-export async function unlockPassword(password: string) {
+/** The master password against the account, with the 5-tries-then-a-minute lockout. Returns the user key. */
+async function checkMasterPassword(password: string): Promise<SymKey> {
   const [{ account }, { lockout }] = await Promise.all([local.get('account'), mem.get('lockout')]);
   if (!account) throw new UserError('Not signed in.');
   const floor = checkKdf(account.kdf);
@@ -242,6 +247,11 @@ export async function unlockPassword(password: string) {
     e.message = `That's not the master password for ${account.email}. Check Caps Lock and try again. ${left} ${left === 1 ? 'try' : 'tries'} left before a 1-minute wait.`;
     throw e;
   }
+  return userKey;
+}
+
+export async function unlockPassword(password: string) {
+  const userKey = await checkMasterPassword(password);
   await startSession(userKey);
   await rebuildFromLocal().catch(() => {});
   void syncNow(false).catch(() => {});
@@ -331,6 +341,7 @@ export async function persistSession(session: Session | null): Promise<void> {
 export async function lock() {
   lockEpoch++;
   keysCache = null;
+  confirmed.clear();
   await mem.remove('session', 'index', 'indexCount', 'recentItems', 'notes', 'tabMatches', 'failures', 'popupWhere');
   await persistSession(null);
   await chrome.alarms.clear('autolock');
@@ -497,9 +508,10 @@ async function buildNotes(live: Cipher[], keys: Keys, e: number) {
   await writeIfUnlocked(e, { notes });
 }
 
+/** An item's notes, for search. Not for re-prompt items: their notes are often where a seed phrase or a PIN lives. */
 async function decryptItemNotes(c: Cipher, keys: Keys) {
   const base = c.organizationId ? keys.orgKeys.get(c.organizationId) : keys.userKey;
-  if (!base || !c.notes) return null;
+  if (!base || !c.notes || c.reprompt === 1) return null;
   const k = c.key ? C.symKey(await C.decryptBytes(c.key, base)) : base;
   return C.decryptString(c.notes, k);
 }
@@ -540,6 +552,45 @@ async function refreshRecentItems(index?: IndexItem[], e = epoch()) {
   await writeIfUnlocked(e, { recentItems: (recent ?? []).map((id) => byId.get(id)).filter((x): x is IndexItem => !!x).slice(0, 8) });
 }
 
+// ---------- master password re-prompt ----------
+
+/**
+ * Items whose re-prompt was answered, and until when. Worker memory only, so a lock, a restart or five minutes
+ * forgets them. A PIN never answers a re-prompt: only the master password does, the way the official apps work.
+ */
+const confirmed = new Map<string, number>();
+const CONFIRM_MS = 5 * 60_000;
+
+export const isConfirmed = (id: string) => (confirmed.get(id) ?? 0) > Date.now();
+/** Opened with the master password, or just saved from the popup (the user had the secrets in front of them). */
+export const markConfirmed = (id: string) => void confirmed.set(id, Date.now() + CONFIRM_MS);
+
+/** This item asks for the master password and it hasn't been typed for it in the last few minutes. */
+export async function needsReprompt(id: string): Promise<boolean> {
+  const c = (await vault()).ciphers.find((x) => x.id === id);
+  return c?.reprompt === 1 && !isConfirmed(id);
+}
+
+export async function assertConfirmed(id: string): Promise<void> {
+  if (await needsReprompt(id)) throw new RepromptNeeded('Type your master password to use this item.');
+}
+
+export async function confirmItem(id: string, password: string) {
+  await sessionKeys();
+  await checkMasterPassword(password);
+  const { lockout } = await mem.get('lockout');
+  await mem.set({ lockout: { ...(lockout ?? { pwUntil: 0, pinFails: 0 }), pwFails: 0, pwUntil: 0 } });
+  markConfirmed(id);
+  return { status: 'ok' as const };
+}
+
+/** What a locked re-prompt item shows: its name and folder, and a wallet's network and address (both public). */
+function lockedView(it: FullItem): FullItem {
+  const w = it.type === CipherType.SecureNote ? walletOf(it.fields) : null;
+  const open = w ? [w.at.network, w.at.address].filter((i): i is number => i !== undefined && it.fields![i]!.type === 0) : [];
+  return { id: it.id, type: it.type, orgId: it.orgId, folderId: it.folderId, name: it.name, notes: null, fields: open.map((i) => it.fields![i]!) };
+}
+
 // ---------- item view, edit, new, trash ----------
 
 let foldersCache: { rev: SyncResponse; list: Folder[] } | null = null;
@@ -560,7 +611,9 @@ export async function itemDetail(id: string): Promise<ItemDetail> {
   const [keys, v] = await Promise.all([sessionKeys(), vault()]);
   const c = v.ciphers.find((x) => x.id === id && !x.deletedDate);
   if (!c) throw new UserError('That item is no longer in the vault. Sync and try again.');
-  const item = await decryptItem(C, c, keys);
+  const locked = c.reprompt === 1 && !isConfirmed(id);
+  const full = await decryptItem(C, c, keys);
+  const item = locked ? lockedView(full) : full;
   const folder = c.folderId ? (await folders()).find((f) => f.id === c.folderId) : null;
   const org = c.organizationId ? v.profile.organizations.find((o) => o.id === c.organizationId) : null;
   return {
@@ -572,6 +625,8 @@ export async function itemDetail(id: string): Promise<ItemDetail> {
     canEdit: c.organizationId ? c.edit !== false : true,
     orgName: org?.name ?? null,
     passwordHistoryCount: Array.isArray(c.passwordHistory) ? c.passwordHistory.length : 0,
+    reprompt: c.reprompt ?? 0,
+    locked,
   };
 }
 

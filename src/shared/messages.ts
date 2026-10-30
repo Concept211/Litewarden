@@ -23,7 +23,7 @@ export interface StateInfo {
 
 export interface FillResult {
   /** 'filled' | needs a decision from the user | nothing to fill */
-  outcome: 'filled' | 'confirm-site' | 'confirm-frame' | 'no-fields' | 'blocked-page';
+  outcome: 'filled' | 'confirm-site' | 'confirm-frame' | 'no-fields' | 'blocked-page' | 'reprompt';
   filled?: string[];
   /** Origin of the frame that holds the form, when it isn't the page's own origin. */
   frameOrigin?: string;
@@ -56,6 +56,8 @@ export interface Api {
   setPin: [{ pin: string | null }, void];
   setSettings: [Partial<Settings>, Settings];
   getItem: [{ id: string }, ItemDetail];
+  /** Master password re-prompt: the typed master password opens this item's secrets for a few minutes. */
+  confirmItem: [{ id: string; password: string }, { status: 'ok' }];
   folders: [void, Folder[]];
   saveItem: [{ id: string | null; draft: Draft }, { id: string }];
   trashItem: [{ id: string }, void];
@@ -196,6 +198,10 @@ export interface ItemDetail {
   /** Item is in an organization (shown as a note in the editor). */
   orgName: string | null;
   passwordHistoryCount: number;
+  /** Bitwarden's master password re-prompt is on for this item. */
+  reprompt: number;
+  /** Re-prompt not answered yet: `item` holds only its name, folder and a wallet's public parts. */
+  locked: boolean;
 }
 
 export type Req = { [K in keyof Api]: { type: K; data: Api[K][0] } }[keyof Api];

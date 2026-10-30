@@ -83,9 +83,19 @@ on self-hosted servers. Litewarden is a smaller client that does the everyday th
 - **2FA codes (TOTP)** built in, including Steam codes.
 - **2FA setup in one click.** When a site shows its 2FA setup (a QR code or a key to type), a card offers to add
   the key to the site's login and types the current code into the page for you. The popup offers it too.
-- **Every item type.** "+" makes a login, card, identity or secure note. Cards get a live card picture, the brand
+- **Every item type.** "+" makes a login, card, identity, secure note or wallet. Cards get a live card picture, the brand
   read from the number, and a warning for a mistyped number or an expired card. Identities show the usual fields,
   with the rest one click away. Custom fields (text, hidden, checkbox) can be edited on every item.
+- **Crypto wallets.** A wallet keeps a public address, a private key and a seed phrase. It's saved as a secure note
+  with labeled fields, so the official apps show it too, and notes you already keep that way show up as wallets.
+  - The network (Ethereum, Hyperliquid, Base, Arbitrum, Bitcoin, Solana and ten more) is picked from the address or
+    the wallet's name and shown with its logo. A 0x address works on many networks, so you can change it.
+  - Your computer checks that a 0x private key belongs to the address and that the seed phrase's words are on the
+    standard BIP39 list. Nothing is looked up online.
+  - The address is one click to copy, from the list or the wallet's page. The key and the phrase stay hidden behind
+    your master password, and they're never filled into web pages.
+- **Master password re-prompt.** Items with Bitwarden's "Master password re-prompt" on (new wallets have it on) ask
+  for your master password, never the PIN, before Litewarden shows, copies or fills their secrets.
 - **Item view and editor** with a password generator, password history, website match types and the 2FA secret.
 - **Live sync** through your server's notifications hub, plus a sync timer and a sync button.
 - **Pop-out window** that stays open, three popup sizes, and light and dark themes.
@@ -156,8 +166,8 @@ A build loaded this way doesn't update itself. Pull and rebuild to get new versi
 | Popup | type | Search |
 | Popup | ↑ ↓, Enter | Move, fill the selected login |
 | Popup | Alt+← Alt+→ | Previous or next folder |
-| Popup | Alt+1 to Alt+4 | Show only logins, cards, identities or notes (again for every type) |
-| Popup | Alt+N | New item: then L, C, I or N |
+| Popup | Alt+1 to Alt+5 | Show only logins, cards, identities, notes or wallets (again for every type) |
+| Popup | Alt+N | New item: then L, C, I, N or W |
 | Popup | Alt+U, Alt+P, Alt+T | Copy username, password, 2FA code |
 | Popup | Alt+E | Open the item |
 | Popup | Esc | Clear the search, then close |
@@ -194,9 +204,13 @@ decrypts single items only when you open or fill them.
 
 **Which browsers?** Chrome, Brave, Edge and other Chromium browsers. Firefox isn't supported yet.
 
-**Passkeys, cards and identities?** Cards, identities, secure notes and custom fields can be created and edited in
-the popup, and the menu in a card or address field fills them into checkout and shipping forms. Passkeys and SSH
-keys aren't supported yet.
+**Passkeys, cards and identities?** Cards, identities, secure notes, crypto wallets and custom fields can be created
+and edited in the popup, and the menu in a card or address field fills cards and addresses into checkout and
+shipping forms. Passkeys and SSH keys aren't supported yet.
+
+**Where do the coin logos come from?** They're the network logos from [web3icons](https://github.com/0xa3k5/web3icons)
+(MIT license), bundled with the extension, so showing them never contacts anyone. The logos belong to their
+projects.
 
 **Is typing my PIN on a web page safe?** The menu is Litewarden's own page in a frame: the site can't read what you
 type there or type into it. The remaining risk is a site drawing a fake "locked" menu to collect your PIN, which is
