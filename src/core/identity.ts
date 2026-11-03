@@ -163,4 +163,4 @@ export function datesToFix(fields: readonly Field[] | null | undefined, saved: r
   return null;
 }
 
-export const GENDERS = ['Female', 'Male', 'Non-binary', 'Prefer not to say'];
+export const GENDERS = ['Female', 'Male', 'Prefer not to say'];

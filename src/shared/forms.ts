@@ -342,12 +342,11 @@ export function dateFor(el: HTMLInputElement, y: number, m: number, d: number): 
   return [mm, dd, yr].join(sep);
 }
 
-/** The ways a gender menu spells the saved one: "Male", "M", "Man"; "Non-binary", "Nonbinary", "Other". */
+/** The ways a gender menu spells the saved one: "Male", "M", "Man". */
 export function genderWants(g: string): string[] {
   const t = g.trim().toLowerCase();
   if (t === 'female' || t === 'woman' || t === 'f') return ['Female', 'F', 'Woman'];
   if (t === 'male' || t === 'man' || t === 'm') return ['Male', 'M', 'Man'];
-  if (/non.?binary/.test(t)) return ['Non-binary', 'Nonbinary', 'Non binary', 'Other'];
   if (/prefer|decline|rather/.test(t)) return ['Prefer not to say', 'Prefer not to answer', 'Decline to answer', 'Decline to state', 'Rather not say', 'I prefer not to say'];
   return [g];
 }

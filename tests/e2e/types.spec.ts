@@ -143,6 +143,7 @@ test('identity: the short form with birth date and gender, the Passport block an
   await p.locator('#f-dob').pressSequentially('03141988');
   await expect(p.locator('#f-dob')).toHaveValue('03/14/1988');
   await expect(p.locator('.field.err')).toHaveCount(0);
+  await expect(p.locator('#f-gender option')).toHaveText(['Choose', 'Female', 'Male', 'Prefer not to say']);
   await p.selectOption('#f-gender', 'Male');
   await p.fill('#f-email', 'alex@example.com');
   await p.fill('#f-phone', '(305) 555-0142');

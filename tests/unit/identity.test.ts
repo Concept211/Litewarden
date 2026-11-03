@@ -144,7 +144,6 @@ describe('birth date, gender, job title and suffix on web forms', () => {
 
   it('spells the gender the way menus do', () => {
     expect(genderWants('Male')).toEqual(['Male', 'M', 'Man']);
-    expect(genderWants('Non-binary')).toContain('Other');
     expect(genderWants('Prefer not to say')).toContain('Decline to answer');
   });
 });
