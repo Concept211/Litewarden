@@ -6,6 +6,7 @@ import { useState } from 'preact/hooks';
 import { Copy, Eye, EyeOff, Plus, X } from 'lucide-preact';
 import { brandKey, brandOf, digits, expired, formatNumber, luhn, parseExpiry, showExpiry, typeExpiry } from '../../core/cards';
 import type { FieldDraft } from '../../core/edit';
+import { ageOf, dateProblem, docLine, extrasOf, GENDERS, isoDate, longDate, maskDate, readDate, usDate, withExtra, type Extra } from '../../core/identity';
 import type { FullItem } from '../../core/vault';
 
 type Vals = Record<string, string | null>;
@@ -201,19 +202,22 @@ export function CardForm({ card, name, onCard, onName, nameErr }: { card: Vals; 
 
 // ---------- identities ----------
 
+/** Fields the form opens with a chip: identity slots, the custom-field details (x:), and the two documents (doc:). */
 const EXTRA: Array<[string, string, boolean?]> = [
   ['address2', 'Address line 2'],
   ['address3', 'Address line 3'],
   ['country', 'Country'],
   ['company', 'Company'],
+  ['x:jobTitle', 'Job title'],
   ['middleName', 'Middle name'],
   ['title', 'Title'],
+  ['x:suffix', 'Suffix'],
   ['username', 'Username'],
+  ['x:nationality', 'Nationality'],
   ['ssn', 'SSN', true],
-  ['passportNumber', 'Passport number', true],
-  ['licenseNumber', "Driver's license", true],
+  ['doc:passport', 'Passport'],
+  ['doc:license', "Driver's license"],
 ];
-const SECRET_ID = new Set(['ssn', 'passportNumber', 'licenseNumber']);
 
 /** The address as one block, the way it's pasted: lines, then "City, ST 12345", then the country. */
 export function addressOf(i: Vals): string {
@@ -221,22 +225,41 @@ export function addressOf(i: Vals): string {
   return [i.address1, i.address2, i.address3, line, i.country].filter((x) => x?.trim()).join('\n');
 }
 
-export function IdentityView({ identity: i, copy }: { identity: Vals; copy: CopyFn }) {
+/** A saved date as the popup shows it: MM/DD/YYYY, or as typed when it isn't a date we read. */
+const shownDate = (v: string | undefined) => {
+  const p = readDate(v);
+  return p ? usDate(p) : (v ?? '');
+};
+
+export function IdentityView({ identity: i, fields, copy }: { identity: Vals; fields: FullItem['fields']; copy: CopyFn }) {
   const [show, setShow] = useState<Record<string, boolean>>({});
-  const name = [i.title, i.firstName, i.middleName, i.lastName].filter(Boolean).join(' ');
+  const x = extrasOf(fields).values;
+  const name = [i.title, i.firstName, i.middleName, i.lastName, x.suffix].filter(Boolean).join(' ');
   const addr = addressOf(i);
-  const row = (label: string, v: string | null | undefined): ComponentChildren =>
+  const dob = readDate(x.dob);
+  const work = [x.jobTitle, i.company].filter(Boolean).join(', ');
+  const row = (label: string, v: string | null | undefined, shown?: ComponentChildren): ComponentChildren =>
     v ? (
       <Kv label={label} actions={<CopyBtn what={label} onClick={() => copy(v, label, false)} />}>
-        <div>{v}</div>
+        <div>{shown ?? v}</div>
       </Kv>
     ) : null;
-  const ids = ([['ssn', 'SSN'], ['passportNumber', 'Passport'], ['licenseNumber', "Driver's license"]] as const).filter(([k]) => i[k]);
+  const docs = [
+    { k: 'ssn', label: 'SSN', sub: null },
+    { k: 'passportNumber', label: 'Passport', sub: docLine(x.passportCountry, x.passportExpiry, 6) },
+    { k: 'licenseNumber', label: "Driver's license", sub: docLine(x.licenseState, x.licenseExpiry, 1) },
+  ].filter((d) => i[d.k] || d.sub);
   return (
     <>
-      {(name || i.email || i.phone || addr || i.company || i.username) && (
+      {(name || x.dob || x.gender || i.email || i.phone || addr || work || i.username) && (
         <div class="group">
           {row('Name', name)}
+          {row('Date of birth', x.dob && shownDate(x.dob), dob ? (
+            <>
+              {longDate(dob)} <span class="age">· {ageOf(dob)}</span>
+            </>
+          ) : undefined)}
+          {row('Gender', x.gender)}
           {row('Email', i.email)}
           {row('Phone', i.phone)}
           {addr && (
@@ -244,19 +267,31 @@ export function IdentityView({ identity: i, copy }: { identity: Vals; copy: Copy
               <div class="addr">{addr}</div>
             </Kv>
           )}
-          {row('Company', i.company)}
+          {row(x.jobTitle && i.company ? 'Work' : x.jobTitle ? 'Job title' : 'Company', work)}
           {row('Username', i.username)}
         </div>
       )}
-      {ids.length > 0 && (
+      {(docs.length > 0 || x.nationality) && (
         <>
           <div class="g-title">ID numbers</div>
           <div class="group">
-            {ids.map(([k, label]) => (
-              <Kv label={label} actions={<><EyeBtn on={!!show[k]} what={label} onClick={() => setShow((s) => ({ ...s, [k]: !s[k] }))} /><CopyBtn what={label} onClick={() => copy(i[k], label, true)} /></>}>
-                <div class="mono">{show[k] ? i[k] : dots(i[k]!, 12)}</div>
+            {docs.map(({ k, label, sub }) => (
+              <Kv
+                label={label}
+                actions={
+                  i[k] ? (
+                    <>
+                      <EyeBtn on={!!show[k]} what={label} onClick={() => setShow((s) => ({ ...s, [k]: !s[k] }))} />
+                      <CopyBtn what={label} onClick={() => copy(i[k], label, true)} />
+                    </>
+                  ) : undefined
+                }
+              >
+                {i[k] && <div class="mono">{show[k] ? i[k] : dots(i[k]!, 12)}</div>}
+                {sub && <div class={`sub${sub.tone ? ` ${sub.tone}` : ''}`}>{sub.text}</div>}
               </Kv>
             ))}
+            {row('Nationality', x.nationality)}
           </div>
         </>
       )}
@@ -264,12 +299,71 @@ export function IdentityView({ identity: i, copy }: { identity: Vals; copy: Copy
   );
 }
 
-/** Identity form (3A): the usual fields, and a chip for each of the rest. A field with a value always shows. */
-export function IdentityForm({ identity: i, name, onId, onName, nameErr }: { identity: Vals; name: string; onId: (p: Vals) => void; onName: (v: string) => void; nameErr: string | null }) {
+/** A date box: digits get their slashes, and a date that can't exist says so once it's typed in full. */
+function DateBox({ id, label, value, past, onDate }: { id: string; label: string; value: string | undefined; past: boolean; onDate: (v: string | null) => void }) {
+  const [text, setText] = useState(() => shownDate(value));
+  const [left, setLeft] = useState(false);
+  const bad = (left || text.length >= 10) && dateProblem(text, past);
+  return (
+    <label class={`field${bad ? ' err' : ''}`}>
+      <span class="l">{label}</span>
+      <span class="inp">
+        <input
+          id={id}
+          class="mono"
+          inputMode="numeric"
+          placeholder="MM/DD/YYYY"
+          autocomplete="off"
+          maxLength={10}
+          value={text}
+          onBlur={() => setLeft(true)}
+          onInput={(e) => {
+            const t = maskDate(val(e));
+            if (t !== val(e)) (e.currentTarget as HTMLInputElement).value = t;
+            setText(t);
+            const p = readDate(t);
+            onDate(p ? isoDate(p) : t || null);
+          }}
+        />
+      </span>
+      {bad && <span class="f-msg">{bad}</span>}
+    </label>
+  );
+}
+
+type FieldsUp = (up: (fields: FieldDraft[]) => FieldDraft[]) => void;
+const textField = (name: string, value: string): FieldDraft => ({ name, value, type: 0, linkedId: null });
+
+/** Identity form (3A): the usual fields, birth date and gender, and a chip for each of the rest. A field with a value always shows. */
+export function IdentityForm({ identity: i, fields, name, onId, onFields, onName, nameErr }: { identity: Vals; fields: FieldDraft[]; name: string; onId: (p: Vals) => void; onFields: FieldsUp; onName: (v: string) => void; nameErr: string | null }) {
   const [added, setAdded] = useState<string[]>([]);
   const [show, setShow] = useState<Record<string, boolean>>({});
-  const open = EXTRA.filter(([k]) => i[k] != null || added.includes(k));
-  const closed = EXTRA.filter(([k]) => !(i[k] != null || added.includes(k)));
+  const x = extrasOf(fields);
+  const xVal = (part: Extra) => (x.at[part] !== undefined ? (fields[x.at[part]!]?.value ?? '') : '');
+  const setX = (part: Extra, v: string | null) => onFields((f) => withExtra(f, part, v, textField));
+  const docOpen = (num: string, a: Extra, b: Extra) => i[num] != null || x.at[a] !== undefined || x.at[b] !== undefined;
+  const has = (k: string) =>
+    added.includes(k) ||
+    (k === 'doc:passport' ? docOpen('passportNumber', 'passportCountry', 'passportExpiry') : k === 'doc:license' ? docOpen('licenseNumber', 'licenseState', 'licenseExpiry') : k.startsWith('x:') ? x.at[k.slice(2) as Extra] !== undefined : i[k] != null);
+  const keep = (k: string) => setAdded((a) => (a.includes(k) ? a : [...a, k]));
+  const open = EXTRA.filter(([k]) => has(k));
+  const closed = EXTRA.filter(([k]) => !has(k));
+  const drop = (k: string) => {
+    setAdded((a) => a.filter((y) => y !== k));
+    if (k === 'doc:passport') {
+      onId({ passportNumber: null });
+      onFields((f) => withExtra(withExtra(f, 'passportCountry', null, textField), 'passportExpiry', null, textField));
+    } else if (k === 'doc:license') {
+      onId({ licenseNumber: null });
+      onFields((f) => withExtra(withExtra(f, 'licenseState', null, textField), 'licenseExpiry', null, textField));
+    } else if (k.startsWith('x:')) setX(k.slice(2) as Extra, null);
+    else onId({ [k]: null });
+  };
+  const removeBtn = (k: string, label: string) => (
+    <button type="button" class="ib" aria-label={`Remove ${label.toLowerCase()}`} title="Remove" onClick={() => drop(k)}>
+      <X />
+    </button>
+  );
   const text = (k: string, label: string | null, ph = '', extra: Record<string, unknown> = {}) => (
     <label class="field">
       {label && <span class="l">{label}</span>}
@@ -278,6 +372,41 @@ export function IdentityForm({ identity: i, name, onId, onName, nameErr }: { ide
       </span>
     </label>
   );
+  const xText = (part: Extra, label: string, chip?: string) => (
+    <label class="field" onInput={chip ? () => keep(chip) : undefined}>
+      <span class="l">{label}</span>
+      <span class="inp">
+        <input id={`f-${part}`} autocomplete="off" value={xVal(part)} onInput={(e) => setX(part, val(e) || null)} />
+        {chip && removeBtn(chip, label)}
+      </span>
+    </label>
+  );
+  const secret = (k: string, label: string, hint: string) => (
+    <label class="field">
+      <span class="l">
+        {label}
+        <small>Hidden when you view it</small>
+      </span>
+      <span class="inp">
+        <input id={`f-${k}`} aria-label={hint} class={`mono${show[k] ? '' : ' masked'}`} autocomplete="off" spellcheck={false} value={i[k] ?? ''} onInput={(e) => onId({ [k]: val(e) })} />
+        <EyeBtn on={!!show[k]} what={hint.toLowerCase()} onClick={() => setShow((s) => ({ ...s, [k]: !s[k] }))} />
+      </span>
+    </label>
+  );
+  const doc = (k: string, title: string, num: string, issuer: Extra, issuerLabel: string, expiry: Extra) => (
+    <div class="doc" onInput={() => keep(k)}>
+      <div class="doc-h">
+        {title}
+        {removeBtn(k, title)}
+      </div>
+      {secret(num, 'Number', `${title} number`)}
+      <div class="two">
+        {xText(issuer, issuerLabel)}
+        <DateBox id={`f-${expiry}`} label="Expires" value={x.values[expiry]} past={false} onDate={(v) => setX(expiry, v)} />
+      </div>
+    </div>
+  );
+  const genders = x.values.gender && !GENDERS.includes(x.values.gender) ? [...GENDERS, x.values.gender] : GENDERS;
   return (
     <>
       <label class={`field${nameErr ? ' err' : ''}`}>
@@ -293,6 +422,20 @@ export function IdentityForm({ identity: i, name, onId, onName, nameErr }: { ide
         {text('firstName', 'First name')}
         {text('lastName', 'Last name')}
       </div>
+      <div class="two">
+        <DateBox id="f-dob" label="Date of birth" value={x.values.dob} past onDate={(v) => setX('dob', v)} />
+        <label class="field">
+          <span class="l">Gender</span>
+          <span class="inp">
+            <select id="f-gender" value={x.values.gender ?? ''} onChange={(e) => setX('gender', (e.currentTarget as HTMLSelectElement).value || null)}>
+              <option value="">Choose</option>
+              {genders.map((g) => (
+                <option value={g}>{g}</option>
+              ))}
+            </select>
+          </span>
+        </label>
+      </div>
       {text('email', 'Email', '', { type: 'email', spellcheck: false })}
       {text('phone', 'Phone', '', { type: 'tel' })}
       {text('address1', 'Address', 'Street address')}
@@ -301,30 +444,27 @@ export function IdentityForm({ identity: i, name, onId, onName, nameErr }: { ide
         {text('state', null, 'State')}
         {text('postalCode', null, 'ZIP')}
       </div>
-      {open.map(([k, label, secret]) => (
-        <label class="field">
-          <span class="l">
-            {label}
-            {secret && <small>Hidden when you view it</small>}
-          </span>
-          <span class="inp">
-            <input id={`f-${k}`} class={secret ? `mono${show[k] ? '' : ' masked'}` : ''} autocomplete="off" spellcheck={false} value={i[k] ?? ''} onInput={(e) => onId({ [k]: val(e) })} />
-            {secret && <EyeBtn on={!!show[k]} what={label.toLowerCase()} onClick={() => setShow((s) => ({ ...s, [k]: !s[k] }))} />}
-            <button
-              type="button"
-              class="ib"
-              aria-label={`Remove ${label.toLowerCase()}`}
-              title="Remove"
-              onClick={() => {
-                setAdded((a) => a.filter((x) => x !== k));
-                onId({ [k]: null });
-              }}
-            >
-              <X />
-            </button>
-          </span>
-        </label>
-      ))}
+      {open.map(([k, label, isSecret]) =>
+        k === 'doc:passport' ? (
+          doc(k, 'Passport', 'passportNumber', 'passportCountry', 'Country', 'passportExpiry')
+        ) : k === 'doc:license' ? (
+          doc(k, "Driver's license", 'licenseNumber', 'licenseState', 'State', 'licenseExpiry')
+        ) : k.startsWith('x:') ? (
+          xText(k.slice(2) as Extra, label, k)
+        ) : (
+          <label class="field">
+            <span class="l">
+              {label}
+              {isSecret && <small>Hidden when you view it</small>}
+            </span>
+            <span class="inp">
+              <input id={`f-${k}`} class={isSecret ? `mono${show[k] ? '' : ' masked'}` : ''} autocomplete="off" spellcheck={false} value={i[k] ?? ''} onInput={(e) => onId({ [k]: val(e) })} />
+              {isSecret && <EyeBtn on={!!show[k]} what={label.toLowerCase()} onClick={() => setShow((s) => ({ ...s, [k]: !s[k] }))} />}
+              {removeBtn(k, label)}
+            </span>
+          </label>
+        ),
+      )}
       {closed.length > 0 && (
         <div class="add-chips">
           {closed.map(([k, label]) => (
@@ -333,7 +473,8 @@ export function IdentityForm({ identity: i, name, onId, onName, nameErr }: { ide
               class="add-chip"
               onClick={() => {
                 setAdded((a) => [...a, k]);
-                setTimeout(() => document.getElementById(`f-${k}`)?.focus(), 0);
+                const focus = k === 'doc:passport' ? 'f-passportNumber' : k === 'doc:license' ? 'f-licenseNumber' : `f-${k.replace(/^x:/, '')}`;
+                setTimeout(() => document.getElementById(focus)?.focus(), 0);
               }}
             >
               <Plus />

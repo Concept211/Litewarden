@@ -22,7 +22,14 @@ export type AddrPart =
   | 'postalCode'
   | 'country'
   | 'email'
-  | 'phone';
+  | 'phone'
+  | 'bday'
+  | 'bdayDay'
+  | 'bdayMonth'
+  | 'bdayYear'
+  | 'sex'
+  | 'jobTitle'
+  | 'suffix';
 
 export type FormField = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 
@@ -57,6 +64,13 @@ const ADDR_AC: Record<string, AddrPart> = {
   email: 'email',
   tel: 'phone',
   'tel-national': 'phone',
+  bday: 'bday',
+  'bday-day': 'bdayDay',
+  'bday-month': 'bdayMonth',
+  'bday-year': 'bdayYear',
+  sex: 'sex',
+  'organization-title': 'jobTitle',
+  'honorific-suffix': 'suffix',
 };
 
 // Names, ids and labels. Checked in this order: the first match wins, so the specific ones come first.
@@ -69,9 +83,19 @@ const CARD_WORDS: Array<[CardPart, RegExp]> = [
   ['number', /card.?(number|num|no\b|#)|cc.?(number|num|no\b)|cardnumber|ccnum|credit.?card|debit.?card|\bpan\b|acct.?num/i],
 ];
 
+const BIRTH = String.raw`(birth|\bdob|\bbday|\bborn)`;
+/** Not the birth date, whatever else it says: where you were born, a birth certificate, a birthstone. */
+const NOT_BIRTH_DATE = /(place|city|town|country|state|province|location|county)\W{0,3}(of\W{0,3})?birth|birth\W{0,3}(place|city|town|country|state|province|location|county|certificate|name|stone)/i;
 const ADDR_WORDS: Array<[AddrPart, RegExp]> = [
   ['email', /e.?mail/i],
   ['phone', /phone|\btel\b|telephone|mobile|cell/i],
+  ['bdayDay', new RegExp(String.raw`${BIRTH}[a-z]{0,8}.{0,3}\b(day|dd)\b|\b(day|dd)\b.{0,12}${BIRTH}`, 'i')],
+  ['bdayMonth', new RegExp(String.raw`${BIRTH}[a-z]{0,8}.{0,3}\b(month|mm)\b|\b(month|mm)\b.{0,12}${BIRTH}`, 'i')],
+  ['bdayYear', new RegExp(String.raw`${BIRTH}[a-z]{0,8}.{0,3}\b(year|yyyy|yy)\b|\b(year|yyyy)\b.{0,12}${BIRTH}`, 'i')],
+  ['bday', new RegExp(String.raw`${BIRTH}|date.?of.?birth|birthday`, 'i')],
+  ['sex', /gender|\bsex\b/i],
+  ['jobTitle', /job.?title|position.?title|occupation/i],
+  ['suffix', /name.?suffix|\bsuffix\b/i],
   ['postalCode', /zip|postal|post.?code|postcode|\bpin.?code/i],
   ['country', /country/i],
   ['state', /\bstate\b|province|region|county|prefecture|\bstate.?code|address.?level.?1/i],
@@ -88,12 +112,12 @@ const ADDR_WORDS: Array<[AddrPart, RegExp]> = [
 ];
 
 /** Not a card or address field, whatever its name says: search boxes, coupons, gift cards, quantities. */
-const NOT_FORM = /search|query|coupon|promo|voucher|gift.?card|discount|quantity|\bqty\b|captcha|otp|one.?time|password|username|login|newsletter|comment|message|note/i;
+const NOT_FORM = /search|query|coupon|promo|voucher|gift.?card|discount|quantity|\bqty\b|captcha|otp|one.?time|password|username|login|newsletter|comment|message|note|domain/i;
 
 const TEXTISH = new Set(['', 'text', 'email', 'tel', 'number', 'search', 'url']);
 
 function fillable(el: Element): el is FormField {
-  if (el instanceof HTMLInputElement) return TEXTISH.has(el.type) || el.type === 'month';
+  if (el instanceof HTMLInputElement) return TEXTISH.has(el.type) || el.type === 'month' || el.type === 'date';
   return el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement;
 }
 
@@ -145,13 +169,26 @@ export function cardPart(el: FormField): CardPart | null {
   return null;
 }
 
+/** "MM/DD/YYYY", "DD.MM.YYYY", "YYYY-MM-DD" in one name or label: the box takes the whole date. */
+const WHOLE_DATE = /\b(mm|dd)\W{0,3}(dd|mm)\W{0,3}(yy|aa|jj)|\b(yyyy|aaaa|jjjj)\W{0,3}mm\W{0,3}dd\b/i;
+
 export function addrPart(el: FormField): AddrPart | null {
   const a = acOf(el);
   for (const t of a) if (ADDR_AC[t]) return ADDR_AC[t]!;
   if (a.some((t) => CARD_AC[t] || t === 'username' || t.endsWith('password') || t === 'one-time-code')) return null;
   const d = text(el);
   if (!d.trim() || NOT_FORM.test(d) || cardPart(el)) return null;
-  for (const [part, re] of ADDR_WORDS) if (re.test(d)) return part;
+  for (const [part, re] of ADDR_WORDS) {
+    if (!re.test(d)) continue;
+    if (part.startsWith('bday') && NOT_BIRTH_DATE.test(d)) return null;
+    // A birth date box whose placeholder or label shows the whole date ("MM/DD/YYYY") takes all of it; a date picker too.
+    if ((part === 'bdayDay' || part === 'bdayMonth' || part === 'bdayYear') && el instanceof HTMLInputElement) {
+      const own = `${el.name} ${el.id}`.replace(/([a-z])([A-Z])/g, '$1 $2');
+      const max = Number(el.getAttribute('maxlength') ?? 0);
+      if (el.type === 'date' || (!/day|month|year|\b(dd|mm|yy)/i.test(own) && !(max > 0 && max <= 4) && [el.placeholder, el.getAttribute('aria-label') ?? '', el.labels?.[0]?.textContent ?? ''].some((x) => WHOLE_DATE.test(x)))) return 'bday';
+    }
+    return part;
+  }
   return null;
 }
 
@@ -284,6 +321,35 @@ export interface IdentityData {
   country: string | null;
   email: string | null;
   phone: string | null;
+  /** YYYY-MM-DD */
+  dob: string | null;
+  gender: string | null;
+  jobTitle: string | null;
+  suffix: string | null;
+}
+
+/** A birth date for a single box, in the order and separator its placeholder, label or pattern shows. */
+export function dateFor(el: HTMLInputElement, y: number, m: number, d: number): string {
+  const mm = String(m).padStart(2, '0');
+  const dd = String(d).padStart(2, '0');
+  if (el.type === 'date') return `${y}-${mm}-${dd}`;
+  const hint = `${el.placeholder} ${el.getAttribute('aria-label') ?? ''} ${el.labels?.[0]?.textContent ?? ''}`;
+  const sep = /(mm|dd|yyyy)\s*([/.-])/i.exec(hint)?.[2] ?? '/';
+  const yr = /\byy\b|[/.-]yy\b/i.test(hint) && !/yyyy/i.test(hint) ? String(y).slice(-2) : String(y);
+  if (/yyyy\W{0,3}mm\W{0,3}dd/i.test(hint)) return [yr, mm, dd].join(sep);
+  if (/dd\W{0,3}mm\W{0,3}y/i.test(hint)) return [dd, mm, yr].join(sep);
+  if (Number(el.getAttribute('maxlength') ?? 0) === 8) return `${mm}${dd}${yr}`;
+  return [mm, dd, yr].join(sep);
+}
+
+/** The ways a gender menu spells the saved one: "Male", "M", "Man"; "Non-binary", "Nonbinary", "Other". */
+export function genderWants(g: string): string[] {
+  const t = g.trim().toLowerCase();
+  if (t === 'female' || t === 'woman' || t === 'f') return ['Female', 'F', 'Woman'];
+  if (t === 'male' || t === 'man' || t === 'm') return ['Male', 'M', 'Man'];
+  if (/non.?binary/.test(t)) return ['Non-binary', 'Nonbinary', 'Non binary', 'Other'];
+  if (/prefer|decline|rather/.test(t)) return ['Prefer not to say', 'Prefer not to answer', 'Decline to answer', 'Decline to state', 'Rather not say', 'I prefer not to say'];
+  return [g];
 }
 
 const US_STATES: Record<string, string> = {

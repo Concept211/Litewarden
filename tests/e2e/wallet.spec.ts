@@ -271,3 +271,29 @@ test('a note with a street "Address" field stays a note; the edit form keeps oth
   await expect(p.locator('.addr-card .t')).toHaveText('Bitcoin');
   await expect(p.locator('.addr-card .tile.coin img')).toHaveAttribute('src', '/coins/bitcoin.svg');
 });
+
+test('re-prompt on an identity: birth date and the passport details stay with the worker until the master password', async ({ popup }) => {
+  const name = `${RUN} Reprompt identity`;
+  const fields = [
+    { name: 'Date of birth', value: '1977-06-09', type: 0 },
+    { name: 'Passport expiry', value: '2029-01-31', type: 0 },
+    { name: 'Nationality', value: 'Uruguayan', type: 0 },
+  ];
+  await createItems([{ type: 4, name, reprompt: 1, identity: { firstName: 'Rae', lastName: 'Prompt', passportNumber: 'RP998877' }, fields }]);
+  const p = await open(popup);
+  await relock(p);
+  await p.evaluate(() => chrome.runtime.sendMessage({ type: 'sync' }));
+  await p.fill('#q', name);
+  const id = await p.locator('.row', { hasText: name }).getAttribute('data-id');
+  const item = await p.evaluate((id) => chrome.runtime.sendMessage({ type: 'getItem', data: { id } }), id);
+  expect(item.data.locked).toBe(true);
+  for (const secret of ['1977', 'RP998877', '2029', 'Uruguayan']) expect(JSON.stringify(item)).not.toContain(secret);
+  await p.locator('.row', { hasText: name }).click();
+  await expect(p.locator('.kv', { hasText: 'Date of birth' })).toHaveCount(0);
+  await p.click('button:has-text("Show")');
+  await p.fill('#f-reprompt', creds.main.password);
+  await p.keyboard.press('Enter');
+  await expect(p.locator('.kv', { hasText: 'Date of birth' })).toContainText('June 9, 1977');
+  await expect(p.locator('.kv', { hasText: 'Passport' }).locator('.sub')).toHaveText('expires Jan 31, 2029');
+  await expect(p.locator('.kv', { hasText: 'Nationality' })).toContainText('Uruguayan');
+});

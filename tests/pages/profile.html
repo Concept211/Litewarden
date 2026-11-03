@@ -1,0 +1,11 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Your profile</title><link rel="stylesheet" href="_base.css"><style>select{width:100%;box-sizing:border-box;height:38px;border:1px solid #8fa3b3;border-radius:3px;padding:0 8px;font-size:15px;background:#fff}.two{display:flex;gap:10px}.two>*{flex:1}</style></head><body>
+<header>Driving School</header><main><form onsubmit="event.preventDefault()">
+<label for="fn">First name</label><div class="f"><input id="fn" name="first_name"></div>
+<label for="ln">Last name</label><div class="f"><input id="ln" name="last_name"></div>
+<label for="sfx">Suffix</label><select id="sfx" name="name_suffix"><option value="">None</option><option>Jr</option><option>Sr</option><option>III</option></select>
+<label for="dob">Date of birth</label><div class="f"><input id="dob" name="dob" placeholder="MM/DD/YYYY"></div>
+<label for="gender">Gender</label><select id="gender" name="gender"><option value="">Select</option><option value="F">Female</option><option value="M">Male</option><option value="X">Other</option></select>
+<label for="job">Job title</label><div class="f"><input id="job" name="job_title"></div>
+<label for="street">Street address</label><div class="f"><input id="street" name="street"></div>
+<div class="two"><div class="f"><label for="city">City</label><input id="city" name="city"></div><div class="f"><label for="zip">ZIP code</label><input id="zip" name="zip"></div></div>
+<button type="submit">Save</button></form></main></body></html>

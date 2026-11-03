@@ -26,7 +26,14 @@ test.beforeAll(async ({ popup, ctx }) => {
   await createItems([
     { type: 3, name: `${RUN} Visa`, card: { cardholderName: 'Alex Rivera', brand: 'Visa', number: '4242424242424242', expMonth: '8', expYear: '2031', code: '123' } },
     { type: 3, name: `${RUN} Old`, card: { cardholderName: 'Alex Rivera', brand: 'Mastercard', number: '5555555555554444', expMonth: '1', expYear: '2020', code: '999' } },
-    { type: 4, name: `${RUN} Home`, identity: { firstName: 'Alex', lastName: 'Rivera', address1: '120 Ocean Drive', address2: 'Apt 4', city: 'Miami', state: 'FL', postalCode: '33139', country: 'US', email: 'alex@example.com', phone: '305-555-0100' } },
+    { type: 4, name: `${RUN} Home`, identity: { firstName: 'Alex', lastName: 'Rivera', address1: '120 Ocean Drive', address2: 'Apt 4', city: 'Miami', state: 'FL', postalCode: '33139', country: 'US', email: 'alex@example.com', phone: '305-555-0100' },
+      fields: [
+        { name: 'Date of birth', value: '1988-03-14', type: 0 },
+        { name: 'Gender', value: 'Male', type: 0 },
+        { name: 'Job title', value: 'Product lead', type: 0 },
+        { name: 'Suffix', value: 'Jr.', type: 0 },
+      ],
+    },
     { type: 1, name: `${RUN} One`, login: login('pinone-2fa.test', 'solo') },
     { type: 1, name: `${RUN} Two a`, login: login('pintwo-2fa.test', 'first') },
     { type: 1, name: `${RUN} Two b`, login: login('pintwo-2fa.test', 'second') },
@@ -114,7 +121,8 @@ test('shipping: the name field opens the addresses; Enter fills the address, the
   await expect(m.locator('.m-row')).toContainText('Alex Rivera · Miami, FL');
   await shot(p, 'fill-address-menu-light', 1);
   await m.locator('.m-top input').press('Enter');
-  await expect(p.locator('#sname')).toHaveValue('Alex Rivera');
+  // No suffix box on this form, so the suffix goes on the full name.
+  await expect(p.locator('#sname')).toHaveValue('Alex Rivera Jr.');
   await expect(p.locator('#a1')).toHaveValue('120 Ocean Drive');
   await expect(p.locator('#a2')).toHaveValue('Apt 4');
   await expect(p.locator('#city')).toHaveValue('Miami');
@@ -154,6 +162,38 @@ test('one "MM / YY" box with no names, labeled "Expiration date (MM/YY)": gets t
   await expect(p.locator('#nameOnCard')).toHaveValue('Alex Rivera');
   await expect(p.locator('#expirationDate')).toHaveValue('08 / 31');
   await expect(p.locator('#securityCode')).toHaveValue('123');
+  await p.close();
+});
+
+test('profile form: the birth date in one MM/DD/YYYY box, gender, suffix and job title from the identity', async ({ ctx }) => {
+  const p = await page(ctx, C('profile.html'));
+  await expect.poll(async () => (await icons(p)).length).toBeGreaterThan(0);
+  await clickIcon(p, '#fn');
+  const m = await surface(p, 'menu');
+  await filterRun(m, 1);
+  await m.locator('.m-top input').press('Enter');
+  await expect(p.locator('#fn')).toHaveValue('Alex');
+  await expect(p.locator('#ln')).toHaveValue('Rivera');
+  await expect(p.locator('#sfx')).toHaveValue('Jr');
+  await expect(p.locator('#dob')).toHaveValue('03/14/1988');
+  await expect(p.locator('#gender')).toHaveValue('M');
+  await expect(p.locator('#job')).toHaveValue('Product lead');
+  await expect(p.locator('#street')).toHaveValue('120 Ocean Drive, Apt 4');
+  await p.close();
+});
+
+test('sign-up form: the birth date in month, day and year menus, and a "Sex" menu', async ({ ctx }) => {
+  const p = await page(ctx, C('profile-split.html'));
+  await expect.poll(async () => (await icons(p)).length).toBeGreaterThan(0);
+  await clickIcon(p, '#fn');
+  const m = await surface(p, 'menu');
+  await filterRun(m, 1);
+  await m.locator('.m-top input').press('Enter');
+  await expect(p.locator('#bm')).toHaveValue('3');
+  await expect(p.locator('#bd')).toHaveValue('14');
+  await expect(p.locator('#by')).toHaveValue('1988');
+  await expect(p.locator('#sex')).toHaveValue('Male');
+  await expect(p.locator('#city')).toHaveValue('Miami');
   await p.close();
 });
 

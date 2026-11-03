@@ -3,7 +3,8 @@
 // shortcut); it never runs on page load and never reads or sends anything by itself. Fields are found at fill
 // time, so pages that re-render their form (SPAs) still work. A "teach this site" rule wins over detection.
 import { plan, setValue, type Plan } from '../shared/fields';
-import { countryWants, expiryFor, formFields, monthWants, pickOption, stateWants, yearWants, type CardData, type FormField, type IdentityData } from '../shared/forms';
+import { readDate } from '../core/identity';
+import { countryWants, dateFor, expiryFor, formFields, genderWants, monthWants, pickOption, stateWants, yearWants, type CardData, type FormField, type IdentityData } from '../shared/forms';
 import { resolve, type SiteRule } from '../shared/rules';
 
 type Filled = Array<'username' | 'password' | 'totp'>;
@@ -94,14 +95,34 @@ function fillCard(c: CardData): string[] {
 
 function fillIdentity(d: IdentityData): string[] {
   const done: string[] = [];
-  const full = [d.firstName, d.middleName, d.lastName].filter(Boolean).join(' ');
   const lines = [d.address1, d.address2, d.address3].filter(Boolean) as string[];
   const f = formFields(document, false).addr;
   const has = new Set(f.map((x) => x.part));
+  // The suffix goes on the full name unless the form has a box of its own for it.
+  const full = [d.firstName, d.middleName, d.lastName, has.has('suffix') ? null : d.suffix].filter(Boolean).join(' ');
+  const born = readDate(d.dob);
   for (const { el, part } of f) {
     let v: string | null = null;
     let wants: string[] | undefined;
     if (part === 'fullName') v = full;
+    else if (part === 'bday') v = born && el instanceof HTMLInputElement ? dateFor(el, born.y, born.m, born.d) : null;
+    else if (part === 'bdayDay') {
+      v = born ? String(born.d).padStart(2, '0') : null;
+      wants = born ? [String(born.d), v!] : [];
+    } else if (part === 'bdayMonth') {
+      v = born ? String(born.m).padStart(2, '0') : null;
+      wants = born ? monthWants(String(born.m)) : [];
+    } else if (part === 'bdayYear') {
+      const two = el instanceof HTMLInputElement && (Number(el.getAttribute('maxlength')) === 2 || /^yy$/i.test(el.placeholder.trim()));
+      v = born ? (two ? String(born.y).slice(-2) : String(born.y)) : null;
+      wants = born ? [String(born.y)] : [];
+    } else if (part === 'sex') {
+      v = d.gender;
+      wants = d.gender ? genderWants(d.gender) : [];
+    } else if (part === 'suffix') {
+      v = d.suffix;
+      wants = d.suffix ? [d.suffix, d.suffix.replace(/\./g, '')] : [];
+    }
     else if (part === 'street') v = el instanceof HTMLTextAreaElement ? lines.join('\n') : has.has('address2') ? d.address1 : lines.join(', ');
     else if (part === 'address1') v = has.has('address2') ? d.address1 : lines.join(', ');
     else if (part === 'state') {

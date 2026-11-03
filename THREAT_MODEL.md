@@ -190,6 +190,8 @@ the extension files. What Litewarden does to limit the damage:
   with the same key as the rest of the vault, so anyone who can run code in the unlocked extension can still read it.
   The page-side prompts that write to a login (update its password after a sign-in, add a 2FA key) don't ask for the
   master password: they change the item without showing anything from it, the same as for other items.
+- Identity fills send the page the name, address, email, phone, birth date, gender, suffix and job title, and only into
+  fields the page shows. SSN, passport, license and nationality are never filled; they're copied from the popup.
 - Crypto wallets are never filled into web pages, so a fake "enter your recovery phrase" page can't get one from
   Litewarden. Wallet seed phrases shown in the popup hide again after a minute.
 

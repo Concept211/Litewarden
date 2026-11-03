@@ -8,6 +8,7 @@ import type { CardData, IdentityData } from '../../shared/forms';
 import type { SiteRule } from '../../shared/rules';
 import { getSettings, local } from '../../shared/store';
 import { fullItem, needsReprompt, recordUse } from './session';
+import { extrasOf } from '../../core/identity';
 
 interface Probe {
   /** 2 = has a password field, 1 = username-only (two-step login), 0 = nothing to fill */
@@ -129,7 +130,8 @@ export async function fillForm(tabId: number, id: string, allowed: string[], for
   const settings = await getSettings();
   const card: CardData = { cardholderName: c.cardholderName ?? null, number: c.number ?? null, expMonth: c.expMonth ?? null, expYear: c.expYear ?? null, code: settings.fillCardCode ? (c.code ?? null) : null, brand: c.brand ?? null };
   const keys = ['title', 'firstName', 'middleName', 'lastName', 'company', 'address1', 'address2', 'address3', 'city', 'state', 'postalCode', 'country', 'email', 'phone'] as const;
-  const ident = Object.fromEntries(keys.map((k) => [k, i[k] ?? null])) as unknown as IdentityData;
+  const x = extrasOf(item.fields).values;
+  const ident = { ...Object.fromEntries(keys.map((k) => [k, i[k] ?? null])), dob: x.dob ?? null, gender: x.gender ?? null, jobTitle: x.jobTitle ?? null, suffix: x.suffix ?? null } as unknown as IdentityData;
   const filled: string[] = [];
   for (const cand of cands) {
     const [res] = await chrome.scripting

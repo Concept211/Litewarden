@@ -13,6 +13,7 @@ import { iconDomain, launchUrl, parseLoose } from '../../core/uri';
 import { validateDraft } from '../../core/edit';
 import { CardForm, CardView, FieldsForm, FieldsView, IdentityForm, IdentityView, Kv, Switch } from './ItemForms';
 import { AddressCard, newWalletFields, RepromptBox, WalletForm, WalletSecrets } from './Wallet';
+import { datesToFix, extrasOf } from '../../core/identity';
 import { WALLET_KIND, walletOf, type Wallet } from '../../core/wallet';
 import { RemoteError, send, type Folder, type ItemDetail } from '../../shared/messages';
 import { clipHash } from '../../shared/cliphash';
@@ -52,8 +53,11 @@ function toDraft(it: FullItem, reprompt: number): Draft {
 
 const pick = (keys: readonly string[], o: Record<string, string | null> | undefined) => Object.fromEntries(keys.map((k) => [k, o?.[k] ?? null])) as Record<string, string | null>;
 const NOUN: Record<number, string> = { [CipherType.Login]: 'login', [CipherType.SecureNote]: 'note', [CipherType.Card]: 'card', [CipherType.Identity]: 'identity' };
-/** A wallet's own fields are shown by the wallet parts of the page; the custom fields list gets the rest. */
-const otherFields = <T,>(fields: T[], w: Wallet | null) => (w ? fields.filter((_, i) => !Object.values(w.at).includes(i)) : fields);
+/** A wallet's or an identity's own fields have their own spots on the page; the custom fields list gets the rest. */
+const otherFields = <T,>(fields: T[], at: Partial<Record<string, number>> | null) => (at ? fields.filter((_, i) => !Object.values(at).includes(i)) : fields);
+/** The custom fields that belong to the wallet or identity parts of the page. */
+const ownedFields = (type: number, fields: Array<{ name: string | null; value: string | null; type: number }> | undefined, w: Wallet | null) =>
+  w ? w.at : type === CipherType.Identity ? extrasOf(fields).at : null;
 /** Where the cursor goes when a form opens: the first thing you'd type. */
 const FIRST: Record<number, string> = { [CipherType.Card]: 'f-number', [CipherType.Identity]: 'f-firstName' };
 
@@ -225,7 +229,7 @@ export function ItemView({
   async function save() {
     if (!draft || busy) return;
     const draft_ = { ...draft, name: autoName(draft) };
-    const bad = validateDraft(draft_);
+    const bad = validateDraft(draft_) ?? (draft_.type === CipherType.Identity ? datesToFix(draft_.fields, isNew ? null : detail?.item.fields) : null);
     if (bad) {
       if (!draft.name.trim()) {
         setNameErr(bad);
@@ -483,7 +487,7 @@ export function ItemView({
             </>
           )}
           {it.type === CipherType.Card && it.card && <CardView card={it.card} copy={(v, w, sens) => void copy(v, w, sens)} />}
-          {it.type === CipherType.Identity && it.identity && <IdentityView identity={it.identity} copy={(v, w, sens) => void copy(v, w, sens)} />}
+          {it.type === CipherType.Identity && it.identity && <IdentityView identity={it.identity} fields={it.fields} copy={(v, w, sens) => void copy(v, w, sens)} />}
           {it.notes && (
             <>
               <div class="g-title">Notes</div>
@@ -499,7 +503,7 @@ export function ItemView({
               </div>
             </>
           )}
-          {!locked && otherFields(it.fields ?? [], wallet).length > 0 && <FieldsView fields={otherFields(it.fields ?? [], wallet)} copy={(v, w, sens) => void copy(v, w, sens)} />}
+          {!locked && otherFields(it.fields ?? [], ownedFields(it.type, it.fields, wallet)).length > 0 && <FieldsView fields={otherFields(it.fields ?? [], ownedFields(it.type, it.fields, wallet))} copy={(v, w, sens) => void copy(v, w, sens)} />}
           <p class="meta">{meta}</p>
         </div>
         {canFill && (
@@ -601,7 +605,15 @@ export function ItemView({
           ) : isCard ? (
             <CardForm card={draft.card!} name={draft.name} nameErr={nameErr} onName={setName} onCard={(p) => setDraft((d) => (d?.card ? { ...d, card: { ...d.card, ...p } } : d))} />
           ) : isId ? (
-            <IdentityForm identity={draft.identity!} name={draft.name} nameErr={nameErr} onName={setName} onId={(p) => setDraft((d) => (d?.identity ? { ...d, identity: { ...d.identity, ...p } } : d))} />
+            <IdentityForm
+              identity={draft.identity!}
+              fields={draft.fields ?? []}
+              name={draft.name}
+              nameErr={nameErr}
+              onName={setName}
+              onId={(p) => setDraft((d) => (d?.identity ? { ...d, identity: { ...d.identity, ...p } } : d))}
+              onFields={(up) => setDraft((d) => (d ? { ...d, fields: up(d.fields ?? []) } : d))}
+            />
           ) : (
             <label class={`field${nameErr ? ' err' : ''}`}>
               <span class="l">Name</span>
@@ -742,8 +754,14 @@ export function ItemView({
           </label>
           {draft.fields && (
             <FieldsForm
-              fields={otherFields(draft.fields, draftWallet)}
-              onChange={(others) => setDraft((d) => (d ? { ...d, fields: [...(d.fields ?? []).filter((_, i) => !!draftWallet && Object.values(draftWallet.at).includes(i)), ...others] } : d))}
+              fields={otherFields(draft.fields, ownedFields(draft.type, draft.fields, draftWallet))}
+              onChange={(others) =>
+                setDraft((d) => {
+                  if (!d) return d;
+                  const owned = Object.values(ownedFields(d.type, d.fields, draftWallet) ?? {});
+                  return { ...d, fields: [...(d.fields ?? []).filter((_, i) => owned.includes(i)), ...others] };
+                })
+              }
             />
           )}
           {!isNew && (

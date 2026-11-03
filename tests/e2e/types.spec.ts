@@ -127,37 +127,77 @@ test('card form: a mistyped number and an expired date warn but still save; an e
   await p.close();
 });
 
-test('identity: the short form, a "Passport number" chip, then the page with the address as one block', async ({ popup }) => {
+test('identity: the short form with birth date and gender, the Passport block and a Job title chip, then the page', async ({ popup }) => {
   const p = await open(popup);
   await newItem(p, 'i');
   await expect(p.locator('.hdr h1')).toHaveText('New identity');
   await expect(p.locator('#f-firstName')).toBeFocused();
   await p.keyboard.type('Alex');
   await p.fill('#f-lastName', `Rivera ${RUN}`);
+  // Digits get their slashes; a date that can't exist says so.
+  await p.locator('#f-dob').pressSequentially('02301988');
+  await expect(p.locator('#f-dob')).toHaveValue('02/30/1988');
+  await expect(p.locator('.field.err .f-msg')).toHaveText('February has 29 days at most.');
+  await shot(p, 'types-identity-dob-error-light', 2);
+  await p.fill('#f-dob', '');
+  await p.locator('#f-dob').pressSequentially('03141988');
+  await expect(p.locator('#f-dob')).toHaveValue('03/14/1988');
+  await expect(p.locator('.field.err')).toHaveCount(0);
+  await p.selectOption('#f-gender', 'Male');
   await p.fill('#f-email', 'alex@example.com');
   await p.fill('#f-phone', '(305) 555-0142');
   await p.fill('#f-address1', '120 Ocean Drive');
   await p.fill('#f-city', 'Miami');
   await p.fill('#f-state', 'FL');
   await p.fill('#f-postalCode', '33139');
-  await expect(p.locator('.add-chip')).toHaveCount(10);
-  await p.locator('.add-chip', { hasText: 'Passport number' }).click();
+  await expect(p.locator('.add-chip')).toHaveCount(13);
+  await p.locator('.add-chip', { hasText: 'Passport' }).click();
   await expect(p.locator('#f-passportNumber')).toBeFocused();
   await p.keyboard.type('X1234567');
-  await expect(p.locator('.add-chip')).toHaveCount(9);
+  await p.fill('#f-passportCountry', 'United States');
+  await p.locator('#f-passportExpiry').pressSequentially('08212027');
+  await p.locator('.add-chip', { hasText: 'Job title' }).click();
+  await expect(p.locator('#f-jobTitle')).toBeFocused();
+  await p.keyboard.type('Product lead');
+  await expect(p.locator('.add-chip')).toHaveCount(11);
   await expect(p.locator('#f-name')).toHaveAttribute('placeholder', `Alex Rivera ${RUN}`);
   await shot(p, 'types-identity-form-light', 2);
   await save(p);
   await expect(p.locator('.hdr h1')).toHaveText(`Alex Rivera ${RUN}`);
+  await expect(p.locator('.kv', { hasText: 'Date of birth' })).toContainText('March 14, 1988 · ');
+  await expect(p.locator('.kv', { hasText: 'Gender' })).toContainText('Male');
   await expect(p.locator('.kv .addr')).toHaveText('120 Ocean Drive\nMiami, FL 33139');
+  await expect(p.locator('.kv', { hasText: 'Job title' })).toContainText('Product lead');
   await expect(p.locator('.kv', { hasText: 'Passport' })).toContainText('••••••••');
+  await expect(p.locator('.kv', { hasText: 'Passport' }).locator('.sub')).toHaveText('United States · expires Aug 21, 2027');
+  // The details have their own spots, not the custom fields list.
+  await expect(p.locator('.g-title', { hasText: 'Custom fields' })).toHaveCount(0);
   await shot(p, 'types-identity-view-light', 2);
   const [it] = await serverItems(`Alex Rivera ${RUN}`);
   expect(it?.type).toBe(4);
   expect(it?.identity).toMatchObject({ firstName: 'Alex', email: 'alex@example.com', city: 'Miami', postalCode: '33139', passportNumber: 'X1234567', ssn: null });
-  // Copy the address as it pastes.
+  expect(it?.fields?.map((f) => [f.name, f.value, f.type])).toEqual([
+    ['Date of birth', '1988-03-14', 0],
+    ['Gender', 'Male', 0],
+    ['Passport country', 'United States', 0],
+    ['Passport expiry', '2027-08-21', 0],
+    ['Job title', 'Product lead', 0],
+  ]);
+  // Copying the date gives it the American way.
+  await p.locator('button[aria-label="Copy date of birth"]').click();
+  await expect.poll(() => clipboard(p.context())).toBe('03/14/1988');
   await p.locator('button[aria-label="Copy address"]').click();
-  expect((await clipboard(p.context())).replace(/\r\n/g, '\n')).toBe('120 Ocean Drive\nMiami, FL 33139'); // Windows stores CRLF
+  await expect.poll(async () => (await clipboard(p.context())).replace(/\r\n/g, '\n')).toBe('120 Ocean Drive\nMiami, FL 33139'); // Windows stores CRLF
+  // Editing: removing the Passport block takes the number, country and expiry with it.
+  await p.click('button:has-text("Edit")');
+  await expect(p.locator('#f-dob')).toHaveValue('03/14/1988');
+  await p.click('button[aria-label="Remove passport"]');
+  await expect(p.locator('#f-passportNumber')).toHaveCount(0);
+  await save(p);
+  await expect(p.locator('.kv', { hasText: 'Passport' })).toHaveCount(0);
+  const [after] = await serverItems(`Alex Rivera ${RUN}`);
+  expect(after?.identity?.passportNumber).toBeNull();
+  expect(after?.fields?.map((f) => f.name)).toEqual(['Date of birth', 'Gender', 'Job title']);
   await p.close();
 });
 

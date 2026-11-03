@@ -72,7 +72,8 @@ on self-hosted servers. Litewarden is a smaller client that does the everyday th
 - **Cards and addresses on forms.** Card and address fields on checkout and shipping pages get the icon too. Its menu
   lists your cards (brand, last four digits, expiry, expired ones last) or your identities, and one Enter fills the
   whole card or address: number, name, expiry in the shape the form wants, security code, street, city, state and
-  country menus, ZIP, email and phone.
+  country menus, ZIP, email and phone. Sign-up forms also get the birth date (one box, or month, day and year menus, in
+  the order the form shows), gender, suffix and job title.
   - Card boxes inside a payment company's frames (Stripe, Braintree, Adyen) work too. Litewarden asks once per shop
     before filling them and remembers the answer.
 - **Save and update prompts.** After you sign in with a new login or a changed password, a card next to the form
@@ -85,7 +86,10 @@ on self-hosted servers. Litewarden is a smaller client that does the everyday th
   the key to the site's login and types the current code into the page for you. The popup offers it too.
 - **Every item type.** "+" makes a login, card, identity, secure note or wallet. Cards get a live card picture, the brand
   read from the number, and a warning for a mistyped number or an expired card. Identities show the usual fields,
-  with the rest one click away. Custom fields (text, hidden, checkbox) can be edited on every item.
+  birth date and gender, with the rest one click away: job title, suffix, nationality, and the passport's and driver's
+  license's country or state and expiry, with a warning when a passport has under 6 months left. Bitwarden has no slot
+  for these, so they're saved as named custom fields ("Date of birth", "Passport expiry"), which the official apps show
+  too. Custom fields (text, hidden, checkbox) can be edited on every item.
 - **Crypto wallets.** A wallet keeps a public address, a private key and a seed phrase. It's saved as a secure note
   with labeled fields, so the official apps show it too, and notes you already keep that way show up as wallets.
   - The network (Ethereum, Hyperliquid, Base, Arbitrum, Bitcoin, Solana and ten more) is picked from the address or
