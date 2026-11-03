@@ -114,6 +114,21 @@ function text(el: FormField): string {
   return raw.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_\-.[\]]+/g, ' ');
 }
 
+/** "MM / YY", "MMYY", "month/year" in one name or label: the box takes the whole expiry. */
+const MONTH_YEAR = /\bmm\s*[/\-.]?\s*(yy|aa|jj)|\bmonth\s*[/\-]\s*year\b/i;
+
+/**
+ * One box for month and year. Read per name or label, since the joined text runs one into the next: placeholder
+ * "MM / YY" then label "Expiration date" reads "YY Expiration", which looks like a year box.
+ */
+function wholeExpiry(el: FormField): boolean {
+  const max = Number(el.getAttribute('maxlength') ?? 0);
+  if (!(el instanceof HTMLInputElement) || (max > 0 && max <= 3)) return false;
+  const own = `${el.name} ${el.id}`.replace(/([a-z])([A-Z])/g, '$1 $2');
+  if (/month|year|\bmm\b|\byy/i.test(own)) return false;
+  return [el.placeholder, el.getAttribute('aria-label') ?? '', el.labels?.[0]?.textContent ?? ''].some((s) => MONTH_YEAR.test(s));
+}
+
 export function cardPart(el: FormField): CardPart | null {
   const a = acOf(el);
   for (const t of a) if (CARD_AC[t]) return CARD_AC[t]!;
@@ -124,6 +139,7 @@ export function cardPart(el: FormField): CardPart | null {
   for (const [part, re] of CARD_WORDS) {
     if (!re.test(d)) continue;
     if ((part === 'month' || part === 'year' || part === 'exp') && /birth|dob\b|graduat/i.test(d)) return null;
+    if ((part === 'month' || part === 'year') && wholeExpiry(el)) return 'exp';
     return part;
   }
   return null;

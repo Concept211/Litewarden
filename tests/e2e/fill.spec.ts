@@ -143,6 +143,20 @@ test('split expiry: month and year menus, fields known only by their names', asy
   await p.close();
 });
 
+test('one "MM / YY" box with no names, labeled "Expiration date (MM/YY)": gets the whole expiry, not just the year', async ({ ctx }) => {
+  const p = await page(ctx, C('checkout-mmyy.html'));
+  await expect.poll(async () => (await icons(p)).length).toBeGreaterThan(0);
+  await clickIcon(p, '#cardNumber');
+  const m = await surface(p, 'menu');
+  await filterRun(m, 2);
+  await m.locator('.m-top input').press('Enter');
+  await expect(p.locator('#cardNumber')).toHaveValue('4242424242424242');
+  await expect(p.locator('#nameOnCard')).toHaveValue('Alex Rivera');
+  await expect(p.locator('#expirationDate')).toHaveValue('08 / 31');
+  await expect(p.locator('#securityCode')).toHaveValue('123');
+  await p.close();
+});
+
 test("payment company's frames: the menu opens on the page beside the card box; asks once per shop, then fills straight away", async ({ ctx }) => {
   const p = await page(ctx, C('checkout-frames.html'));
   const num = p.frames().find((f) => f.url().includes('/pay-number.html'))!;

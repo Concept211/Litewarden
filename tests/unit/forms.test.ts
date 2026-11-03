@@ -38,6 +38,17 @@ describe('card fields', () => {
     expect(cardPart(el('<input placeholder="MM / YY">'))).toBe('exp');
   });
 
+  it('one "MM / YY" box is the whole expiry, even when its label runs into the placeholder', () => {
+    // floridaeducationaldrivingschool.com: "MM / YY" then "Expiration date" read as "YY Expiration", a year box.
+    expect(cardPart(el('<input id="expirationDate" placeholder="MM / YY" aria-label="Expiration date (MM/YY)" pattern="^\\d* ?\\/? ?\\d*$">'))).toBe('exp');
+    expect(cardPart(el('<input name="expiry" placeholder="MM/YYYY" aria-label="Expiry">'))).toBe('exp');
+    // Separate boxes stay separate.
+    expect(cardPart(el('<input name="exp_month" placeholder="MM" aria-label="Expiration (MM/YY)">'))).toBe('month');
+    expect(cardPart(el('<input id="expYear" placeholder="YY" aria-label="Expiration (MM/YY)">'))).toBe('year');
+    expect(cardPart(el('<input maxlength="2" placeholder="YY" aria-label="Expiration year (MM/YY)">'))).toBe('year');
+    expect(cardPart(el('<select aria-label="Expiration (MM/YY)" name="exp_mo"></select>'))).toBe('month');
+  });
+
   it('leaves gift cards, coupons, birthdays and logins alone', () => {
     expect(cardPart(el('<input name="gift_card_number">'))).toBeNull();
     expect(cardPart(el('<input name="coupon_code">'))).toBeNull();

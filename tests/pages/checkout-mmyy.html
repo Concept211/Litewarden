@@ -1,0 +1,15 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Checkout</title><link rel="stylesheet" href="_base.css"><style>.two{display:flex;gap:10px}.two>.f{flex:1}</style></head><body>
+<header>Driving School</header><main><form id="f" onsubmit="event.preventDefault()">
+<!-- Markup as on floridaeducationaldrivingschool.com's payment form: no names, no autocomplete, "MM / YY" then a label that says "Expiration date (MM/YY)". -->
+<label for="cardNumber">Card Number</label><div class="f"><input id="cardNumber" placeholder="Card Number" type="text" inputmode="numeric"></div>
+<label for="nameOnCard">Name on card</label><div class="f"><input id="nameOnCard" type="text"></div>
+<div class="two"><div class="f"><label for="expirationDate">Expiration date (MM/YY)</label><input id="expirationDate" placeholder="MM / YY" type="text" inputmode="numeric" pattern="^\d* ?\/? ?\d*$"></div>
+<div class="f"><label for="securityCode">Security code</label><input id="securityCode" type="text" inputmode="numeric"></div></div>
+<button type="submit">Pay Now</button></form></main>
+<script>
+// The usual expiry mask: keep the digits, "MM / YY" after the second one.
+expirationDate.addEventListener('input', (e) => {
+  const d = e.target.value.replace(/\D/g, '').slice(0, 4);
+  e.target.value = d.length > 2 ? `${d.slice(0, 2)} / ${d.slice(2)}` : d;
+});
+</script></body></html>
