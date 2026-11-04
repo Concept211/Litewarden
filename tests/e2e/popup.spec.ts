@@ -194,6 +194,18 @@ test('fill: a login for another site asks first (fill here, or open its site); a
   await expect(p.locator('#confirm')).toContainText("login and you're on frames.example-lw.test");
   await expect(p.locator('#confirm .c-ok')).toHaveText('Open corpus.lw.test');
   await shot(p, 'confirm-site-light', 1);
+  // A long site name can't wrap the buttons or push them out of the dialog.
+  await p.locator('#confirm .c-go').evaluate((el) => (el.textContent = 'Open support.rataassociates-with-a-very-long-name.example.com'));
+  const dlg = (await p.locator('#confirm').boundingBox())!;
+  const go = (await p.locator('#confirm .c-go').boundingBox())!;
+  const here = (await p.locator('#confirm button', { hasText: 'Fill here' }).boundingBox())!;
+  const cancel = (await p.locator('#confirm .c-cancel').boundingBox())!;
+  expect([go.height, here.height, cancel.height]).toEqual([34, 34, 34]);
+  expect(go.y + go.height).toBeLessThanOrEqual(here.y);
+  expect(here.y).toBe(cancel.y);
+  expect(go.x + go.width).toBeLessThanOrEqual(dlg.x + dlg.width);
+  expect(await p.locator('#confirm button', { hasText: 'Fill here' }).evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await shot(p, 'confirm-site-long', 1);
   await p.locator('#confirm button', { hasText: 'Fill here' }).click();
   await p.waitForEvent('close', { timeout: 3000 }).catch(async () => console.log(`still open: toast "${await p.locator('#toast').innerText()}" confirm "${await p.locator('#confirm').innerText().catch(() => '')}"`));
   await expect(page.locator('#u')).toHaveValue('bob');
@@ -583,6 +595,26 @@ test('server down: unlock still works, sync says so in plain words', async ({ po
   const p = await popup(page);
   await p.click('.warn button:has-text("Retry")');
   await expect(p.locator('.warn')).toHaveCount(0);
+  await p.close();
+  await page.close();
+});
+
+test('item page: the sites-do-not-match sheet shows Open on its own row, then Cancel and Fill here', async ({ popup, ctx }) => {
+  const page = await ctx.newPage();
+  await page.goto(`${OTHER}/stacked.html`);
+  const p = await popup(page);
+  await p.keyboard.type('corpus bob');
+  await p.getByRole('button', { name: 'Open Corpus · Bob' }).first().click();
+  await p.locator('.btn.wide', { hasText: 'Fill' }).click();
+  const sheet = p.locator('.sheet');
+  await expect(sheet).toContainText('Fill on');
+  const go = (await sheet.locator('.c-go').boundingBox())!;
+  const here = (await sheet.locator('button', { hasText: 'Fill here' }).boundingBox())!;
+  const cancel = (await sheet.locator('button', { hasText: 'Cancel' }).boundingBox())!;
+  expect([go.height, here.height, cancel.height]).toEqual([34, 34, 34]);
+  expect(go.y + go.height).toBeLessThanOrEqual(here.y);
+  expect(here.y).toBe(cancel.y);
+  await shot(p, 'item-sheet-site', 1);
   await p.close();
   await page.close();
 });

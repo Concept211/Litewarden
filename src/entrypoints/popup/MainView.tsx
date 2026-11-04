@@ -1051,15 +1051,15 @@ export function Main({
             )}
           </p>
           {confirm.kind === 'site' && confirmGo ? (
-            <div class="c-actions three">
+            <div class="c-actions stack">
+              <button class="c-ok c-go" title={`Open ${confirmGo} in a new tab and fill it`} onClick={() => void launch(confirm.item)}>
+                Open {confirmGo}
+              </button>
               <button class="c-cancel" onClick={() => setConfirm(null)}>
                 Cancel
               </button>
               <button class="c-alt" onClick={() => void confirmOk(confirm)}>
                 Fill here
-              </button>
-              <button class="c-ok c-go" title={`Open ${confirmGo} in a new tab and fill it`} onClick={() => void launch(confirm.item)}>
-                Open {confirmGo}
               </button>
             </div>
           ) : (

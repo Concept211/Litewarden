@@ -527,14 +527,14 @@ export function ItemView({
                 This login is saved for {l?.uris[0] ? <Site host={host(l.uris[0].uri)} /> : 'another site'}, not <Site host={tabHost} />.
               </p>
               {go ? (
-                <div class="c-actions three">
+                <div class="c-actions stack">
+                  <button class="c-ok c-go" title={`Open ${go} in a new tab and fill it`} onClick={() => void launch()}>
+                    Open {go}
+                  </button>
                   <button class="c-cancel" onClick={() => setSheet(null)}>
                     Cancel
                   </button>
                   <button onClick={() => fill(true)}>Fill here</button>
-                  <button class="c-ok c-go" title={`Open ${go} in a new tab and fill it`} onClick={() => void launch()}>
-                    Open {go}
-                  </button>
                 </div>
               ) : (
                 <div class="c-actions">
