@@ -7,26 +7,31 @@ import { Main, type MainKeep, type NewPrefill } from './MainView';
 import { Unlock } from './Unlock';
 import { here } from './where';
 import { initIcons } from '../../ui/bits';
-import type { PopupScreen } from '../../shared/store';
+import type { PopupScreen, ShareDraft } from '../../shared/store';
 
 type Resume = Extract<PopupScreen, { item: string | null }>;
-type View = Boot['view'] | 'settings' | { item: string; resume?: Resume } | { new: NewPrefill; resume?: Resume };
+type ShareScreen = Extract<PopupScreen, { share: string }>;
+type View = Boot['view'] | 'settings' | { item: string; resume?: Resume } | { new: NewPrefill; resume?: Resume } | { share: ShareScreen };
 
 /** The view to open on: the remembered screen, if the vault is open and there is one. */
 function firstView(b: Boot): View {
   const w = b.where;
   if (b.view !== 'main' || !w) return b.view;
   if ('settings' in w) return 'settings';
+  if ('share' in w) return { share: w };
   return w.item ? { item: w.item, resume: w } : { new: w.prefill ?? { host: null, origin: null }, resume: w };
 }
 
-// The item editor and Settings load on first use, so opening the popup only parses the main list.
+// The item editor, Settings and sharing load on first use, so opening the popup only parses the main list.
 type ItemViewT = typeof import('./ItemView').ItemView;
 type SettingsT = typeof import('./Settings').SettingsView;
+type ShareT = typeof import('./ShareView');
 let ItemViewC: ItemViewT | null = null;
 let SettingsC: SettingsT | null = null;
+let ShareC: ShareT | null = null;
 const loadItem = () => import('./ItemView').then((m) => (ItemViewC = m.ItemView));
 const loadSettings = () => import('./Settings').then((m) => (SettingsC = m.SettingsView));
+const loadShare = () => import('./ShareView').then((m) => (ShareC = m));
 
 function useLoaded<T>(get: () => T | null, load: () => Promise<unknown>, when: boolean): T | null {
   const [, force] = useState(0);
@@ -45,7 +50,9 @@ export function App({ boot: initial }: { boot: Boot }) {
   const keep = useRef<MainKeep>({ query: '' });
   // The remembered Settings page applies to the first Settings view only.
   const settings0 = useRef(initial.where && 'settings' in initial.where ? initial.where.settings : undefined);
-  const ItemView = useLoaded(() => ItemViewC, loadItem, typeof view === 'object');
+  const isShare = typeof view === 'object' && 'share' in view;
+  const ItemView = useLoaded(() => ItemViewC, loadItem, typeof view === 'object' && !isShare);
+  const Share = useLoaded(() => ShareC, loadShare, isShare);
   const SettingsView = useLoaded(() => SettingsC, loadSettings, view === 'settings');
   // Favicons for every screen, started once per open (the popup can reopen straight into an item or Settings).
   useEffect(() => void (b.account && initIcons(b.account.server)), [b.account?.server]);
@@ -61,6 +68,15 @@ export function App({ boot: initial }: { boot: Boot }) {
       settings0.current = undefined;
     }
   }, [view]);
+  // A pop-out window that was already open comes to the front on the screen a file is being shared from.
+  useEffect(() => {
+    if (!b.popout) return;
+    const l = (m: { event?: string; draft?: ShareDraft }) => {
+      if (m?.event === 'openShare' && m.draft) setView({ share: { share: 'new', draft: m.draft } });
+    };
+    chrome.runtime.onMessage.addListener(l);
+    return () => chrome.runtime.onMessage.removeListener(l);
+  }, [b.popout]);
   const reload = async (next?: 'main' | 'settings', msg?: string) => {
     const nb = await boot();
     applyLook(nb.settings);
@@ -71,6 +87,19 @@ export function App({ boot: initial }: { boot: Boot }) {
   if (view === 'firstrun') return <FirstRun onDone={() => reload()} />;
   if (view === 'unlock') return <Unlock boot={b} onUnlocked={() => reload()} onLoggedOut={() => reload()} />;
   if (view === 'settings') return SettingsView ? <SettingsView boot={b} page0={settings0.current} onPage={(page) => here({ settings: page })} onBack={() => reload('main')} onLoggedOut={() => reload()} /> : <Shell />;
+  if (typeof view === 'object' && 'share' in view)
+    return Share ? (
+      <Share.ShareView
+        key={JSON.stringify(view.share).slice(0, 80)}
+        boot={b}
+        start={view.share}
+        onBack={() => reload('main')}
+        onItem={(id) => setView({ item: id })}
+        onLocked={() => reload()}
+      />
+    ) : (
+      <Shell />
+    );
   if (typeof view === 'object')
     return ItemView ? (
       <ItemView
@@ -81,6 +110,7 @@ export function App({ boot: initial }: { boot: Boot }) {
         resume={view.resume}
         onBack={(msg) => reload('main', msg)}
         onLocked={() => reload()}
+        onShare={(id) => void loadShare().then((m) => setView({ share: { share: 'new', draft: m.newDraft(b, { fromItem: id }) } }))}
       />
     ) : (
       <Shell />
@@ -94,6 +124,7 @@ export function App({ boot: initial }: { boot: Boot }) {
       onSettings={() => setView('settings')}
       onOpen={(id) => setView({ item: id })}
       onNew={(p) => setView({ new: p })}
+      onShares={() => setView({ share: { share: 'list' } })}
     />
   );
 }

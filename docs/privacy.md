@@ -29,7 +29,8 @@ To do its job, Litewarden handles your password vault: logins, usernames, passwo
     the browser's session memory and are dropped when you lock or close the browser, unless you turn off "Lock when
     the browser closes."
 
-Nothing leaves your browser except requests to your own server.
+Nothing leaves your browser except requests to your own server. If you make a secure link, whoever you give it to can
+read what you shared, from your server, along with your account's email unless you choose to hide it.
 
 ## Network requests
 

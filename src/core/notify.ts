@@ -19,6 +19,9 @@ export const PushType = {
   SyncCipherDelete: 9,
   SyncSettings: 10,
   LogOut: 11,
+  SyncSendCreate: 12,
+  SyncSendUpdate: 13,
+  SyncSendDelete: 14,
 } as const;
 
 /** Pushes that change what's in the vault (Litewarden answers them with a sync). */

@@ -22,6 +22,8 @@ File references point at the source as of version 0.1.0.
 | Two-step "remember this browser" token, device id | `chrome.storage.local` | Same as any Bitwarden-compatible client. |
 | Clipboard contents | The system clipboard | Cleared after 30 seconds by default, but only if it still holds what Litewarden copied (`src/entrypoints/background/clipboard.ts`, `src/entrypoints/offscreen/main.ts`). A SHA-256 of the copied text is kept in `chrome.storage.session` until then. |
 | Unlocked session mirror (user key, org keys) | `chrome.storage.local` (`persistedSession`), only if "Lock when the browser closes" is off | AES-GCM sealed under a non-extractable key in IndexedDB, dropped on every lock (`src/shared/vaultkey.ts`). Never the raw key. |
+| Shared links (see "Shared links" below) | `chrome.storage.local`, inside `vault` | Encrypted exactly as the server stores them. Titles are decrypted only to show the list. |
+| A message being written for a link | `chrome.storage.session` (`popupWhere`) | Memory only, removed on lock. A saved item's fields are kept for 5 minutes at most. |
 | Weak-settings notice dismissal | `chrome.storage.local` (`kdfDismissed`) | The KDF settings the user dismissed the notice for. No secret. |
 | "Teach this site" rules | `chrome.storage.local` (`siteRules`) | CSS selectors for a site's fields. No secrets. |
 
@@ -65,6 +67,30 @@ broken into the content-script world could use that window.
 5. **Your Vaultwarden server.** Trusted with ciphertext and the login hash, not with plaintext. Vault contents are
    end-to-end encrypted the same way the official clients do it.
 6. **The network** between the browser and your server.
+
+## Shared links
+
+A shared link (Bitwarden's Send protocol) hands a secret to someone outside the vault, so the rules are different from
+the rest of Litewarden.
+
+- **The link is the secret.** Anyone holding the whole link can read the contents until it ends: 16 random bytes after
+  the `#` derive the key. Chat logs, email archives, browser history and link previewers that run scripts can all hold
+  or open it. "Only one view" limits the damage, and also lets a previewer use up the view. A password on the link adds
+  a second factor if it travels another way. Delete a link when it's done with.
+- **What the server sees.** Ciphertext, the expiry, the view count, a PBKDF2 hash of the link's password if there is one,
+  and when each link is opened. It never gets the part after the `#` from the recipient's browser. It does keep those 16
+  bytes wrapped under your user key, so you can copy the link again later. A server that turned malicious would still
+  decide what code the recipient's page runs, since the page is its own web vault: it could serve a page that sends the
+  key elsewhere. That risk is the recipient's, and it's why a link is only as trustworthy as the server behind it.
+- **What the recipient sees.** Your account's email, unless you hide it, in which case the page warns them to check they
+  trust the link.
+- **Sharing a saved item** goes through the same master password re-prompt as showing it. The message is a copy, so
+  changing the login later doesn't change a link already sent, and deleting the link doesn't change the password
+  they've read. The 2FA secret, a card's security code and government ID numbers start off. Wallets and organization
+  items you can only view have no Share button.
+- **Files** are encrypted and uploaded by the pop-out window, not the service worker, because Chrome stops a worker whose
+  request takes over 30 seconds. For that upload the window holds the file, its key and an access token in memory. It's
+  an extension page, which could already read the session, and neither the file nor the key is written to disk.
 
 ## Who we defend against
 

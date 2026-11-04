@@ -10,7 +10,7 @@ export const FRESH_MS = 5 * 60_000;
 export function pickScreen(w: PopupWhere | null | undefined, now = Date.now()): PopupScreen | null {
   if (!w) return null;
   const s = w.screen;
-  const unsaved = 'item' in s && s.mode === 'edit' && !!s.draft && JSON.stringify(s.draft) !== s.baseline;
+  const unsaved = ('item' in s && s.mode === 'edit' && !!s.draft && JSON.stringify(s.draft) !== s.baseline) || ('share' in s && s.share === 'new' && !s.draft.fromItem && !!s.draft.text.trim());
   return unsaved || now - w.at < FRESH_MS ? s : null;
 }
 

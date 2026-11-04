@@ -3,6 +3,7 @@
 import { b64url, utf8 } from './bytes';
 import { ApiError, ServerUnreachable, TwoFactorRequired, WrongPassword, WrongTwoFactorCode, serverMessage } from './errors';
 import type { Kdf } from './crypto/types';
+import type { FileUploadSlot, Policy, SendRecord } from './send';
 
 /** Bitwarden DeviceType for a Chrome extension. */
 export const DEVICE_TYPE_CHROME_EXT = 2;
@@ -307,6 +308,27 @@ export class Api {
     await this.req('PUT', `/api/ciphers/${encodeURIComponent(id)}/delete`);
   }
 
+  createSend(body: Record<string, unknown>): Promise<SendRecord> {
+    return this.req<SendRecord>('POST', '/api/sends', { json: body });
+  }
+
+  /** Make a file share and get the slot to upload its encrypted bytes to. */
+  createFileSend(body: Record<string, unknown>): Promise<FileUploadSlot> {
+    return this.req<FileUploadSlot>('POST', '/api/sends/file/v2', { json: body });
+  }
+
+  getSend(id: string): Promise<SendRecord> {
+    return this.req<SendRecord>('GET', `/api/sends/${encodeURIComponent(id)}`);
+  }
+
+  async listSends(): Promise<SendRecord[]> {
+    return (await this.req<{ data?: SendRecord[] }>('GET', '/api/sends')).data ?? [];
+  }
+
+  async deleteSend(id: string): Promise<void> {
+    await this.req('DELETE', `/api/sends/${encodeURIComponent(id)}`);
+  }
+
   /** Seconds until the access token expires (from its JWT exp), or 0 if unknown/expired. */
   tokenSecondsLeft(now = Date.now()): number {
     const t = this.tokens?.access_token;
@@ -379,9 +401,12 @@ export interface SyncResponse {
     key: string;
     privateKey: string | null;
     accountKeys?: AccountKeys | null;
-    organizations: Array<{ id: string; name: string; key: string | null }>;
+    organizations: Array<{ id: string; name: string; key: string | null; type?: number }>;
   };
   folders: Array<{ id: string; name: string }>;
   collections: Array<{ id: string; organizationId: string; name: string }>;
   ciphers: Cipher[];
+  /** The account's shared links, encrypted. */
+  sends?: SendRecord[];
+  policies?: Policy[];
 }

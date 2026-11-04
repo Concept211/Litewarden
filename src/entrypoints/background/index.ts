@@ -83,6 +83,12 @@ const handlers: Handlers = {
     return r;
   },
   trashItem: ({ id }) => S.trashItem(id),
+  shares: ({ fresh }) => S.shares(!!fresh),
+  shareText: ({ options, text }) => S.shareText(options, text),
+  shareFileStart: ({ options, fileName, size }) => S.shareFileStart(options, fileName, size),
+  shareFileEnd: ({ id, ok }) => S.shareFileEnd(id, ok),
+  shareLink: ({ id }) => S.shareLink(id),
+  shareDelete: ({ id }) => S.shareDelete(id),
   liveState: async () => (await mem.get('live')).live ?? { status: 'off', detail: null, lastPush: null },
   popout: () => openPopout(),
   ...inpageHandlers,

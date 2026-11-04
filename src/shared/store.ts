@@ -5,7 +5,7 @@
 //    "lock when the browser closes: off", is sealed (vaultkey.ts).
 //  - chrome.storage.session (memory, cleared when the browser closes) holds the unlocked session: the user key,
 //    org keys and the decrypted list index the popup reads directly on open.
-import type { Kdf, ServerInfo, SyncResponse, Tokens } from '../core';
+import type { Kdf, ServerInfo, ShareLasts, SyncResponse, Tokens } from '../core';
 import { DEFAULT_GEN, type GenOptions } from '../core/generator';
 import type { Draft } from '../core/edit';
 import type { ListItem } from '../core/vault';
@@ -71,6 +71,8 @@ export interface Settings {
   fillCardCode: boolean;
   /** Shop hostname -> origins of payment-company frames the user agreed to fill cards into there. */
   cardFrames: Record<string, string[]>;
+  /** How long the last shared link was set to last; the next one starts there. */
+  shareLasts: ShareLasts;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -98,6 +100,7 @@ export const DEFAULT_SETTINGS: Settings = {
   fillForms: true,
   fillCardCode: true,
   cardFrames: {},
+  shareLasts: '7d',
 };
 
 /** Popup sizes in CSS px (Chrome caps popups at 800 x 600). */
@@ -272,9 +275,27 @@ export interface SessionStore {
   popupWhere?: PopupWhere;
 }
 
-/** A popup screen to come back to: a Settings page, or an item (open, being edited, or new). */
+/** A message being written for a link. Memory only, like an unsaved edit; a lock removes it. */
+export interface ShareDraft {
+  kind: 'text' | 'file';
+  text: string;
+  title: string;
+  oneView: boolean;
+  /** Set once the Password chip has been opened. */
+  password: string | null;
+  hideEmail: boolean;
+  lasts: ShareLasts;
+  /** Sharing a saved item: its id, and the fields tapped on. */
+  fromItem?: string;
+  picked?: string[];
+}
+
+/** A popup screen to come back to: a Settings page, a shared-links screen, or an item (open, being edited, or new). */
 export type PopupScreen =
   | { settings: string }
+  | { share: 'list' }
+  | { share: 'new'; draft: ShareDraft }
+  | { share: 'link'; id: string; fresh?: boolean }
   | { item: string | null; prefill?: { host: string | null; origin: string | null; type?: number; folderId?: string | null }; mode: 'view' | 'edit'; draft?: Draft; baseline?: string };
 
 export interface PopupWhere {

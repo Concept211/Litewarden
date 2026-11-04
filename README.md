@@ -100,6 +100,15 @@ on self-hosted servers. Litewarden is a smaller client that does the everyday th
     your master password, and they're never filled into web pages.
 - **Master password re-prompt.** Items with Bitwarden's "Master password re-prompt" on (new wallets have it on) ask
   for your master password, never the PIN, before Litewarden shows, copies or fills their secrets.
+- **Share by secure link.** Send a message, a saved login, card, identity or note, or a file up to 100 MB, to anyone.
+  Click the paper plane, paste or pick, and the link is on your clipboard. They open it in a browser with no account
+  and no extension. It's encrypted in your browser, and the key stays in the part of the link browsers never send to a
+  server.
+  - Links last an hour, a day, 7 days or 30 days, and can close after one view or ask for a password.
+  - Sharing a saved login, you tap which fields go. The 2FA secret starts off.
+  - Your links list shows views and time left, and deleting one kills it at once.
+  - It uses the Send feature of Bitwarden-compatible servers, so links show up in the official apps too. Your server
+    needs to be reachable by the people you share with, over HTTPS.
 - **Item view and editor** with a password generator, password history, website match types and the 2FA secret.
 - **Live sync** through your server's notifications hub, plus a sync timer and a sync button.
 - **Pop-out window** that stays open, three popup sizes, and light and dark themes.
@@ -172,11 +181,13 @@ A build loaded this way doesn't update itself. Pull and rebuild to get new versi
 | Popup | Alt+← Alt+→ | Previous or next folder |
 | Popup | Alt+1 to Alt+5 | Show only logins, cards, identities, notes or wallets (again for every type) |
 | Popup | Alt+N | New item: then L, C, I, N or W |
+| Popup | Alt+S | Shared links |
 | Popup | Alt+U, Alt+P, Alt+T | Copy username, password, 2FA code |
 | Popup | Alt+E | Open the item |
 | Popup | Esc | Clear the search, then close |
 | Popup | ? | Show all shortcuts |
 | Item | Alt+R, Ctrl+S, Esc | Show or hide the password, save, back |
+| New link | Ctrl+Enter, Esc | Create and copy the link, close |
 
 Change the two Chrome-wide shortcuts at `chrome://extensions/shortcuts`.
 

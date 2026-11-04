@@ -13,6 +13,8 @@ import {
   WrongPassword,
   b64decode,
   b64encode,
+  buildFileSend,
+  buildTextSend,
   checkKdf,
   decryptItem,
   decryptListItem,
@@ -22,7 +24,13 @@ import {
   iconDomain,
   loadKeys,
   normalizeServerUrl,
+  MAX_SHARE_BYTES,
   parseLoose,
+  readShare,
+  resolveUrl,
+  sendLink,
+  sharePolicy,
+  sortShares,
   unlockWithPassword,
   webCrypto as C,
   type Cipher,
@@ -30,12 +38,16 @@ import {
   type FullItem,
   type Keys,
   type LoginResponse,
+  type SendRecord,
+  type ShareOptions,
+  type SharePolicy,
+  type ShareRow,
   type SymKey,
   type SyncResponse,
   type Tokens,
 } from '../../core';
 import { walletOf } from '../../core/wallet';
-import type { Folder, ItemDetail, Progress, StateInfo } from '../../shared/messages';
+import type { Folder, ItemDetail, Progress, ShareMade, ShareUpload, StateInfo } from '../../shared/messages';
 import { dropKey, seal, unseal, type Sealed } from '../../shared/vaultkey';
 import { getSettings, local, mem, type Account, type IndexItem, type Session, type SessionStore } from '../../shared/store';
 
@@ -729,6 +741,141 @@ async function removeLocalNow(id: string) {
   if (await writeIfUnlocked(e, { index: next, indexCount: next.length, notes: n, tabMatches: {} })) await refreshRecentItems(next, e);
   onIndexChange?.();
   await local.set({ vault: v });
+}
+
+// ---------- shared links ----------
+
+/** Plain words for a failed share. Nothing is made, and the screen keeps what was typed. */
+function shareError(err: unknown, server: string): Error {
+  const host = server.replace(/^https?:\/\//, '');
+  if (err instanceof ServerUnreachable) return new UserError(`Can't reach ${host}, so no link was made. Your message is still here; try again when the server is back.`);
+  if (err instanceof ApiError) {
+    const msg = serverMessage(err.body).replace(/\.+$/, '');
+    // Vaultwarden gives the policy's answer for both a server with Sends off and an organization's policy.
+    if (/only able to delete an existing send|sends? (is|are) disabled/i.test(msg)) return new UserError(`Shared links are turned off for this account, on ${host} or by an organization's policy. Whoever runs it can turn them on.`);
+    if (err.status === 413) return new UserError(`That's more than ${host} accepts. Ask whoever runs the server, or share something smaller.`);
+    if (err.status === 429) return new UserError('The server is limiting requests right now. Wait a minute, then try again.');
+    return new UserError(`${host} didn't make the link${msg ? `: ${msg}` : ` (HTTP ${err.status})`}.`);
+  }
+  return err instanceof Error ? err : new Error(String(err));
+}
+
+async function sharePolicyNow(v?: SyncResponse): Promise<SharePolicy> {
+  const d = v ?? (await vault());
+  return sharePolicy(d.policies, d.profile.organizations);
+}
+
+/** The local copy changed; an open Shared links screen redraws. */
+const announceShares = () => void chrome.runtime.sendMessage({ event: 'shares' }).catch(() => {});
+
+const writeSends = (change: (list: SendRecord[]) => SendRecord[]) =>
+  oneAtATime(async () => {
+    const v = await vault();
+    v.sends = change(v.sends ?? []);
+    vaultCache = v;
+    announceShares();
+    await local.set({ vault: v });
+  });
+
+const upsertSend = (s: SendRecord) => writeSends((list) => [...list.filter((x) => x.id !== s.id), s]);
+
+export async function shares(fresh: boolean): Promise<{ rows: ShareRow[]; policy: SharePolicy }> {
+  // Stale is fine when the server can't be reached: the list still shows, and making a link says what's wrong.
+  if (fresh) {
+    const list = await (await api()).listSends().catch(() => null);
+    if (list) await writeSends(() => list);
+  }
+  const [{ userKey }, v] = await Promise.all([sessionKeys(), vault()]);
+  const rows = await Promise.all((v.sends ?? []).map((s) => readShare(C, s, userKey).catch(() => null)));
+  return { rows: sortShares(rows.filter((r): r is ShareRow => !!r)), policy: await sharePolicyNow(v) };
+}
+
+async function requireAccount() {
+  const { account } = await local.get('account');
+  if (!account) throw new UserError('Not signed in.');
+  return account;
+}
+
+export async function shareText(options: ShareOptions, text: string): Promise<ShareMade> {
+  if (!text.trim()) throw new UserError('Write the message first.');
+  if ((await sharePolicyNow()).disabled) throw new UserError("Your organization's policy doesn't allow shared links.");
+  const [{ userKey }, account, a] = await Promise.all([sessionKeys(), requireAccount(), api()]);
+  const { body, material } = await buildTextSend(C, options, text, userKey);
+  let saved: SendRecord;
+  try {
+    saved = await a.createSend(body);
+  } catch (err) {
+    throw shareError(err, account.server);
+  }
+  await upsertSend(saved);
+  return { link: sendLink(a.urls, saved.accessId, material), row: await readShare(C, saved, userKey) };
+}
+
+export async function shareFileStart(options: ShareOptions, fileName: string, size: number): Promise<ShareUpload> {
+  if (size > MAX_SHARE_BYTES) throw new UserError('That file is over the 100 MB limit.');
+  if ((await sharePolicyNow()).disabled) throw new UserError("Your organization's policy doesn't allow shared links.");
+  const [{ userKey }, account, a] = await Promise.all([sessionKeys(), requireAccount(), api()]);
+  const { body, material, encName } = await buildFileSend(C, options, fileName, size, userKey);
+  let slot;
+  try {
+    slot = await a.createFileSend(body);
+  } catch (err) {
+    throw shareError(err, account.server);
+  }
+  // Bitwarden's cloud sends files to its storage provider, which this doesn't speak yet.
+  if (slot.fileUploadType) {
+    await a.deleteSend(slot.sendResponse.id).catch(() => {});
+    throw new UserError("Sharing files isn't available on Bitwarden's cloud yet. Share a message instead.");
+  }
+  // The token and the bytes go to the page: a worker is stopped if a response takes over 30 seconds, which a big
+  // upload easily does, while the pop-out window keeps going. Both stay in that page's memory.
+  return {
+    id: slot.sendResponse.id,
+    material: b64encode(material),
+    url: resolveUrl(a.urls, '/api' + slot.url.replace(/^\/api/, '')),
+    token: await a.freshAccessToken(),
+    encName,
+  };
+}
+
+export async function shareFileEnd(id: string, ok: boolean): Promise<ShareRow | null> {
+  const a = await api();
+  if (!ok) {
+    await a.deleteSend(id).catch(() => {});
+    return null;
+  }
+  const [{ userKey }, saved] = await Promise.all([sessionKeys(), a.getSend(id)]);
+  await upsertSend(saved);
+  return readShare(C, saved, userKey);
+}
+
+export async function shareLink(id: string): Promise<ShareMade> {
+  const [{ userKey }, v, a] = await Promise.all([sessionKeys(), vault(), api()]);
+  const s = v.sends?.find((x) => x.id === id);
+  if (!s) throw new UserError('That link is gone. It may have expired or been deleted.');
+  return { link: sendLink(a.urls, s.accessId, await C.decryptBytes(s.key, userKey)), row: await readShare(C, s, userKey) };
+}
+
+export async function shareDelete(id: string): Promise<void> {
+  await sessionKeys(); // locked: throws
+  const account = await requireAccount();
+  try {
+    await (await api()).deleteSend(id);
+  } catch (err) {
+    // Already gone on the server: that's what was asked for.
+    if (!(err instanceof ApiError && err.status === 404)) {
+      const host = account.server.replace(/^https?:\/\//, '');
+      throw err instanceof ServerUnreachable ? new UserError(`Can't reach ${host}, so the link still works. Try again when the server is back.`) : shareError(err, account.server);
+    }
+  }
+  await writeSends((list) => list.filter((x) => x.id !== id));
+}
+
+/** A live push about one link. A view count going up arrives this way too. */
+export async function applySendPush(id: string, removed: boolean): Promise<void> {
+  if (!(await mem.get('session')).session) return;
+  if (removed) await writeSends((list) => list.filter((x) => x.id !== id));
+  else await upsertSend(await (await api()).getSend(id));
 }
 
 export { TwoFactorRequired };

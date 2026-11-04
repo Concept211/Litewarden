@@ -13,3 +13,4 @@ export * from './edit';
 export * from './generator';
 export * from './notify';
 export * from './kdf';
+export * from './send';

@@ -27,6 +27,8 @@ export const test = base.extend<{}, Fx>({
       args: [
         `--disable-extensions-except=${EXT}`,
         `--load-extension=${EXT}`,
+        // The share tests' HTTPS server has a self-signed cert. Only when one is in use.
+        ...(process.env.LW_SHARE_SERVER ? ['--ignore-certificate-errors'] : []),
         `--host-resolver-rules=MAP *.lw.test 127.0.0.1, MAP *.example-lw.test 127.0.0.1, MAP *.newsite-lw.test 127.0.0.1, MAP *.save-lw.test 127.0.0.1, MAP *-2fa.test 127.0.0.1`,
       ],
     });

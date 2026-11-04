@@ -3,7 +3,7 @@
 // Enter fills the selected login, a click fills, the stubs copy. Edit is a separate control.
 import type { ComponentChildren } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { AppWindow, CloudOff, Copy, CreditCard, Folder as FolderIcon, Hash, IdCard, ShieldAlert, Keyboard, KeyRound, Lock, NotebookText, Pencil, Plus, RefreshCw, ScanLine, Search, Settings, SquareArrowOutUpRight, StickyNote, Timer, User, Wallet, X } from 'lucide-preact';
+import { AppWindow, CloudOff, Copy, CreditCard, Folder as FolderIcon, Hash, IdCard, ShieldAlert, Keyboard, KeyRound, Lock, NotebookText, Pencil, Plus, RefreshCw, ScanLine, Search, Send, Settings, SquareArrowOutUpRight, StickyNote, Timer, User, Wallet, X } from 'lucide-preact';
 import type { ComponentType } from 'preact';
 import { expiredMMYY } from '../../core/cards';
 import { SearchIndex, type Range, type SearchHit } from '../../core/search';
@@ -140,6 +140,7 @@ export function Main({
   onSettings,
   onOpen,
   onNew,
+  onShares,
 }: {
   boot: Boot;
   keep: MainKeep;
@@ -148,6 +149,7 @@ export function Main({
   onSettings: () => void;
   onOpen: (id: string) => void;
   onNew: (p: NewPrefill) => void;
+  onShares: () => void;
 }) {
   const [index, setIndex] = useState<IndexItem[] | null>(null);
   const [count, setCount] = useState(b.count);
@@ -526,6 +528,10 @@ export function Main({
       if (e.altKey && /^n$/i.test(e.key)) {
         e.preventDefault();
         return setNewMenu(0);
+      }
+      if (e.altKey && /^s$/i.test(e.key)) {
+        e.preventDefault();
+        return onShares();
       }
       if (e.altKey && /^[1-5]$/.test(e.key)) {
         e.preventDefault();
@@ -927,6 +933,9 @@ export function Main({
             </button>
           )}
         </label>
+        <button class="ib" title="Shared links (Alt S)" aria-label="Shared links" onClick={onShares}>
+          <Send />
+        </button>
         <button class={`ib${newMenu != null ? ' on' : ''}`} title="New item (Alt N)" aria-label="New item" aria-haspopup="menu" aria-expanded={newMenu != null} onClick={() => setNewMenu(newMenu == null ? 0 : null)}>
           <Plus />
         </button>

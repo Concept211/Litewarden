@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Typed messages between extension pages (popup, offscreen) and the service worker.
-import type { Draft, FullItem, ServerInfo } from '../core';
+import type { Draft, FullItem, ServerInfo, ShareOptions, SharePolicy, ShareRow } from '../core';
 import type { Captured } from './fields';
 import type { SiteRule } from './rules';
 import type { SetupSeen } from './twofa';
@@ -61,6 +61,16 @@ export interface Api {
   folders: [void, Folder[]];
   saveItem: [{ id: string | null; draft: Draft }, { id: string }];
   trashItem: [{ id: string }, void];
+  /** Shared links: what's on this device, and any policy against making them. `fresh`: ask the server first. */
+  shares: [{ fresh?: boolean }, { rows: ShareRow[]; policy: SharePolicy }];
+  shareText: [{ options: ShareOptions; text: string }, ShareMade];
+  /** A file share, step 1: the worker makes it and hands back what the page needs to encrypt and upload the file. */
+  shareFileStart: [{ options: ShareOptions; fileName: string; size: number }, ShareUpload];
+  /** Step 2: the upload went through (`ok`), or didn't, in which case the half-made link is removed. */
+  shareFileEnd: [{ id: string; ok: boolean }, ShareRow | null];
+  /** The link again, from what the server keeps (wrapped under the user key). */
+  shareLink: [{ id: string }, ShareMade];
+  shareDelete: [{ id: string }, void];
   popout: [{ tabId?: number }, { windowId: number }];
   liveState: [void, import('./store').LiveState];
   // ----- in-page surfaces (menu, save prompt, teach panel): extension pages framed into a site -----
@@ -85,6 +95,21 @@ export interface Api {
   totpForTab: [{ tabId: number }, (TotpData & { token: string }) | null];
   siteRules: [void, Record<string, SiteRule>];
   removeRule: [{ host: string }, void];
+}
+
+export interface ShareMade {
+  link: string;
+  row: ShareRow;
+}
+
+export interface ShareUpload {
+  id: string;
+  /** Base64. Stays in the page's memory, for the length of the upload. */
+  material: string;
+  /** Where the encrypted file goes, and the file name the server expects with it. */
+  url: string;
+  token: string;
+  encName: string;
 }
 
 export interface MenuData {

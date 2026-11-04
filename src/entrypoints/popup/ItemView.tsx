@@ -4,7 +4,7 @@
 // A failed save never loses the edit: the form stays open with an error that says what to do.
 import type { ComponentChildren } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { ArrowLeft, Copy, CornerDownLeft, ExternalLink, Eye, EyeOff, Plus, RefreshCw, ScanLine, Trash2, TriangleAlert, WandSparkles, X } from 'lucide-preact';
+import { ArrowLeft, Copy, CornerDownLeft, ExternalLink, Eye, EyeOff, Plus, RefreshCw, ScanLine, Send, Trash2, TriangleAlert, WandSparkles, X } from 'lucide-preact';
 import { CipherType, type FullItem, type ListUri } from '../../core/vault';
 import { autoName, CARD_KEYS, IDENTITY_KEYS, type Draft } from '../../core/edit';
 import { generatePassword, strength, GEN_MAX, GEN_MIN, type GenOptions } from '../../core/generator';
@@ -74,6 +74,7 @@ export function ItemView({
   resume,
   onBack,
   onLocked,
+  onShare,
 }: {
   boot: Boot;
   id: string | null;
@@ -83,6 +84,8 @@ export function ItemView({
   resume?: Extract<PopupScreen, { item: string | null }>;
   onBack: (flash?: string) => void;
   onLocked: () => void;
+  /** Share this item by secure link. */
+  onShare: (id: string) => void;
 }) {
   const [id, setId] = useState(initialId);
   const [detail, setDetail] = useState<ItemDetail | null>(null);
@@ -379,6 +382,12 @@ export function ItemView({
           </button>
           <Tile item={tileItem({ type: it.type, name: it.name, uris: l?.uris ?? [], brand: it.card?.brand, wallet })} />
           <h1>{it.name}</h1>
+          {/* Not a wallet's keys, and not an organization item the user may only view. */}
+          {detail!.canEdit && !locked && !wallet && (
+            <button class="ib" title="Share by secure link" aria-label="Share" onClick={() => onShare(it.id)}>
+              <Send />
+            </button>
+          )}
           {detail!.canEdit && !locked && (
             <button class="btn sec" onClick={() => setMode('edit')}>
               Edit

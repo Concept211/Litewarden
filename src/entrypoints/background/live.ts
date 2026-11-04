@@ -4,7 +4,15 @@
 // since Chrome 116, the service worker) alive. When the hub isn't there or drops, a timer sync is the fallback.
 import { HANDSHAKE, PING, PushType, VAULT_PUSHES, handshakeReply, hubUrl, parsePushes, serverUrls } from '../../core';
 import { getSettings, local, mem, type LiveState } from '../../shared/store';
-import { api, applyCipherPush, syncNow } from './session';
+import { api, applyCipherPush, applySendPush, syncNow } from './session';
+
+const SEND_PUSHES: number[] = [PushType.SyncSendCreate, PushType.SyncSendUpdate, PushType.SyncSendDelete];
+
+/** The id a push is about, when it's about one thing. */
+function pushId(payload: unknown): string | null {
+  const id = payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as Record<string, unknown>).Id : null;
+  return typeof id === 'string' ? id : null;
+}
 
 let ws: WebSocket | null = null;
 let pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -67,16 +75,24 @@ export async function startLive(): Promise<void> {
       return; // a frame we can't read is not worth dropping the connection over
     }
     const mine = account.deviceId;
+    // Someone opened a link, or a link changed on another device: only that link, the vault is untouched.
+    const shared = pushes.filter((p) => p.contextId !== mine && SEND_PUSHES.includes(p.type));
+    for (const p of shared) {
+      const id = pushId(p.payload);
+      if (id) void applySendPush(id, p.type === PushType.SyncSendDelete).catch(() => fullSyncSoon());
+      else fullSyncSoon();
+    }
     const relevant = pushes.filter((p) => p.contextId !== mine && (VAULT_PUSHES.has(p.type) || p.type === PushType.SyncSettings));
-    if (!relevant.length) return;
+    if (!relevant.length && !shared.length) return;
     void setState('connected', null, true);
+    if (!relevant.length) return;
     // One item changed: fetch just that item. Anything else (folders, org keys, an import) means a full sync.
     const one = relevant.length === 1 ? relevant[0]! : null;
-    const itemId = one && one.payload && typeof one.payload === 'object' && !Array.isArray(one.payload) ? (one.payload as Record<string, unknown>).Id : null;
-    const single = one && typeof itemId === 'string' && ([PushType.SyncCipherUpdate, PushType.SyncCipherCreate, PushType.SyncLoginDelete, PushType.SyncCipherDelete] as number[]).includes(one.type);
+    const itemId = one ? pushId(one.payload) : null;
+    const single = one && itemId && ([PushType.SyncCipherUpdate, PushType.SyncCipherCreate, PushType.SyncLoginDelete, PushType.SyncCipherDelete] as number[]).includes(one.type);
     if (single && !syncTimer) {
       const removed = one.type === PushType.SyncLoginDelete || one.type === PushType.SyncCipherDelete;
-      void applyCipherPush(itemId as string, removed).catch(() => fullSyncSoon());
+      void applyCipherPush(itemId, removed).catch(() => fullSyncSoon());
       return;
     }
     fullSyncSoon();
