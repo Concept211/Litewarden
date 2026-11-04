@@ -71,11 +71,14 @@ const PIN_TRIES = 5;
 // ---------- small helpers ----------
 
 let apiCache: Api | null = null;
+/** Goes up when an account's data is wiped: work that started before then must not write any of it back. */
+let accountEpoch = 0;
 export async function api(): Promise<Api> {
   const { account, tokens } = await local.get('account', 'tokens');
   if (!account) throw new UserError('Not signed in.');
   if (!apiCache || apiCache.base !== account.server) {
-    apiCache = new Api(account.server, { deviceId: account.deviceId, tokens: tokens ?? null, onTokens: (t) => void local.set({ tokens: t }) });
+    const born = accountEpoch;
+    apiCache = new Api(account.server, { deviceId: account.deviceId, tokens: tokens ?? null, onTokens: (t) => void (born === accountEpoch && local.set({ tokens: t })) });
   } else {
     apiCache.tokens = tokens ?? apiCache.tokens;
   }
@@ -212,6 +215,7 @@ export async function login(p: { server: string; email: string; password: string
 }
 
 async function wipeLocalVault() {
+  accountEpoch++;
   vaultCache = null;
   keysCache = null;
   await local.remove('vault', 'lastSync', 'recent', 'pinWrapped', 'persistedSession', 'tokens');
@@ -361,12 +365,14 @@ export async function lock() {
 }
 
 export async function logout() {
-  const a = await api().catch(() => null);
+  accountEpoch++; // first: a sync on its way back from the server stops here
   await lock();
-  await wipeLocalVault();
-  await local.remove('account', 'tokens');
+  // In line with the vault's other writers, so one already part way through finishes first and is wiped with the rest.
+  await oneAtATime(async () => {
+    await wipeLocalVault();
+    await local.remove('account', 'tokens');
+  });
   apiCache = null;
-  void a;
 }
 
 /** Push the auto-lock deadline out (called on every popup action). */
@@ -429,6 +435,7 @@ function oneAtATime<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 async function doSync(report: boolean) {
+  const signedIn = accountEpoch;
   const a = await api();
   if (report) broadcast({ phase: 'sync', done: 0, total: 0 });
   let data: SyncResponse;
@@ -438,7 +445,8 @@ async function doSync(report: boolean) {
     await local.set({ lastSyncError: err instanceof Error ? err.message : String(err) });
     throw err;
   }
-  return oneAtATime(() => storeSync(data, report));
+  // Signed out while the server was answering: writing this would put the account and vault back.
+  return oneAtATime(async () => (signedIn === accountEpoch ? storeSync(data, report) : { count: 0, changed: 0 }));
 }
 
 async function storeSync(data: SyncResponse, report: boolean) {

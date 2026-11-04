@@ -8,7 +8,7 @@ import type { Page } from '@playwright/test';
 import { CORPUS_PORT, e2eCreds } from './accounts';
 import { EXT, expect, test } from './fixtures';
 import { finishFirstRun, shot, signIn, signOut, watchErrors, budget } from './helpers';
-import { clickIcon, contentCost, frameBox, gone, icons, overlaps, protectedBoxes, serverLogins, surface, tabIdOf, pressOrExplain, createLogins } from './inpage-helpers';
+import { clickIcon, contentCost, frameBox, gone, icons, overlaps, protectedBoxes, serverLogins, surface, tabIdOf, pressOrExplain, createLogins, deleteItems } from './inpage-helpers';
 
 // Independent tests: each opens its own page. Sign-in happens per worker in beforeAll, so after a failure
 // Playwright's fresh worker signs in again and the rest of the file still runs (serial mode would skip it).
@@ -36,7 +36,9 @@ test.beforeAll(async ({ popup, ctx }) => {
   await p.close();
   await p0.close();
 });
-test.afterAll(() => {
+test.afterAll(async () => {
+  // 46 items a run add up and slow every later test on this server. Here, not in the test: each delete pushes to the worker.
+  await deleteItems(/^(A many \d\d|Zz the one)$/);
   if (errors.length) console.log('console errors:\n' + errors.join('\n'));
   expect(errors, 'console errors').toEqual([]);
 });

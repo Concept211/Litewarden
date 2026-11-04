@@ -6,6 +6,9 @@ import type { SiteRule } from './rules';
 import type { SetupSeen } from './twofa';
 import type { IndexItem, PendingSave, PendingTotp, Settings, TeachState } from './store';
 
+/** A message from an extension page. A content script has the same id, but its URL is the web page's. */
+export const fromExtensionPage = (s: chrome.runtime.MessageSender) => s.id === chrome.runtime.id && /^chrome-extension:\/\//.test(s.url ?? '');
+
 export type Status = 'new' | 'locked' | 'unlocked';
 
 export interface StateInfo {

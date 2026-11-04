@@ -23,7 +23,7 @@ File references point at the source as of version 0.1.0.
 | Clipboard contents | The system clipboard | Cleared after 30 seconds by default, but only if it still holds what Litewarden copied (`src/entrypoints/background/clipboard.ts`, `src/entrypoints/offscreen/main.ts`). A SHA-256 of the copied text is kept in `chrome.storage.session` until then. |
 | Unlocked session mirror (user key, org keys) | `chrome.storage.local` (`persistedSession`), only if "Lock when the browser closes" is off | AES-GCM sealed under a non-extractable key in IndexedDB, dropped on every lock (`src/shared/vaultkey.ts`). Never the raw key. |
 | Shared links (see "Shared links" below) | `chrome.storage.local`, inside `vault` | Encrypted exactly as the server stores them. Titles are decrypted only to show the list. |
-| A message being written for a link | `chrome.storage.session` (`popupWhere`) | Memory only, removed on lock. A saved item's fields are kept for 5 minutes at most. |
+| A link being written: its message and password | `chrome.storage.session` (`popupWhere`) | Memory only, removed on lock. A saved item's fields reopen for 5 minutes at most, and are removed the next time the popup opens after that, or on lock, whichever comes first. |
 | Weak-settings notice dismissal | `chrome.storage.local` (`kdfDismissed`) | The KDF settings the user dismissed the notice for. No secret. |
 | "Teach this site" rules | `chrome.storage.local` (`siteRules`) | CSS selectors for a site's fields. No secrets. |
 

@@ -37,6 +37,7 @@ test(`soak ${MINUTES} min on Vaultwarden ${VERSION}`, async () => {
     viewport: { width: 1100, height: 760 },
     args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`, `--remote-debugging-port=${DEBUG_PORT}`, '--host-resolver-rules=MAP *.lw.test 127.0.0.1'],
   });
+  ctx.setDefaultTimeout(30_000); // a stuck step fails naming itself, rather than running out the whole test's clock
   const errors: string[] = [];
   const watch = (p: Page) => {
     p.on('console', (m) => m.type() === 'error' && errors.push(`${p.url().slice(0, 50)}: ${m.text()}`));
@@ -79,6 +80,7 @@ test(`soak ${MINUTES} min on Vaultwarden ${VERSION}`, async () => {
   await p.keyboard.type(PIN);
   await p.click('button:has-text("Turn on PIN")');
   await expect(p.locator('#toast')).toContainText('PIN unlock is on');
+  await p.evaluate(() => chrome.storage.session.remove('popupWhere')); // or the next popup reopens on Settings
   await p.close();
   await tabA.reload();
   await tabA.waitForLoadState('load');
@@ -136,8 +138,8 @@ test(`soak ${MINUTES} min on Vaultwarden ${VERSION}`, async () => {
     await lp.fill('#q', '');
     // 4. in-page menu in the long-lived tab
     await clickIcon(tabA, '#u');
-    await surface(tabA, 'menu');
-    await tabA.keyboard.press('Escape');
+    const menu = await surface(tabA, 'menu');
+    await menu.locator('body').press('Escape'); // into the menu: the long-lived popup tab keeps the page's own keyboard from reaching it
     await expect.poll(() => gone(tabA, 'menu'), { timeout: 5000 }).toBe(true);
     // 5. sync every 3rd cycle, lock and unlock with the PIN every 5th
     if (cycles % 3 === 0) {

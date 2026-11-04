@@ -5,6 +5,7 @@ import { applyLook, boot, type Boot } from './boot';
 import { FirstRun } from './FirstRun';
 import { Main, type MainKeep, type NewPrefill } from './MainView';
 import { Unlock } from './Unlock';
+import { fromExtensionPage } from '../../shared/messages';
 import { here } from './where';
 import { initIcons } from '../../ui/bits';
 import type { PopupScreen, ShareDraft } from '../../shared/store';
@@ -71,8 +72,8 @@ export function App({ boot: initial }: { boot: Boot }) {
   // A pop-out window that was already open comes to the front on the screen a file is being shared from.
   useEffect(() => {
     if (!b.popout) return;
-    const l = (m: { event?: string; draft?: ShareDraft }) => {
-      if (m?.event === 'openShare' && m.draft) setView({ share: { share: 'new', draft: m.draft } });
+    const l = (m: { event?: string; draft?: ShareDraft }, sender: chrome.runtime.MessageSender) => {
+      if (fromExtensionPage(sender) && m?.event === 'openShare' && m.draft) setView({ share: { share: 'new', draft: m.draft } });
     };
     chrome.runtime.onMessage.addListener(l);
     return () => chrome.runtime.onMessage.removeListener(l);

@@ -2,7 +2,7 @@
 // Lock always wins: a read-modify-write that started before lock() must not put the session back.
 // Regression for a CI failure (1.36.0): the popup's start-up "touch" read the session, awaited the settings, and
 // wrote the session back after the user had clicked Lock.
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 type Area = Map<string, unknown>;
 const session: Area = new Map();
@@ -66,5 +66,33 @@ describe('lock wins over writes already in flight', () => {
     await S.touch();
     const s = session.get('session') as { lockAt: number | null };
     expect(s.lockAt).toBeGreaterThan(Date.now());
+  });
+});
+
+describe('signing out wins over a sync already in flight', () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it('a sync answered after logout() does not put the account or vault back', async () => {
+    local.set('account', { server: 'http://test.invalid', email: 'a@b.c', deviceId: 'd', userId: 'u', kdf: {}, encUserKey: 'k' });
+    local.set('tokens', { accessToken: 'a', refreshToken: 'r', expiresAt: Date.now() + 3_600_000 });
+    let answer!: (r: Response) => void;
+    const asked = new Promise<void>((seen) => {
+      globalThis.fetch = (() => {
+        seen();
+        return new Promise<Response>((r) => (answer = r));
+      }) as typeof fetch;
+    });
+    const sync = S.syncNow(false);
+    await asked;
+    await S.logout();
+    expect(local.has('account')).toBe(false);
+    answer(new Response(JSON.stringify({ profile: { id: 'u', key: 'k' }, folders: [], ciphers: [], collections: [], domains: null }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    await sync;
+    expect(local.has('account'), 'account written back after sign-out').toBe(false);
+    expect(local.has('vault'), 'vault written back after sign-out').toBe(false);
+    expect(local.has('lastSync')).toBe(false);
   });
 });

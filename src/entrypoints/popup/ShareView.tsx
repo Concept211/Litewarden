@@ -6,7 +6,7 @@ import { serverMessage } from '../../core/errors';
 import { b64decode } from '../../core/bytes';
 import { SHARE_LASTS, MAX_SHARE_BYTES, composeShare, encryptSendFile, sendContentKey, shareFields, titleFromMessage, type ShareField, type ShareLasts, type ShareOptions, type SharePolicy, type ShareRow } from '../../core/send';
 import { clipHash } from '../../shared/cliphash';
-import { RemoteError, send, type ShareMade } from '../../shared/messages';
+import { RemoteError, fromExtensionPage, send, type ShareMade } from '../../shared/messages';
 import { mem, type PopupScreen, type ShareDraft } from '../../shared/store';
 import { Busy, Toast, useToast } from '../../ui/bits';
 import type { Boot } from './boot';
@@ -136,8 +136,8 @@ function useSharesChanged(fn: () => void) {
   const latest = useRef(fn);
   latest.current = fn;
   useEffect(() => {
-    const l = (m: { event?: string }) => {
-      if (m?.event === 'shares') latest.current();
+    const l = (m: { event?: string }, sender: chrome.runtime.MessageSender) => {
+      if (fromExtensionPage(sender) && m?.event === 'shares') latest.current();
     };
     chrome.runtime.onMessage.addListener(l);
     return () => chrome.runtime.onMessage.removeListener(l);

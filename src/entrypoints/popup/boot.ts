@@ -73,6 +73,9 @@ export async function boot(): Promise<Boot> {
   if (expired) void send('lock');
   const unlocked = !!m.session && !expired;
   const match = tab && m.tabMatches?.[tab.id];
+  const where = unlocked ? pickScreen(m.popupWhere) : null;
+  // Too old to reopen, so it goes now rather than at the lock: it can hold a saved item's fields.
+  if (m.popupWhere && !where) void mem.remove('popupWhere').catch(() => {});
   return {
     view: !l.account ? 'firstrun' : unlocked ? 'main' : 'unlock',
     account: l.account ?? null,
@@ -91,7 +94,7 @@ export async function boot(): Promise<Boot> {
     popout: isPopout(),
     listFolder: l.listFolder ?? 'all',
     listType: l.listType ?? 0,
-    where: unlocked ? pickScreen(m.popupWhere) : null,
+    where,
   };
 }
 
