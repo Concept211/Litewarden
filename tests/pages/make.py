@@ -73,6 +73,30 @@ setInterval(render,250);
 <label for="c">Current password</label><div class="f"><input id="c" type="password" autocomplete="current-password"></div>
 <label for="n1">New password</label><div class="f"><input id="n1" type="password" autocomplete="new-password"></div>
 <label for="n2">Repeat new password</label><div class="f"><input id="n2" type="password" autocomplete="new-password"></div><button type="submit">Change password</button></form>'''),
+    'create-unmarked.html': dict(t='Change password', h='Change password for alice@corpus.test', b='''<form onsubmit="event.preventDefault();out.textContent='sent'">
+<div>Create password</div><div class="f"><input id="n1" name="a1" type="password"></div>
+<div>Confirm password</div><div class="f"><input id="n2" name="a2" type="password"></div><button type="submit">Change password</button><pre id="out"></pre></form>'''),
+    'change-unmarked.html': dict(t='Change password', h='Account settings', b='''<form onsubmit="event.preventDefault()">
+<input type="text" autocomplete="username" value="gen-change@corpus.test" hidden>
+<label for="c">Current password</label><div class="f"><input id="c" type="password"></div>
+<label for="n1">New password</label><div class="f"><input id="n1" type="password"></div>
+<label for="n2">Confirm new password</label><div class="f"><input id="n2" type="password"></div><button type="submit">Save</button></form>'''),
+    'boxes-opaque.html': dict(t='Account', h='Account', b='''<form onsubmit="event.preventDefault()">
+<input type="text" autocomplete="username" value="gen-opaque@corpus.test" hidden>
+<div class="f"><input id="a" name="f1" type="password"></div>
+<div class="f"><input id="b" name="f2" type="password"></div>
+<div class="f"><input id="c" name="f3" type="password"></div><button type="submit">Save</button></form>'''),
+    'new-limits.html': dict(t='Limits', h='Create an account', b='''<form onsubmit="event.preventDefault()">
+<label for="e">Email</label><div class="f"><input id="e" type="email" autocomplete="email"></div>
+<label for="n1">Choose a password</label><div class="f"><input id="n1" type="password" autocomplete="new-password" minlength="12" maxlength="16"></div>
+<label for="n2">Repeat it</label><div class="f"><input id="n2" type="password" autocomplete="new-password" maxlength="16"></div><button type="submit">Create account</button></form>'''),
+    'new-pin.html': dict(t='Choose a PIN', h='Choose a PIN', b='''<form onsubmit="event.preventDefault()">
+<label for="n1">New password</label><div class="f"><input id="n1" type="password" autocomplete="new-password" maxlength="6"></div><button type="submit">Save</button></form>'''),
+    'login-extra.html': dict(t='Login with a code', h='Sign in', s='<style>.trap{position:absolute;left:-5000px}</style>', b='''<form onsubmit="event.preventDefault()">
+<label for="u">Username</label><div class="f"><input id="u" name="username"></div>
+<label for="p">Password</label><div class="f"><input id="p" name="password" type="password"></div>
+<input class="trap" name="password_confirm" type="password" tabindex="-1">
+<label for="s">Security code</label><div class="f"><input id="s" name="security_code" type="password"></div><button type="submit">Sign in</button></form>'''),
     'edge.html': dict(t='Login at the right edge', h='Right-aligned portal', s='<style>main{place-items:start end;padding-right:8px}</style>', b='''<form onsubmit="event.preventDefault();out.textContent='submitted'">
 <label for="u">Email</label><div class="f"><input id="u" type="email" autocomplete="username"></div>
 <label for="p">Password</label><div class="f"><input id="p" type="password" autocomplete="current-password">''' + EYE + '''</div>

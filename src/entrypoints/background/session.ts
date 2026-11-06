@@ -218,7 +218,7 @@ async function wipeLocalVault() {
   accountEpoch++;
   vaultCache = null;
   keysCache = null;
-  await local.remove('vault', 'lastSync', 'recent', 'pinWrapped', 'persistedSession', 'tokens');
+  await local.remove('vault', 'lastSync', 'recent', 'pinWrapped', 'persistedSession', 'tokens', 'generated');
   await dropKey();
   await mem.remove('session', 'index', 'indexCount', 'recentItems', 'notes', 'tabMatches', 'iconCache', 'pinWrapped', 'failures', 'popupWhere');
 }
@@ -428,7 +428,7 @@ export function syncNow(report: boolean) {
  * each write their own copy and the later one would drop the other's item.
  */
 let localChain: Promise<unknown> = Promise.resolve();
-function oneAtATime<T>(fn: () => Promise<T>): Promise<T> {
+export function oneAtATime<T>(fn: () => Promise<T>): Promise<T> {
   const r = localChain.then(fn, fn);
   localChain = r.catch(() => {});
   return r;

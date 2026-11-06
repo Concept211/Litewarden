@@ -6,7 +6,7 @@ permalink: /privacy
 
 # Litewarden privacy policy
 
-Last updated: October 20, 2026
+Last updated: November 6, 2026
 
 Litewarden is a password manager extension for Vaultwarden and other Bitwarden-compatible servers. It is made by
 [Concept211](https://concept211.com). The short version: **we collect nothing.** Litewarden has no account with us,
@@ -25,6 +25,8 @@ To do its job, Litewarden handles your password vault: logins, usernames, passwo
   - an encrypted copy of your vault, so the popup opens quickly;
   - your sign-in tokens for your server;
   - your settings, and any "teach this site" field rules;
+  - passwords you generate on a web page until they're saved as a login: the last 10, for 30 days at most, encrypted
+    with your vault key and never sent to your server;
   - while unlocked, the decryption key and a search index of names, usernames and website addresses. These stay in
     the browser's session memory and are dropped when you lock or close the browser, unless you turn off "Lock when
     the browser closes."

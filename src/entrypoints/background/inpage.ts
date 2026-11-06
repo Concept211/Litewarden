@@ -12,6 +12,7 @@ import type { SiteRule } from '../../shared/rules';
 import { getSettings, local, mem, type IndexItem, type PendingSave, type Settings, type Surface, type TeachState } from '../../shared/store';
 import { copySecret } from './clipboard';
 import { fillForm, fillFrame } from './fill';
+import { forgetGenerated, generatedPassword, keepGenerated, missedFor, pruneGenerated } from './generated';
 import * as S from './session';
 import { forgetTotpTab, onUnlockedTotp, openTotpSurface, twofaCs } from './twofa';
 
@@ -91,8 +92,12 @@ async function menuData(t: string, sender: chrome.runtime.MessageSender): Promis
   const s = await surface(t, sender);
   const [st, { index }, { recent }, { account }, settings] = await Promise.all([S.state(), mem.get('index'), local.get('recent'), local.get('account'), getSettings()]);
   const offer: MenuData['offer'] = s.offer ?? 'login';
-  const base = { site: siteName(hostOf(s.url)), server: account?.server ?? null, theme: settings.theme, totp: {}, offer, pin: st.pinEnabled && settings.pinInMenu };
+  const gen = s.gen ? { ...s.gen, options: settings.gen } : null;
+  const base = { site: siteName(hostOf(s.url)), server: account?.server ?? null, theme: settings.theme, totp: {}, offer, pin: st.pinEnabled && settings.pinInMenu, gen, missed: null as MenuData['missed'] };
   if (st.status !== 'unlocked' || !index) return { ...base, status: st.status, items: [] };
+  if (s.gen) base.missed = await missedFor(s.url).catch(() => null);
+  // A box that wants a new password: saved ones don't go there.
+  if (s.gen?.kind === 'new') return { ...base, status: 'unlocked', items: [] };
   const rank = new Map((recent ?? []).map((id, i) => [id, i]));
   const byUse = (a: IndexItem, b: IndexItem) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999) || a.name.localeCompare(b.name);
   if (offer !== 'login') {
@@ -140,6 +145,49 @@ async function formFill(s: Surface, id: string, force: boolean) {
     await patchSettings({ cardFrames: { ...now.cardFrames, [shop]: [...mine] } });
   }
   return r;
+}
+
+/** Into the boxes the menu opened on. The content script knows them; the worker only passes the password along. */
+async function putGenerated(s: Surface, t: string, password: string): Promise<number> {
+  const r = (await chrome.tabs.sendMessage(s.tabId, { lw: 'gen-fill', token: t, password } satisfies ToCs, { frameId: s.frameId }).catch(() => null)) as { filled?: number } | null;
+  return r?.filled ?? 0;
+}
+
+async function genSurface(t: string, sender: chrome.runtime.MessageSender): Promise<Surface> {
+  const s = await surface(t, sender);
+  if (s.kind !== 'menu' || !s.gen) throw new S.UserError('This box is not a password box.');
+  return s;
+}
+
+async function menuGenFill(t: string, password: string, sender: chrome.runtime.MessageSender) {
+  const s = await genSurface(t, sender);
+  if (!password || password.length > 128) throw new S.UserError('That password can not be used.');
+  // Kept before the page gets it: there's no moment when only the page has it.
+  const id = await keepGenerated(new URL(s.url).origin, password);
+  const filled = await putGenerated(s, t, password);
+  if (!filled) await forgetGenerated(id);
+  return { filled };
+}
+
+async function menuMissed(t: string, id: string, act: Api['menuMissed'][0]['act'], sender: chrome.runtime.MessageSender) {
+  const s = await genSurface(t, sender);
+  if (act === 'forget') {
+    await forgetGenerated(id);
+    return { filled: 0 };
+  }
+  const password = await generatedPassword(new URL(s.url).origin, id);
+  if (!password) throw new S.UserError('That password is no longer kept.');
+  if (act === 'fill') return { filled: await putGenerated(s, t, password) };
+  // Save: the usual card. With one login on the site this is most likely its new password, and the card has an Undo.
+  const { index } = await mem.get('index');
+  const logins = (index ?? []).filter((it) => it.type === 1 && it.uris.length && matchesPage(it.uris, s.url));
+  const one = logins.length === 1 ? logins[0]! : null;
+  const p = token();
+  await setPending(p, { tabId: s.tabId, url: s.url, username: one?.username ?? '', password, current: null, signIn: false, kind: one ? 'update' : 'save', itemId: one?.id ?? null, created: Date.now(), state: 'ask' });
+  await toCs(s, { lw: 'close', token: t });
+  await dropSurface(t);
+  void deliverPrompt(s.tabId, p);
+  return { filled: 0 };
 }
 
 /** The PIN typed in the locked menu. Same tries and lockout as the popup's PIN. */
@@ -317,6 +365,7 @@ async function closePrompt(t: string, tabId: number) {
 /** After an unlock, prompts that were waiting ("Unlock to save") get their real answer. */
 export async function onUnlocked() {
   await onUnlockedTotp().catch(() => {});
+  await pruneGenerated().catch(() => {});
   const all = await pendings();
   const settings = await getSettings();
   for (const [t, p] of Object.entries(all)) {
@@ -383,11 +432,13 @@ export async function openPopup() {
 
 // ---------- message handlers ----------
 
-type ExtHandlers = { [K in 'menuData' | 'menuFill' | 'menuUnlock' | 'surfaceAct' | 'promptData' | 'promptAct' | 'teachData' | 'teachAct' | 'startTeach' | 'openPopup' | 'siteRules' | 'removeRule']: (data: Api[K][0], sender: chrome.runtime.MessageSender) => Promise<Api[K][1]> };
+type ExtHandlers = { [K in 'menuData' | 'menuFill' | 'menuGenFill' | 'menuMissed' | 'menuUnlock' | 'surfaceAct' | 'promptData' | 'promptAct' | 'teachData' | 'teachAct' | 'startTeach' | 'openPopup' | 'siteRules' | 'removeRule']: (data: Api[K][0], sender: chrome.runtime.MessageSender) => Promise<Api[K][1]> };
 
 export const inpageHandlers: ExtHandlers = {
   menuData: ({ token: t }, sender) => menuData(t, sender),
   menuFill: ({ token: t, id, force, stay }, sender) => menuFill(t, id, !!force, !!stay, sender),
+  menuGenFill: ({ token: t, password }, sender) => menuGenFill(t, password, sender),
+  menuMissed: ({ token: t, id, act }, sender) => menuMissed(t, id, act, sender),
   menuUnlock: ({ token: t, pin }, sender) => menuUnlock(t, pin, sender),
   surfaceAct: async ({ token: t, act, w, h }, sender) => {
     // A frame whose record is gone (expired, extension updated) can still close: ask every frame of its tab to drop
@@ -448,9 +499,10 @@ export const csHandlers: CsHandlers = {
       theme: settings.theme,
     };
   },
-  'cs:open': async ({ kind, token: given, offer }, sender) => {
+  'cs:open': async ({ kind, token: given, offer, gen }, sender) => {
     const s: Surface = { kind, tabId: sender.tab!.id!, frameId: sender.frameId!, url: sender.url!, created: Date.now() };
     if (kind === 'menu' && (offer === 'card' || offer === 'identity')) s.offer = offer;
+    else if (kind === 'menu' && gen) s.gen = gen;
     if (kind === 'teach') s.teach = { step: 1, username: null, password: null, totp: null };
     if (kind === 'totp') return openTotpSurface(given, s);
     if (kind === 'prompt') {

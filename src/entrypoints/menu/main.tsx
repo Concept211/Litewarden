@@ -9,8 +9,9 @@ import '@fontsource/hanken-grotesk/latin-700.css';
 import '@fontsource/fragment-mono/latin-400.css';
 import '../../ui/slip.css';
 import '../../ui/inpage.css';
-import { Check } from 'lucide-preact';
+import { Check, RefreshCw, SlidersHorizontal, X } from 'lucide-preact';
 import { expiredMMYY } from '../../core/cards';
+import { generatePassword, GEN_MAX, GEN_MIN, type GenOptions } from '../../core/generator';
 import { secondsRemaining, totp } from '../../core/totp';
 import { send, type MenuData, type RemoteError } from '../../shared/messages';
 import type { IndexItem } from '../../shared/store';
@@ -22,6 +23,15 @@ const WORDS = {
   identity: { filter: 'Filter addresses', what: 'an address', none: 'No addresses saved yet', hint: 'Add an identity with + in the toolbar popup.' },
 } as const;
 import { applyFrameTheme, useAutoSize, useGuard, useHash } from '../../ui/frame';
+
+const ago = (at: number) => {
+  const m = Math.floor((Date.now() - at) / 60_000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m} min ago`;
+  if (m < 1440) return `${Math.floor(m / 60)} hr ago`;
+  const d = Math.floor(m / 1440);
+  return `${d} ${d === 1 ? 'day' : 'days'} ago`;
+};
 
 function Menu() {
   const { token } = useHash();
@@ -37,7 +47,13 @@ function Menu() {
   /** Payment frames from other origins the fill wants to use: asked once per shop. */
   const [frameAsk, setFrameAsk] = useState<{ id: string; origins: string[] } | null>(null);
   /** "Unlocked and filled": shown for a moment, then the menu closes. */
-  const [done, setDone] = useState<string | null>(null);
+  const [done, setDone] = useState<{ title: string; line: string } | null>(null);
+  /** The generator was asked for on a sign-in box (a new password box starts there). */
+  const [genAsked, setGenAsked] = useState(false);
+  const [gen, setGen] = useState<GenOptions | null>(null);
+  const [genPw, setGenPw] = useState('');
+  const [genTune, setGenTune] = useState(false);
+  const fillBtn = useRef<HTMLButtonElement>(null);
   /**
    * Until when (ms) an unlock counts as asked from this menu (PIN here, or Unlock and the popup): the first list
    * that arrives after it fills at once when it has one choice. The list can take a moment (the vault's index is
@@ -55,10 +71,11 @@ function Menu() {
       applyFrameTheme(d.theme);
       if (d.server) await initIcons(d.server);
       setData(d);
+      if (d.gen) setGen((g) => g ?? d.gen!.options);
       if (d.status === 'unlocked' && d.items.length && wantFill.current > Date.now()) {
         wantFill.current = 0;
         const one = d.items.length === 1 ? d.items[0]! : null;
-        if (one) void fillNow(one);
+        if (one) void fillNow(one, d.site);
       }
     } catch (e) {
       // Not "locked": the vault may well be open. Say what failed; Esc and the footer still close the frame.
@@ -108,14 +125,63 @@ function Menu() {
   useEffect(() => {
     // Locked: the PIN boxes have the focus (or, without a PIN, the Unlock button, so Enter unlocks).
     const f = () => {
-      if (!data || data.status === 'unlocked') return input.current?.focus();
+      if (!data || data.status === 'unlocked') return (fillBtn.current ?? input.current)?.focus();
       const box = root.current?.querySelectorAll<HTMLInputElement>('.m-pin input')[Math.min(pin.length, 5)];
       (box ?? unlockBtn.current)?.focus();
     };
     if (document.hasFocus()) f();
     addEventListener('focus', f);
     return () => removeEventListener('focus', f);
-  }, [data]);
+  }, [data, genAsked]);
+
+  const lengthFor = (o: GenOptions) => Math.min(data?.gen?.max ?? GEN_MAX, GEN_MAX, Math.max(data?.gen?.min ?? GEN_MIN, GEN_MIN, o.length));
+  const showGen = data?.status === 'unlocked' && !!data.gen && (data.gen.kind === 'new' || genAsked);
+  // A box's limits decide the length, without changing what's remembered for other sites.
+  useEffect(() => {
+    if (showGen && gen && !genPw) setGenPw(generatePassword({ ...gen, length: lengthFor(gen) }));
+  }, [showGen, gen]);
+
+  function tune(patch: Partial<GenOptions>) {
+    const next = { ...gen!, ...patch };
+    setGen(next);
+    setGenPw(generatePassword({ ...next, length: lengthFor(next) }));
+    void send('setSettings', { gen: next }).catch(() => {});
+  }
+
+  function filledNew(n: number) {
+    if (!n) return setMsg('The password box is no longer on the page, so nothing was filled.');
+    setDone({ title: 'New password filled', line: n > 1 ? `In ${n} boxes. Submit the form to save it.` : 'Submit the form to save it.' });
+    setTimeout(close, 1400);
+  }
+
+  async function fillGenerated(ev: { isTrusted: boolean; type: string }) {
+    if (busy || !genPw || !can(ev)) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      filledNew((await send('menuGenFill', { token, password: genPw })).filled);
+    } catch (e) {
+      setMsg((e as RemoteError).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function missedAct(act: 'fill' | 'save' | 'forget', ev: { isTrusted: boolean; type: string }) {
+    const id = data?.missed?.id;
+    if (busy || !id || !can(ev)) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const { filled } = await send('menuMissed', { token, id, act });
+      if (act === 'fill') filledNew(filled);
+      if (act === 'forget') void load();
+    } catch (e) {
+      setMsg((e as RemoteError).message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const close = () => void send('surfaceAct', { token, act: 'close' }).catch(() => {});
   const unlock = () => {
@@ -170,12 +236,12 @@ function Menu() {
   }
 
   /** Right after an unlock from this menu, with one thing to fill: fill it, say so, close. */
-  async function fillNow(it: IndexItem) {
+  async function fillNow(it: IndexItem, site: string) {
     setBusy(true);
     try {
       const r = await send('menuFill', { token, id: it.id, stay: true });
       if (r.outcome !== 'filled') return outcome(r, it.id);
-      setDone(it.type === 1 ? (it.username ?? it.name) : it.name);
+      setDone({ title: 'Unlocked and filled', line: `${it.type === 1 ? (it.username ?? it.name) : it.name} on ${site}` });
       setTimeout(close, 1400);
     } catch (e) {
       setMsg((e as RemoteError).message);
@@ -197,7 +263,10 @@ function Menu() {
       return unlock();
     }
     if (e.key === 'Enter') {
+      // One of these buttons has the focus (Tab got there): Enter is its own click.
+      if ((e.target as Element | null)?.closest?.('.m-foot, .m-tools, .m-opts, .m-missed')) return;
       e.preventDefault();
+      if (showGen) return void fillGenerated(e);
       const ask = frameAsk?.id ?? confirm;
       const it = ask ? data?.items.find((i) => i.id === ask) : items[sel];
       if (it) void fill(it.id, !!ask, e);
@@ -216,7 +285,25 @@ function Menu() {
 
   const foot = (
     <div class="m-foot">
-      <span class="sp">Esc to close</span>
+      {showGen && data?.gen?.kind === 'signin' ? (
+        <span class="sp">
+          <button onClick={(e) => can(e) && setGenAsked(false)}>Back to logins</button>
+        </span>
+      ) : data?.status === 'unlocked' && data.gen && !showGen ? (
+        <span class="sp">
+          <button
+            onClick={(e) => {
+              if (!can(e)) return;
+              setQ('');
+              setGenAsked(true);
+            }}
+          >
+            Generate password
+          </button>
+        </span>
+      ) : (
+        <span class="sp">Esc to close</span>
+      )}
       <button onClick={(e) => can(e) && void send('surfaceAct', { token, act: 'teach' })}>Wrong fields?</button>
       <button onClick={(e) => can(e) && void send('surfaceAct', { token, act: 'hide' })}>Hide here</button>
     </div>
@@ -243,16 +330,85 @@ function Menu() {
             <Check />
           </span>
           <div class="t">
-            <b>Unlocked and filled</b>
-            <span>
-              {done} on {data.site}
-            </span>
+            <b>{done.title}</b>
+            <span>{done.line}</span>
           </div>
         </div>
       </div>
     );
   const locked = data.status !== 'unlocked';
   const w = WORDS[data.offer];
+  const missedRow = data.missed && !genTune && (
+    <div class="m-missed">
+      <div>
+        <b>Generated here {ago(data.missed.at)}</b>
+        <span>Not saved as a login</span>
+      </div>
+      <button onClick={(e) => void missedAct('fill', e)}>Fill</button>
+      <button onClick={(e) => void missedAct('save', e)}>Save</button>
+      <button class="ib" aria-label="Forget this password" title="Forget this password" onClick={(e) => void missedAct('forget', e)}>
+        <X />
+      </button>
+    </div>
+  );
+  if (showGen && gen) {
+    const len = lengthFor(gen);
+    const boxes = data.gen!.boxes;
+    return (
+      <div class="menu" ref={root}>
+        {blocked && <div class="blocked">Part of this menu is hidden by the page, so clicks are ignored.</div>}
+        <div class="m-gen">
+          <button ref={fillBtn} class="m-use" onClick={(e) => void fillGenerated(e)}>
+            <b>Use this new password</b>
+            <span data-pw>{genPw}</span>
+          </button>
+          <div class="m-tools">
+            <button class={`ib${genTune ? ' on' : ''}`} aria-label="Options" title="Options" aria-expanded={genTune} onClick={() => setGenTune(!genTune)}>
+              <SlidersHorizontal />
+            </button>
+            <button class="ib" aria-label="Another one" title="Another one" onClick={() => setGenPw(generatePassword({ ...gen, length: len }))}>
+              <RefreshCw />
+            </button>
+          </div>
+        </div>
+        {genTune ? (
+          <div class="m-opts">
+            <div class="r">
+              <span>Length</span>
+              <span class="m-step">
+                <button aria-label="Shorter" disabled={len <= Math.max(data.gen!.min ?? GEN_MIN, GEN_MIN)} onClick={() => tune({ length: len - 1 })}>
+                  −
+                </button>
+                <span data-len>{len}</span>
+                <button aria-label="Longer" disabled={len >= Math.min(data.gen!.max ?? GEN_MAX, GEN_MAX)} onClick={() => tune({ length: len + 1 })}>
+                  +
+                </button>
+              </span>
+            </div>
+            <div class="r">
+              <span>Symbols</span>
+              <label class="sw">
+                <input type="checkbox" role="switch" aria-label="Symbols" checked={gen.symbols} onChange={(e) => tune({ symbols: (e.currentTarget as HTMLInputElement).checked })} />
+                <i />
+              </label>
+            </div>
+            <div class="r">
+              <span>Numbers</span>
+              <label class="sw">
+                <input type="checkbox" role="switch" aria-label="Numbers" checked={gen.digits} onChange={(e) => tune({ digits: (e.currentTarget as HTMLInputElement).checked })} />
+                <i />
+              </label>
+            </div>
+          </div>
+        ) : (
+          !data.missed && <div class="m-note">{boxes === 1 ? 'Fills this box.' : boxes === 2 ? 'Fills both boxes.' : `Fills all ${boxes} boxes.`} Litewarden offers to save it when you submit.</div>
+        )}
+        {missedRow}
+        {msg && <div class="m-msg">{msg}</div>}
+        {foot}
+      </div>
+    );
+  }
   return (
     <div class="menu" ref={root}>
       <label class="m-top">
@@ -276,7 +432,7 @@ function Menu() {
       ) : locked ? (
         <div class="m-msg">
           <b>Litewarden is locked</b>
-          Unlock it to fill {w.what} here.
+          {data.gen?.kind === 'new' ? 'Unlock it to generate a password here.' : `Unlock it to fill ${w.what} here.`}
           {pinErr && (
             <span class="m-err" role="alert">
               {pinErr}
@@ -347,6 +503,7 @@ function Menu() {
           </button>
         </div>
       )}
+      {!locked && missedRow}
       {msg && <div class="m-msg">{msg}</div>}
       {foot}
     </div>

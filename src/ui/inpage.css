@@ -83,3 +83,31 @@ html.is-menu .app{height:auto;overflow:visible}
 .m-sec{padding:6px 12px 2px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
 .m-row .pill{flex:none}
 .menu:has(.m-confirm) #mlist{max-height:96px}
+
+/* Generating a password in the menu */
+.m-gen{position:relative;margin:8px 6px 4px;border-radius:11px;background:var(--accent-tint);border:1.5px solid var(--accent)}
+.m-use{display:block;width:100%;text-align:left;padding:8px 66px 8px 10px;border-radius:9px;color:var(--ink)}
+.m-use:focus-visible{outline:none}
+.m-use b{display:block;font-size:13.5px;line-height:24px;white-space:nowrap}
+.m-use span{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;width:calc(300px - 46px);margin-top:3px;font-family:var(--mono);font-size:12.5px;line-height:1.35;word-break:break-all}
+.m-tools{position:absolute;top:6px;right:6px;display:flex;gap:2px}
+.m-tools .ib{width:26px;height:26px;border-radius:7px;color:var(--accent-text)}
+.m-tools .ib:hover,.m-tools .ib.on{background:var(--surface);color:var(--accent-text)}
+.m-tools .ib svg.lucide{width:15px;height:15px}
+.m-note{padding:2px 12px 9px;font-size:12px;color:var(--muted);line-height:1.4}
+.m-opts{padding:0 12px 8px;font-size:12.5px}
+.m-opts .r{display:flex;align-items:center;justify-content:space-between;height:30px}
+.m-step{display:flex;align-items:center;gap:8px;font-family:var(--mono)}
+.m-step button{width:24px;height:24px;border-radius:7px;background:var(--raised);color:var(--ink);display:grid;place-items:center}
+.m-step button:disabled{opacity:.4;cursor:not-allowed}
+.m-opts .sw{width:30px;height:18px}
+.m-opts .sw i::after{left:2px;top:2px;width:14px;height:14px}
+.m-opts .sw input:checked+i::after{transform:translateX(12px)}
+.m-missed{display:flex;align-items:center;gap:8px;margin:2px 6px 6px;border-radius:11px;background:var(--raised);padding:7px 4px 7px 10px}
+.m-missed>div{flex:1;min-width:0}
+.m-missed b{display:block;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m-missed span{display:block;color:var(--muted);font-size:11.5px}
+.m-missed>button{flex:none;color:var(--accent-text);font-weight:700;font-size:12px}
+.m-missed .ib{width:22px;height:22px;color:var(--muted)}
+.m-missed .ib svg.lucide{width:13px;height:13px}
+.menu:has(.m-missed) #mlist{max-height:96px}

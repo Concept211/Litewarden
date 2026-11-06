@@ -26,6 +26,7 @@ File references point at the source as of version 0.1.0.
 | A link being written: its message and password | `chrome.storage.session` (`popupWhere`) | Memory only, removed on lock. A saved item's fields reopen for 5 minutes at most, and are removed the next time the popup opens after that, or on lock, whichever comes first. |
 | Weak-settings notice dismissal | `chrome.storage.local` (`kdfDismissed`) | The KDF settings the user dismissed the notice for. No secret. |
 | "Teach this site" rules | `chrome.storage.local` (`siteRules`) | CSS selectors for a site's fields. No secrets. |
+| Generated passwords no login holds yet | `chrome.storage.local` (`generated`) | Encrypted with the user key, together with the origin they were made on. The last 10, for 30 days at most. Never sent to the server, and offered only on that exact origin. Removed on sign-out, and when the menu finds that password in one of the site's logins. |
 
 ## What is stored where, and who can read it
 
@@ -40,6 +41,7 @@ browser's files on disk; that is out of scope (see below) and listed only for co
 | PIN-wrapped user key (if "Keep the PIN after a restart") | `storage.local` | Encrypted by a key derived from the PIN through the account KDF | Yes | **No** (fence); and it is ciphertext anyway | Yes, then guesses the PIN offline |
 | Session mirror (if "Lock when the browser closes" is off) | `storage.local` | AES-GCM under a non-extractable WebCrypto key held in IndexedDB | Yes | **No**: fenced, and IndexedDB belongs to the extension's origin, so even a content script that got past the fence reads only ciphertext | Yes: the key is in the same profile |
 | User key, org keys, decrypted index, PIN-wrapped key (default) | `storage.session` (memory) | Not on disk | Yes | **No**: session storage is trusted contexts only by default, and we set it explicitly | Only by reading browser memory |
+| Generated passwords no login holds yet | `storage.local` | Encrypted with the user key | Yes | **No** (fence); and it is ciphertext anyway | Ciphertext only |
 | Clipboard hash | `storage.session` | Not on disk | Yes | No | Only by reading browser memory |
 | Master password | Popup memory while typing | Never stored | n/a | n/a | n/a |
 

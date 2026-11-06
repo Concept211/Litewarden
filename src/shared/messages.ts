@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Typed messages between extension pages (popup, offscreen) and the service worker.
 import type { Draft, FullItem, ServerInfo, ShareOptions, SharePolicy, ShareRow } from '../core';
+import type { GenOptions } from '../core/generator';
 import type { Captured } from './fields';
 import type { SiteRule } from './rules';
 import type { SetupSeen } from './twofa';
-import type { IndexItem, PendingSave, PendingTotp, Settings, TeachState } from './store';
+import type { GenFor, IndexItem, PendingSave, PendingTotp, Settings, TeachState } from './store';
 
 /** A message from an extension page. A content script has the same id, but its URL is the web page's. */
 export const fromExtensionPage = (s: chrome.runtime.MessageSender) => s.id === chrome.runtime.id && /^chrome-extension:\/\//.test(s.url ?? '');
@@ -80,6 +81,10 @@ export interface Api {
   menuData: [{ token: string }, MenuData];
   /** `stay`: keep the menu open after filling (it shows "Unlocked and filled", then closes itself). */
   menuFill: [{ token: string; id: string; force?: boolean; stay?: boolean }, FillResult];
+  /** Fill the page's box with a password the menu generated. It's kept (encrypted) first. */
+  menuGenFill: [{ token: string; password: string }, { filled: number }];
+  /** A generated password no login holds yet: put it in the box again, offer to save it, or let it go. */
+  menuMissed: [{ token: string; id: string; act: 'fill' | 'save' | 'forget' }, { filled: number }];
   /** The PIN typed in the locked in-page menu. */
   menuUnlock: [{ token: string; pin: string }, { status: 'ok' }];
   /** Menu / prompt / panel tells its content script something (natural size, close, start teaching, hide here). */
@@ -127,6 +132,10 @@ export interface MenuData {
   totp: Record<string, string>;
   server: string | null;
   theme: Settings['theme'];
+  /** On a password box: what to generate for, and the generator's remembered choices. */
+  gen: (GenFor & { options: GenOptions }) | null;
+  /** The newest password generated on this site that no login holds yet. */
+  missed: { id: string; at: number } | null;
 }
 
 export interface PromptData {
@@ -167,7 +176,7 @@ export interface TotpData {
 export interface CsApi {
   'cs:hello': [{ top: boolean }, CsHello];
   /** A new surface. Prompts pass the pending-save token they were given, so the prompt frame finds its data. */
-  'cs:open': [{ kind: 'menu' | 'prompt' | 'teach' | 'totp'; token?: string; offer?: 'card' | 'identity' }, { token: string; signIn?: boolean }];
+  'cs:open': [{ kind: 'menu' | 'prompt' | 'teach' | 'totp'; token?: string; offer?: 'card' | 'identity'; gen?: GenFor }, { token: string; signIn?: boolean }];
   /** A card or address field in a small frame (a payment company's): the top page opens the menu beside that frame.
    * Answer: whether it did. */
   'cs:menuUp': [{ offer: 'card' | 'identity'; w: number; h: number }, { ok: boolean }];
@@ -207,6 +216,8 @@ export type ToCs =
   | { lw: 'prompt'; token: string }
   /** Show the 2FA card. */
   | { lw: 'totp'; token: string }
+  /** Put a generated password in the boxes the menu with this token opened on. The answer says how many. */
+  | { lw: 'gen-fill'; token: string; password: string }
   /** Type this code into the page's 2FA code field. The answer says whether there was one. */
   | { lw: 'otp-code'; code: string };
 

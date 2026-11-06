@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // What Litewarden keeps where. Two rules:
-//  - chrome.storage.local (disk) only ever holds encrypted vault data, tokens, settings and the account's
+//  - chrome.storage.local (disk) only ever holds encrypted vault data and generated passwords, tokens, settings and the account's
 //    public facts. Never a key, a password or a decrypted name. The one exception, the session mirror for
 //    "lock when the browser closes: off", is sealed (vaultkey.ts).
 //  - chrome.storage.session (memory, cleared when the browser closes) holds the unlocked session: the user key,
@@ -171,6 +171,15 @@ export interface LocalStore {
   listFolder?: string;
   /** The list's type filter (1 logins, 2 notes, 3 cards, 4 identities), 0 for every type. */
   listType?: number;
+  /** Passwords generated from the in-page menu, newest first, until they're in a login (background/generated.ts). */
+  generated?: GeneratedPassword[];
+}
+
+export interface GeneratedPassword {
+  id: string;
+  at: number;
+  /** The password and the origin it was made on, encrypted with the user key. */
+  enc: string;
 }
 
 /** One Litewarden surface drawn on a page (menu, save prompt, teach panel), known by a random token. */
@@ -186,6 +195,18 @@ export interface Surface {
   teach?: TeachState;
   /** Menu: what it offers. Logins when unset; cards on a card field, identities on an address field. */
   offer?: 'card' | 'identity';
+  /** Menu on a password box: what it can generate for. */
+  gen?: GenFor;
+}
+
+/** A password box the menu opened on. `new`: it wants a new password. `signin`: it looks like a sign-in, so it's a link. */
+export interface GenFor {
+  kind: 'new' | 'signin';
+  /** How many boxes it would fill. */
+  boxes: number;
+  /** From the boxes' own limits. */
+  min?: number;
+  max?: number;
 }
 
 export interface TeachState {

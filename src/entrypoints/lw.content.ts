@@ -5,12 +5,13 @@
 // when the page changes). It never reads the vault. The menu, prompt and panel are extension pages in iframes
 // (the page can't read or script them); this script only places them so they cover nothing, and tells the
 // worker what the user submitted. Everything Litewarden draws lives in one closed shadow root.
-import { capture, inputs, isPassword, isUsernameCandidate, loginFields, looksLikeLogin, scopeOf, setValue, strongUser, visible, type Role } from '../shared/fields';
+import { GEN_MIN } from '../core/generator';
+import { capture, freshPasswords, generateTargets, inputs, isPassword, isUsernameCandidate, loginFields, looksLikeLogin, scopeOf, setValue, strongUser, visible, type Role } from '../shared/fields';
 import { addrPart, cardPart, formFields, looksLikeForm } from '../shared/forms';
 import type { CsApi, CsHello, ToCs } from '../shared/messages';
 import { placeMenu, placePanel, placePrompt, type Rect } from '../shared/place';
 import { refFor, resolve, type SiteRule } from '../shared/rules';
-import type { TeachState } from '../shared/store';
+import type { GenFor, TeachState } from '../shared/store';
 import { codeFields, findSetup, type SetupSeen } from '../shared/twofa';
 
 const KEEP =
@@ -220,7 +221,10 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
         [r.password, 'password'],
       ] as const) {
         const el = resolve(ref);
-        if (el && !found.some((f) => f.el === el)) found.push({ el, role });
+        const seen = found.find((f) => f.el === el);
+        // A taught box is what the user said it is.
+        if (seen) seen.role = role;
+        else if (el) found.push({ el, role });
       }
     }
     // The card and address scan reads every field: only on pages with a hint of one (one cheap query first).
@@ -331,6 +335,35 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
     onScroll();
   };
 
+  // ---------- generating a password ----------
+  /** Boxes Litewarden put a new password in, so the submit saves that one whatever the page calls them. */
+  const generatedInto = new WeakSet<HTMLInputElement>();
+  /** Filling moves the focus from box to box: that isn't the user asking for a menu there. */
+  let quietUntil = 0;
+
+  function genFor(a: HTMLElement): GenFor | undefined {
+    if (!(a instanceof HTMLInputElement) || !isPassword(a)) return undefined;
+    const boxes = generateTargets(a);
+    const limit = (v: number[], pick: (...n: number[]) => number) => (v.length ? pick(...v) : undefined);
+    const max = limit(boxes.map((b) => b.maxLength).filter((n) => n > 0), Math.min);
+    const min = limit(boxes.map((b) => b.minLength).filter((n) => n > 0), Math.max);
+    if (max !== undefined && max < GEN_MIN) return undefined; // a PIN box, not a password
+    const taught = !!conf?.rule && resolve(conf.rule.password) === a;
+    const kind = !taught && freshPasswords(boxes).has(a) ? 'new' : 'signin';
+    return { kind, boxes: boxes.length, ...(min !== undefined && { min }), ...(max !== undefined && { max }) };
+  }
+
+  function genFill(password: string): number {
+    if (!(menu?.anchor instanceof HTMLInputElement) || !menu.anchor.isConnected) return 0;
+    const boxes = generateTargets(menu.anchor);
+    quietUntil = Date.now() + 500;
+    for (const b of boxes) {
+      setValue(b, password);
+      generatedInto.add(b);
+    }
+    return boxes.length;
+  }
+
   // ---------- in-page menu ----------
   let menuSeq = 0;
   async function openMenu(anchor: HTMLElement, focus: boolean, offer?: 'card' | 'identity') {
@@ -346,7 +379,8 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
     }
     let token: string;
     try {
-      token = (await cs('cs:open', { kind: 'menu', ...(offer ? { offer } : {}) })).token;
+      const gen = offer ? undefined : genFor(anchor);
+      token = (await cs('cs:open', { kind: 'menu', ...(offer ? { offer } : {}), ...(gen ? { gen } : {}) })).token;
     } catch {
       return;
     }
@@ -383,7 +417,7 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
 
   function onSubmit(from: Element) {
     if (teach) return;
-    const c = capture(from);
+    const c = capture(from, generatedInto);
     if (!c) {
       // Two-step login, page 1: remember the username for the password page.
       const scope = (from as HTMLInputElement).form ?? from.closest('form') ?? scopeOf(from);
@@ -739,7 +773,7 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
 
   function onFocus(e: FocusEvent) {
     // Not while the save card is up: two of our surfaces at once crowd the form. The field icon still opens it.
-    if (!conf?.menuOnFocus || teach || prompt) return;
+    if (!conf?.menuOnFocus || teach || prompt || Date.now() < quietUntil) return;
     const t = e.composedPath()[0];
     if (t === handedBack) return void (handedBack = null);
     if (t instanceof HTMLInputElement && icons.has(t) && menu?.anchor !== t) void openMenu(t, false, offerOf(icons.get(t)?.role));
@@ -759,7 +793,7 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
     switch (m.lw) {
       case 'size':
         if (menu?.token === m.token) {
-          menu.h = Math.max(120, Math.min(236, m.h));
+          menu.h = Math.max(60, Math.min(236, m.h));
           placeMenuFrame();
         } else if (card?.token === m.token && !card.bar) {
           card.h = Math.max(60, Math.min(420, m.h));
@@ -807,6 +841,9 @@ function start(ctx: { onInvalidated: (cb: () => void) => void; isInvalid: boolea
         break;
       case 'totp':
         void showCard(m.token);
+        break;
+      case 'gen-fill':
+        if (menu?.token === m.token) reply({ filled: genFill(m.password) });
         break;
       case 'otp-code':
         if (window === window.top) reply({ filled: typeCode(m.code) });

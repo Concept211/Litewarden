@@ -110,6 +110,9 @@ on self-hosted servers. Litewarden is a smaller client that does the everyday th
   - It uses the Send feature of Bitwarden-compatible servers, so links show up in the official apps too. Your server
     needs to be reachable by the people you share with, over HTTPS.
 - **Item view and editor** with a password generator, password history, website match types and the 2FA secret.
+- **New passwords from the page.** On a create or confirm box, the in-page menu offers a new password in one click.
+  It fills both boxes and fits the box's length limit, and the save card appears when you submit. If no card appears,
+  the menu offers that password again on the same site.
 - **Live sync** through your server's notifications hub, plus a sync timer and a sync button.
 - **Pop-out window** that stays open, three popup sizes, and light and dark themes.
 - **Keyboard first** (see below).

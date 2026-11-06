@@ -36,8 +36,6 @@ export function isPassword(el: HTMLInputElement): boolean {
   return TEXTY.has(el.type) && (a.includes('current-password') || a.includes('new-password'));
 }
 
-export const isNewPassword = (el: HTMLInputElement) => ac(el).includes('new-password');
-
 export function describe(el: HTMLInputElement): string {
   const label = el.labels?.[0]?.textContent ?? '';
   return [el.name, el.id, el.placeholder, el.getAttribute('aria-label') ?? '', label].join(' ');
@@ -77,6 +75,76 @@ export function partnerOf(password: HTMLInputElement, users: HTMLInputElement[])
   return pool.filter(strongUser).pop() ?? pool.filter((u) => USERISH.test(describe(u))).pop() ?? pool.pop() ?? null;
 }
 
+const OLD_BOX = /(^|[^a-z])old|(pass|pwd).?old|current|existing/i;
+const NEW_BOX = /(new|create|choose|pick|set|make|sign.?up|regist\w*).{0,16}(pass|pwd)|(pass|pwd).{0,12}new/i;
+const AGAIN_BOX = /confirm|repeat|re-?type|re-?enter|again|verify|(pass|pwd|pw)\w*2\b/i;
+const NOT_AGAIN = /code|otp|\bpin\b/i;
+
+export interface PwBox {
+  auto: string[];
+  text: string;
+}
+
+/**
+ * Which of a form's password boxes want a new password. Many forms don't mark theirs, so names and labels count. A box
+ * that says "confirm" only counts after another password box: alone, it's asking for the password you already have.
+ */
+export function wantsNew(boxes: PwBox[]): boolean[] {
+  const marked = (b: PwBox) => b.auto.includes('new-password');
+  const old = boxes.map((b) => b.auto.includes('current-password') || (!marked(b) && OLD_BOX.test(b.text)));
+  const fresh = boxes.map((b, i) => !old[i] && (marked(b) || NEW_BOX.test(b.text)));
+  boxes.forEach((b, i) => {
+    if (!i || old[i] || !AGAIN_BOX.test(b.text) || NOT_AGAIN.test(b.text)) return;
+    fresh[i] = true;
+    if (!old[i - 1]) fresh[i - 1] = true;
+  });
+  return fresh;
+}
+
+/** What a box says about itself, plus the text just before it, for labels not tied to their field. */
+function boxText(el: HTMLInputElement): string {
+  const doc = el.ownerDocument;
+  const by = (el.getAttribute('aria-labelledby') ?? '').split(/\s+/).map((id) => (id ? doc.getElementById(id)?.textContent : '') ?? '');
+  const prev = el.labels?.length ? null : (el.previousElementSibling ?? el.parentElement?.previousElementSibling);
+  const near = prev?.textContent?.trim() ?? '';
+  return [describe(el), ...by, near.length < 40 ? near : ''].join(' ');
+}
+
+/** On the page at all: forms hide trap fields far off screen, and those mustn't count as a second box. */
+function onPage(el: HTMLInputElement): boolean {
+  const r = el.getBoundingClientRect();
+  return r.right + scrollX > 0 && r.bottom + scrollY > 0;
+}
+
+/** The password boxes that want a new password, of `pws` (visible ones, in page order), form by form. */
+export function freshPasswords(pws: HTMLInputElement[]): Set<HTMLInputElement> {
+  const out = new Set<HTMLInputElement>();
+  const groups = new Map<Node, HTMLInputElement[]>();
+  for (const p of pws) {
+    if (!onPage(p)) continue;
+    const k = p.form ?? p.getRootNode();
+    const g = groups.get(k);
+    if (g) g.push(p);
+    else groups.set(k, [p]);
+  }
+  for (const g of groups.values()) {
+    const fresh = wantsNew(g.map((el) => ({ auto: ac(el), text: boxText(el) })));
+    g.forEach((el, i) => fresh[i] && out.add(el));
+  }
+  return out;
+}
+
+/** The boxes a generated password goes into, starting from the one the menu opened on. */
+export function generateTargets(anchor: HTMLInputElement): HTMLInputElement[] {
+  const k = anchor.form ?? anchor.getRootNode();
+  const pws = inputs(anchor.form ?? (anchor.getRootNode() as Document | ShadowRoot)).filter((i) => visible(i) && isPassword(i) && (i.form ?? i.getRootNode()) === k);
+  if (!pws.includes(anchor)) return [anchor];
+  const fresh = freshPasswords(pws);
+  if (fresh.size) return pws.filter((p) => fresh.has(p));
+  // Nothing says "new" here: this box, and any empty ones after it (a "confirm" we couldn't recognize).
+  return pws.slice(pws.indexOf(anchor)).filter((p, i) => !i || !p.value);
+}
+
 export interface Plan {
   username: HTMLInputElement | null;
   password: HTMLInputElement | null;
@@ -88,16 +156,17 @@ export function plan(root: Document | ShadowRoot | Element = document): Plan {
   const pws = all.filter(isPassword);
   const current = pws.find((p) => ac(p).includes('current-password'));
   // Never put the saved password into a "new password" field (signup and change-password forms).
-  const password = current ?? pws.find((p) => !isNewPassword(p)) ?? null;
+  const fresh = pws.length ? freshPasswords(pws) : null;
+  const password = current ?? pws.find((p) => !fresh?.has(p)) ?? null;
   const users = all.filter(isUsernameCandidate);
   if (password) return { username: partnerOf(password, users), password };
   // Two-step login: a page with only the username step. Only a field that clearly asks for it.
   return { username: users.find(strongUser) ?? users.find((u) => USERISH.test(describe(u))) ?? null, password: null };
 }
 
-export type Role = 'username' | 'password';
+export type Role = 'username' | 'password' | 'new';
 
-/** Every field that gets the Litewarden icon: current-password fields, their usernames, and two-step username pages. */
+/** Every field that gets the Litewarden icon: password fields, the usernames of sign-in ones, and two-step username pages. */
 export function loginFields(root: Document | ShadowRoot = document): Array<{ el: HTMLInputElement; role: Role }> {
   const all = inputs(root).filter(visible);
   const users = all.filter(isUsernameCandidate);
@@ -109,12 +178,17 @@ export function loginFields(root: Document | ShadowRoot = document): Array<{ el:
       out.push({ el, role });
     }
   };
-  const pws = all.filter((p) => isPassword(p) && !isNewPassword(p));
+  const pws = all.filter(isPassword);
+  const fresh = pws.length ? freshPasswords(pws) : null;
   for (const p of pws) {
+    if (fresh?.has(p)) {
+      add(p, 'new');
+      continue;
+    }
     add(partnerOf(p, users), 'username');
     add(p, 'password');
   }
-  if (!pws.length && !all.some(isPassword)) add(users.find(strongUser) ?? users.find((u) => loneStepUser(u, all)) ?? null, 'username');
+  if (!pws.length) add(users.find(strongUser) ?? users.find((u) => loneStepUser(u, all)) ?? null, 'username');
   return out;
 }
 
@@ -138,17 +212,18 @@ export interface Captured {
 
 /**
  * What the user just submitted from the form around `from` (a form, a field or a button): the username and the
- * password worth saving. Null when there is no non-empty password.
+ * password worth saving. Null when there is no non-empty password. `ours`: boxes Litewarden put a new password in.
  */
-export function capture(from: Element): Captured | null {
+export function capture(from: Element, ours?: WeakSet<HTMLInputElement>): Captured | null {
   const form = (from as HTMLInputElement).form ?? from.closest('form');
   const scope: Element | Document = form ?? scopeOf(from);
   const all = inputs(scope).filter((i) => i.isConnected && !i.disabled);
   const vis = all.filter(visible);
   const pws = vis.filter((i) => isPassword(i) && i.value);
   if (!pws.length) return null;
-  const news = pws.filter(isNewPassword);
-  const cur = pws.find((p) => ac(p).includes('current-password')) ?? pws.find((p) => !isNewPassword(p)) ?? null;
+  const fresh = freshPasswords(vis.filter(isPassword));
+  const news = pws.filter((p) => fresh.has(p) || ours?.has(p));
+  const cur = pws.find((p) => ac(p).includes('current-password')) ?? pws.find((p) => !news.includes(p)) ?? null;
   // Change password: current + new (+ repeat). Signup: new (+ repeat). Login: one password.
   const password = news[0]?.value ?? cur?.value ?? '';
   if (!password) return null;
