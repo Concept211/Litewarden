@@ -11,8 +11,11 @@ html.is-menu .app{height:auto;overflow:visible}
 .m-msg{padding:4px 12px 10px;font-size:12.5px;color:var(--muted);line-height:1.45}
 .m-msg b{color:var(--ink);display:block;font-size:13px;margin-bottom:2px}
 .m-msg .btn{margin-top:8px;height:30px;padding:0 12px}
-.m-confirm{margin:0 8px 8px;padding:8px 10px;border-radius:10px;background:var(--accent-tint);font-size:12.5px;display:flex;align-items:center;gap:8px}
-.m-confirm span{flex:1}.m-confirm .btn{height:28px;padding:0 10px;flex:none}
+.m-ask{padding:12px 12px 10px}
+.m-ask b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m-ask p{margin:3px 0 10px;font-size:12.5px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
+.m-ask p .h{color:var(--ink);font-weight:600}
+.m-ask-acts{display:flex;justify-content:flex-end;gap:6px}.m-ask-acts .btn{height:30px;padding:0 14px}
 .blocked{padding:6px 12px;font-size:11.5px;color:var(--warn-ink);background:var(--warn)}
 .prompt{height:auto}
 .p-sub{color:var(--muted);font-size:12px;font-weight:500;display:block;margin-top:1px}
@@ -82,7 +85,6 @@ html.is-menu .app{height:auto;overflow:visible}
 .m-link:hover{text-decoration:underline}
 .m-sec{padding:6px 12px 2px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
 .m-row .pill{flex:none}
-.menu:has(.m-confirm) #mlist{max-height:96px}
 
 /* Generating a password in the menu */
 .m-gen{position:relative;margin:8px 6px 4px;border-radius:11px;background:var(--accent-tint);border:1.5px solid var(--accent)}

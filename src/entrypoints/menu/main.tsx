@@ -132,7 +132,7 @@ function Menu() {
     if (document.hasFocus()) f();
     addEventListener('focus', f);
     return () => removeEventListener('focus', f);
-  }, [data, genAsked]);
+  }, [data, genAsked, frameAsk, confirm]);
 
   const lengthFor = (o: GenOptions) => Math.min(data?.gen?.max ?? GEN_MAX, GEN_MAX, Math.max(data?.gen?.min ?? GEN_MIN, GEN_MIN, o.length));
   const showGen = data?.status === 'unlocked' && !!data.gen && (data.gen.kind === 'new' || genAsked);
@@ -226,6 +226,7 @@ function Menu() {
     setBusy(true);
     setMsg(null);
     setFrameAsk(null);
+    setConfirm(null);
     try {
       outcome(await send('menuFill', { token, id, force }), id);
     } catch (e) {
@@ -264,7 +265,7 @@ function Menu() {
     }
     if (e.key === 'Enter') {
       // One of these buttons has the focus (Tab got there): Enter is its own click.
-      if ((e.target as Element | null)?.closest?.('.m-foot, .m-tools, .m-opts, .m-missed')) return;
+      if ((e.target as Element | null)?.closest?.('.m-foot, .m-tools, .m-opts, .m-missed, .m-ask-acts')) return;
       e.preventDefault();
       if (showGen) return void fillGenerated(e);
       const ask = frameAsk?.id ?? confirm;
@@ -409,6 +410,46 @@ function Menu() {
       </div>
     );
   }
+  // A question before filling takes the list's place: below a list, the compact menu beside a box cut it off.
+  const askId = !locked ? (frameAsk?.id ?? confirm) : null;
+  if (askId) {
+    const it = data.items.find((i) => i.id === askId);
+    const hosts = frameAsk?.origins.map((o) => o.replace(/^https?:\/\//, '')) ?? [];
+    const from = hosts.length > 2 ? `${hosts.slice(0, 2).join(', ')} and ${hosts.length - 2} more` : hosts.join(' and ');
+    return (
+      <div class="menu" ref={root}>
+        {blocked && <div class="blocked">Part of this menu is hidden by the page, so clicks are ignored.</div>}
+        <div class="m-ask" role="alertdialog" aria-labelledby="m-ask-t" aria-describedby="m-ask-d">
+          <b id="m-ask-t">Fill {it?.name ?? (frameAsk ? `this ${data.offer === 'card' ? 'card' : 'address'}` : 'this login')}?</b>
+          <p id="m-ask-d">
+            {frameAsk ? (
+              <>
+                The {data.offer === 'card' ? 'card' : 'address'} boxes are in frames from <span class="h">{from}</span>, not {data.site}.
+              </>
+            ) : (
+              <>This login is saved for another site, not {data.site}.</>
+            )}
+          </p>
+          <div class="m-ask-acts">
+            <button
+              class="btn sec"
+              onClick={(e) => {
+                if (!can(e)) return;
+                setFrameAsk(null);
+                setConfirm(null);
+              }}
+            >
+              Back
+            </button>
+            <button ref={fillBtn} class="btn" onClick={(e) => void fill(askId, true, e)}>
+              {frameAsk ? 'Fill' : 'Fill anyway'}
+            </button>
+          </div>
+        </div>
+        {msg && <div class="m-msg">{msg}</div>}
+      </div>
+    );
+  }
   return (
     <div class="menu" ref={root}>
       <label class="m-top">
@@ -483,24 +524,6 @@ function Menu() {
               {q ? 'Try another word.' : w.hint}
             </div>
           )}
-        </div>
-      )}
-      {frameAsk && (
-        <div class="m-confirm">
-          <span>
-            The {data.offer === 'card' ? 'card' : 'address'} boxes are in frames from {frameAsk.origins.map((o) => o.replace(/^https?:\/\//, '')).join(', ')} on {data.site}. Fill them?
-          </span>
-          <button class="btn" onClick={(e) => void fill(frameAsk.id, true, e)}>
-            Fill
-          </button>
-        </div>
-      )}
-      {confirm && (
-        <div class="m-confirm">
-          <span>This login is saved for another site. Fill it here?</span>
-          <button class="btn" onClick={(e) => void fill(confirm, true, e)}>
-            Fill anyway
-          </button>
         </div>
       )}
       {!locked && missedRow}

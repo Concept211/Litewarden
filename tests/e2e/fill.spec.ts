@@ -199,6 +199,8 @@ test('sign-up form: the birth date in month, day and year menus, and a "Sex" men
 
 test("payment company's frames: the menu opens on the page beside the card box; asks once per shop, then fills straight away", async ({ ctx }) => {
   const p = await page(ctx, C('checkout-frames.html'));
+  // A short window: the menu is the compact one, where the question used to be cut off below the list.
+  await p.setViewportSize({ width: 900, height: 330 });
   const num = p.frames().find((f) => f.url().includes('/pay-number.html'))!;
   const exp = () => p.frames().find((f) => f.url().includes('/pay-exp.html'))!;
   await expect.poll(async () => (await icons(p, num)).length).toBe(1);
@@ -211,12 +213,23 @@ test("payment company's frames: the menu opens on the page beside the card box; 
   expect(box.height).toBeGreaterThan(120);
   await filterRun(m, 2);
   await m.locator('.m-top input').press('Enter');
-  await expect(m.locator('.m-confirm')).toContainText(`frames from frames.example-lw.test:${CORPUS_PORT} on corpus.lw.test. Fill them?`);
+  await expect(m.locator('.m-ask')).toContainText(`frames from frames.example-lw.test:${CORPUS_PORT}, not corpus.lw.test.`);
   await p.waitForTimeout(400);
   await shot(p, 'fill-card-frames-ask-light', 1);
-  // Nothing went into the frames before the answer.
+  // The whole question and its buttons are inside the frame on the page.
+  const fb = (await (await m.frameElement()).boundingBox())!;
+  for (const b of [m.locator('.m-ask p'), m.locator('.m-ask-acts .btn').last()]) {
+    const r = (await b.boundingBox())!;
+    expect(r.y + r.height).toBeLessThanOrEqual(fb.y + fb.height + 0.5);
+  }
+  // Back returns to the list; nothing went into the frames before the answer.
+  await m.locator('.m-ask-acts .btn').first().press('Enter');
+  await expect(m.locator('.m-ask')).toHaveCount(0);
+  await expect(m.locator('#mlist .m-row').first()).toBeVisible();
   await expect(num.locator('#n')).toHaveValue('');
   await m.locator('.m-top input').press('Enter');
+  await expect(m.locator('.m-ask-acts .btn').last()).toBeFocused();
+  await m.locator('.m-ask-acts .btn').last().press('Enter');
   await expect(num.locator('#n')).toHaveValue('4242424242424242');
   await expect(exp().locator('#e')).toHaveValue('08 / 31');
   await expect(exp().locator('#c')).toHaveValue('123');
@@ -232,7 +245,7 @@ test("payment company's frames: the menu opens on the page beside the card box; 
   await filterRun(m2, 2);
   await m2.locator('.m-top input').press('Enter');
   await expect(num2.locator('#n')).toHaveValue('4242424242424242');
-  await expect(m2.locator('.m-confirm')).toHaveCount(0);
+  await expect(m2.locator('.m-ask')).toHaveCount(0);
   await p.close();
 });
 
