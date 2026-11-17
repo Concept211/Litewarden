@@ -456,6 +456,22 @@ textarea.masked{-webkit-text-security:disc}
 .share .add-chip.on{border-style:solid;border-color:transparent;background:var(--accent-tint)}
 .share .body-foot{padding:10px 12px 12px;border-top:1px solid var(--line);flex:none;background:var(--ground)}
 .share .body-foot .note{margin-bottom:8px}
+.share .seg.lasts button{padding:0 6px;display:inline-flex;align-items:center;justify-content:center;gap:4px;white-space:nowrap}
+.share .seg.lasts svg.lucide{width:13px;height:13px;flex:none}
+.share .f-msg.ends b{color:var(--ink);font-weight:700}
+.share .f-msg.ends.err{color:var(--low)}
+[data-theme=dark] .share .f-msg.ends.err{color:var(--warn-ink)}
+.cal{background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:6px 8px 8px;margin-top:8px}
+.cal-h{display:flex;align-items:center;justify-content:space-between;font-size:13px;padding-bottom:4px}
+.cal-h .ib{width:28px;height:28px}
+.cal-h .ib:disabled{opacity:.35;cursor:default;background:none}
+.cal-g{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}
+.cal-g i{font-style:normal;font-size:10.5px;font-weight:700;color:var(--muted);padding:2px 0 4px;text-transform:uppercase;overflow:hidden;white-space:nowrap}
+.cal-g button{height:30px;border-radius:8px;font-weight:600;font-size:12.5px;color:var(--ink)}
+.cal-g button:hover:not(:disabled){background:var(--accent-tint)}
+.cal-g button.today{box-shadow:inset 0 0 0 1.5px var(--line)}
+.cal-g button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);box-shadow:none}
+.cal-g button:disabled{color:var(--muted);opacity:.45;cursor:default}
 .share .drop{display:block;width:100%;border:1.5px dashed var(--line);border-radius:12px;background:var(--surface);padding:18px 12px;text-align:center;font-size:12.5px;line-height:1.4;color:var(--muted);cursor:pointer}
 .share .drop:hover,.share .drop.over,.share .drop:focus-within{border-color:var(--accent);background:var(--accent-tint)}
 .share .drop b{display:block;color:var(--ink);font-size:13.5px;margin:6px 0 2px}

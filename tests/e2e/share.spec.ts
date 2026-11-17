@@ -168,6 +168,66 @@ test('a first line that could be the secret is not used as the title', async ({ 
   await p.close();
 });
 
+test('pick a date: the calendar stops inside the 31 days servers allow, the link ends that night, and presets are kept, not the day', async ({ popup }) => {
+  const p = await links(popup);
+  await newMessage(p, 'date-picked-spike-value');
+  const day = (n: number) => {
+    const t = new Date();
+    const d = new Date(t.getFullYear(), t.getMonth(), t.getDate() + n);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  // Date opens the calendar on today. Days before today and past the limit can't be picked.
+  await p.click('#share-date');
+  await expect(p.locator('#share-cal')).toBeVisible();
+  await expect(p.locator('#share-date')).toHaveAttribute('aria-pressed', 'true');
+  await expect(p.getByRole('button', { name: '7 days' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(p.locator(`[data-day="${day(0)}"]`)).toBeFocused();
+  const before = p.locator(`[data-day="${day(-1)}"]`);
+  if (await before.count()) await expect(before).toBeDisabled();
+  await shot(p, 'share-date-open');
+  // Esc closes the calendar, not the screen, and says a day is still needed.
+  await p.keyboard.press('Escape');
+  await expect(p.locator('#share-cal')).toHaveCount(0);
+  await expect(p.locator('.hdr h1')).toHaveText('New link');
+  await expect(p.locator('.f-msg.ends')).toHaveText('Pick the last day the link works.');
+  // Create without a day opens the calendar again.
+  await p.click('#share-create');
+  await expect(p.locator('#share-cal')).toBeVisible();
+  // Arrows move by day and week; Enter picks.
+  await p.keyboard.press('ArrowRight');
+  await p.keyboard.press('ArrowDown');
+  await expect(p.locator(`[data-day="${day(8)}"]`)).toBeFocused();
+  await p.keyboard.press('Enter');
+  await expect(p.locator('#share-cal')).toHaveCount(0);
+  await expect(p.locator('#share-date')).toBeFocused();
+  await expect(p.locator('.f-msg.ends')).toContainText('11:59');
+  // End goes to the last day there is: 30 days out, near enough. The day after it is off.
+  await p.click('#share-date');
+  await expect(p.locator(`[data-day="${day(8)}"]`)).toBeFocused();
+  await p.keyboard.press('End');
+  const last = await p.evaluate(() => (document.activeElement as HTMLElement).dataset.day!);
+  expect([day(29), day(30)]).toContain(last);
+  const after = p.locator(`[data-day="${day(31)}"]`);
+  if (await after.count()) await expect(after).toBeDisabled();
+  await shot(p, 'share-date-last');
+  await p.keyboard.press('Enter');
+  const [y, m, d] = last.split('-').map(Number);
+  const label = new Date(y!, m! - 1, d!).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  await expect(p.locator('#share-date')).toContainText(label);
+  await shot(p, 'share-date-picked');
+  // The server takes the farthest day, and the link ends at 11:59 PM on it.
+  await create(p);
+  await expect(p.locator('.facts')).toContainText(`${label}, ${y}`);
+  await expect(p.locator('.facts')).toContainText('11:59');
+  // A picked day isn't kept for the next link; the last preset is.
+  await p.getByRole('button', { name: 'Done' }).click();
+  await p.getByRole('button', { name: 'New link' }).click();
+  await expect(p.locator('#share-date')).toHaveAttribute('aria-pressed', 'false');
+  await expect(p.locator('#share-date')).toHaveText('Date');
+  await expect(p.locator('.seg.lasts button[aria-pressed=true]')).toHaveCount(1);
+  await p.close();
+});
+
 test('one view: the second open says it no longer exists, and the list moves it to Finished', async ({ popup }) => {
   const p = await links(popup);
   await newMessage(p, 'one view only\nspike-once-value');
@@ -499,6 +559,13 @@ test('the popup holds together at every size, light and dark', async ({ popup, s
       await p.getByRole('button', { name: 'Hide my email' }).click();
       await shot(p, `share-new-${size}-${theme}`, 1);
       await noOverflow();
+      // The calendar fits too, and the screen scrolls to it.
+      await p.click('#share-date');
+      await p.locator('#share-cal').scrollIntoViewIfNeeded();
+      await shot(p, `share-date-${size}-${theme}`, 1);
+      await noOverflow();
+      await p.keyboard.press('Escape');
+      await expect(p.locator('#share-cal')).toHaveCount(0);
       // The Create button is always in view, below a body that scrolls.
       const b = await p.locator('#share-create').boundingBox();
       expect(b!.y + b!.height).toBeLessThanOrEqual(h);

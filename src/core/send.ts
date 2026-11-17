@@ -28,6 +28,44 @@ export const SHARE_LASTS = {
 } as const;
 export type ShareLasts = keyof typeof SHARE_LASTS;
 
+/** Vaultwarden and Bitwarden refuse a link that lasts longer than this. */
+export const SHARE_MAX_MS = 31 * 86_400_000;
+/** Said when a picked end has passed, or is past the servers' limit. */
+export const SHARE_DATE_ERR = 'Pick an end date from today to 30 days from now.';
+/** Room for the time between picking a day and the server reading the request. */
+const SHARE_SLACK_MS = 10 * 60_000;
+
+/** A picked day's link ends at 11:59 PM there, in this browser's time zone. `day` is "YYYY-MM-DD". */
+export function dayEnd(day: string): number {
+  const [y, m, d] = parseDay(day);
+  return new Date(y, m - 1, d, 23, 59).getTime();
+}
+
+/** "YYYY-MM-DD" as year, month (1 to 12) and day. */
+export function parseDay(day: string): [number, number, number] {
+  const [y = 0, m = 1, d = 1] = day.split('-').map(Number);
+  return [y, m, d];
+}
+
+export const dayKey = (t: Date): string => `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+
+/** Whether a link can end on this day: still ahead, and inside the servers' limit. */
+export const dayOk = (day: string, now = Date.now()): boolean => {
+  const end = dayEnd(day);
+  return end > now && end < now + SHARE_MAX_MS - SHARE_SLACK_MS;
+};
+
+/** The days a link can end on, today first. Usually 31; one fewer near a clock change. */
+export function shareDays(now = Date.now()): string[] {
+  const out: string[] = [];
+  const t = new Date(now);
+  for (let i = 0; i <= 31; i++) {
+    const k = dayKey(new Date(t.getFullYear(), t.getMonth(), t.getDate() + i));
+    if (dayOk(k, now)) out.push(k);
+  }
+  return out;
+}
+
 // ---------- server payload shapes ----------
 
 export interface SendRecord {
@@ -92,6 +130,8 @@ export function sendLink(urls: ServerUrls, accessId: string, material: Uint8Arra
 export interface ShareOptions {
   title: string;
   lasts: ShareLasts;
+  /** A picked end, in ms. Wins over `lasts`. */
+  until?: number | null;
   oneView: boolean;
   password: string | null;
   hideEmail: boolean;
@@ -99,7 +139,8 @@ export interface ShareOptions {
 
 /** The fields every kind of share has. The link ends and the server removes the contents at the same moment. */
 async function commonBody(c: Crypto, o: ShareOptions, material: Uint8Array, key: SymKey, userKey: SymKey, now: number) {
-  const end = new Date(now + SHARE_LASTS[o.lasts].ms).toISOString();
+  if (o.until != null && !(o.until > now && o.until < now + SHARE_MAX_MS)) throw new RangeError(SHARE_DATE_ERR);
+  const end = new Date(o.until ?? now + SHARE_LASTS[o.lasts].ms).toISOString();
   return {
     name: await c.encryptString(o.title, key),
     notes: null,

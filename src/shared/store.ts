@@ -306,6 +306,8 @@ export interface ShareDraft {
   password: string | null;
   hideEmail: boolean;
   lasts: ShareLasts;
+  /** The Date choice instead of `lasts`: the day picked ("YYYY-MM-DD"), or "" before one is. */
+  until?: string | null;
   /** Sharing a saved item: its id, and the fields tapped on. */
   fromItem?: string;
   picked?: string[];

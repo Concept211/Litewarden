@@ -6,13 +6,18 @@ import { webCrypto as C } from '../../src/core/crypto';
 import {
   buildFileSend,
   buildTextSend,
+  SHARE_MAX_MS,
   composeShare,
+  dayEnd,
+  dayKey,
+  dayOk,
   encryptSendFile,
   encryptedFileLength,
   readShare,
   sendContentKey,
   sendLink,
   sendPasswordHash,
+  shareDays,
   shareClosed,
   shareFields,
   sharePolicy,
@@ -82,6 +87,19 @@ describe('building and reading', () => {
 
     const row = await readShare(C, record(body, { accessCount: 0 }), userKey, NOW);
     expect(row).toMatchObject({ kind: 'text', title: 'Staging DB', views: 0, maxViews: 1, hasPassword: true, hideEmail: true, closed: false });
+  });
+
+  it('a picked end wins over the preset, for the link and the contents both', async () => {
+    const until = NOW + 3 * 864e5 + 5000;
+    const { body } = await buildTextSend(C, opts({ lasts: '1h', until }), 'x', userKey, NOW);
+    expect(body.expirationDate).toBe(new Date(until).toISOString());
+    expect(body.deletionDate).toBe(body.expirationDate);
+  });
+
+  it('refuses a picked end that has passed or is past the 31 days servers allow', async () => {
+    for (const until of [NOW - 1, NOW, NOW + SHARE_MAX_MS, NOW + SHARE_MAX_MS + 1]) {
+      await expect(buildTextSend(C, opts({ until }), 'x', userKey, NOW)).rejects.toThrow(/30 days/);
+    }
   });
 
   it('leaves the password off when none is set', async () => {
@@ -193,4 +211,32 @@ describe('a title from the message', () => {
     ['a'.repeat(61)],
     ['   '],
   ])('never uses what could be the secret: %j', (text) => expect(titleFromMessage(text)).toBeNull());
+});
+
+describe('picking the day a link ends', () => {
+  it('ends at 11:59 PM on that day, here', () => {
+    const e = new Date(dayEnd('2026-11-28'));
+    expect([e.getFullYear(), e.getMonth(), e.getDate(), e.getHours(), e.getMinutes()]).toEqual([2026, 10, 28, 23, 59]);
+  });
+
+  it('offers today through about 30 days out, every one inside the limit', () => {
+    const days = shareDays(NOW);
+    expect(days[0]).toBe(dayKey(new Date(NOW)));
+    expect(days.length).toBeGreaterThanOrEqual(30);
+    expect(days.length).toBeLessThanOrEqual(31);
+    for (const d of days) expect(dayEnd(d) - NOW).toBeLessThan(SHARE_MAX_MS);
+    // Days in a row, none skipped.
+    for (let i = 1; i < days.length; i++) expect(dayEnd(days[i]!) - dayEnd(days[i - 1]!)).toBeGreaterThan(22 * 3600e3);
+  });
+
+  it('says no to yesterday and to a day past the limit', () => {
+    const t = new Date(NOW);
+    expect(dayOk(dayKey(new Date(t.getFullYear(), t.getMonth(), t.getDate() - 1)), NOW)).toBe(false);
+    expect(dayOk(dayKey(new Date(t.getFullYear(), t.getMonth(), t.getDate() + 32)), NOW)).toBe(false);
+  });
+
+  it('drops today once it is 11:59 PM', () => {
+    const late = new Date(2026, 10, 4, 23, 59, 30).getTime();
+    expect(shareDays(late)[0]).toBe('2026-11-05');
+  });
 });

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Share by secure link: the list of links, the New link screen (a message, a file or a saved item) and a link's page.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { ArrowLeft, Check, Clock, Copy, Eye, FileUp, Link as LinkIcon, Lock, MailX, MessageSquareText, Paperclip, Plus, Trash2, X } from 'lucide-preact';
+import { ArrowLeft, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Copy, Eye, FileUp, Link as LinkIcon, Lock, MailX, MessageSquareText, Paperclip, Plus, Trash2, X } from 'lucide-preact';
 import { serverMessage } from '../../core/errors';
 import { b64decode } from '../../core/bytes';
-import { SHARE_LASTS, MAX_SHARE_BYTES, composeShare, encryptSendFile, sendContentKey, shareFields, titleFromMessage, type ShareField, type ShareLasts, type ShareOptions, type SharePolicy, type ShareRow } from '../../core/send';
+import { SHARE_LASTS, MAX_SHARE_BYTES, composeShare, dayEnd, dayKey, dayOk, parseDay, shareDays, encryptSendFile, sendContentKey, shareFields, titleFromMessage, type ShareField, type ShareLasts, type ShareOptions, type SharePolicy, type ShareRow } from '../../core/send';
 import { clipHash } from '../../shared/cliphash';
 import { RemoteError, fromExtensionPage, send, type ShareMade } from '../../shared/messages';
 import { mem, type PopupScreen, type ShareDraft } from '../../shared/store';
@@ -143,6 +143,98 @@ function useSharesChanged(fn: () => void) {
     return () => chrome.runtime.onMessage.removeListener(l);
   }, []);
 }
+
+/** The days a link can end on, a month at a time. Arrow keys move between days, like the browser's own date picker. */
+function Calendar({ days, value, onPick }: { days: string[]; value: string | null; onPick: (day: string) => void }) {
+  const ok = useMemo(() => new Set(days), [days]);
+  const firstDay = days[0] ?? dayKey(new Date());
+  const lastDay = days[days.length - 1] ?? firstDay;
+  const start = value && ok.has(value) ? value : firstDay;
+  const [focus, setFocus] = useState(start);
+  const [month, setMonth] = useState(start.slice(0, 7));
+  const grid = useRef<HTMLDivElement>(null);
+  // The day to move the focus to once it's on screen; the picked day, or today, when the calendar opens.
+  const want = useRef<string | null>(start);
+  useLayoutEffect(() => {
+    if (!want.current) return;
+    grid.current?.querySelector<HTMLButtonElement>(`[data-day="${want.current}"]`)?.focus();
+    want.current = null;
+  });
+
+  const [y, m] = parseDay(`${month}-01`);
+  const lead = new Date(y, m - 1, 1).getDay();
+  const count = new Date(y, m, 0).getDate();
+  const first = firstDay.slice(0, 7);
+  const last = lastDay.slice(0, 7);
+  const today = dayKey(new Date());
+  const turn = (n: number) => {
+    const k = dayKey(new Date(y, m - 1 + n, 1)).slice(0, 7);
+    setMonth(k);
+    const inMonth = days.filter((d) => d.startsWith(k));
+    const f = value && inMonth.includes(value) ? value : inMonth[0];
+    if (f) setFocus(f);
+  };
+  const go = (k: string) => {
+    if (!ok.has(k)) return;
+    want.current = k;
+    setFocus(k);
+    setMonth(k.slice(0, 7));
+    grid.current?.querySelector<HTMLButtonElement>(`[data-day="${k}"]`)?.focus();
+  };
+  const onKey = (e: KeyboardEvent) => {
+    const [a, b, c] = parseDay(focus);
+    const step = ({ ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 } as Record<string, number>)[e.key];
+    if (step) go(dayKey(new Date(a, b - 1, c + step)));
+    else if (e.key === 'Home') go(firstDay);
+    else if (e.key === 'End') go(lastDay);
+    else return;
+    e.preventDefault();
+  };
+  const cells = [];
+  for (let i = 0; i < lead; i++) cells.push(<span key={`l${i}`} />);
+  for (let d = 1; d <= count; d++) {
+    const k = `${month}-${String(d).padStart(2, '0')}`;
+    const at = new Date(y, m - 1, d);
+    cells.push(
+      <button
+        key={k}
+        type="button"
+        data-day={k}
+        class={k === today ? 'today' : undefined}
+        disabled={!ok.has(k)}
+        tabIndex={k === focus ? 0 : -1}
+        aria-pressed={k === value}
+        aria-label={at.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+        onClick={() => onPick(k)}
+      >
+        {d}
+      </button>,
+    );
+  }
+  return (
+    <div class="cal" id="share-cal" role="group" aria-label="The last day the link works">
+      <div class="cal-h">
+        <button type="button" class="ib" aria-label="Previous month" disabled={month <= first} onClick={() => turn(-1)}>
+          <ChevronLeft />
+        </button>
+        <b aria-live="polite">{new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</b>
+        <button type="button" class="ib" aria-label="Next month" disabled={month >= last} onClick={() => turn(1)}>
+          <ChevronRight />
+        </button>
+      </div>
+      <div class="cal-g" ref={grid} onKeyDown={onKey}>
+        {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+          <i key={i} aria-hidden="true">
+            {new Date(2026, 10, 15 + i).toLocaleDateString(undefined, { weekday: 'short' })}
+          </i>
+        ))}
+        {cells}
+      </div>
+    </div>
+  );
+}
+
+const endsText = (day: string) => new Date(dayEnd(day)).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 function useEsc(fn: () => void) {
   const latest = useRef(fn);
@@ -355,6 +447,16 @@ function NewLink({
   const [err, setErr] = useState<string | null>(null);
   const [pwErr, setPwErr] = useState(false);
   const [discard, setDiscard] = useState(false);
+  const [cal, setCal] = useState(false);
+  const [dateErr, setDateErr] = useState(false);
+  const days = useMemo(() => shareDays(), [cal]);
+  const untilOk = draft.until != null && dayOk(draft.until);
+  const backToDate = useRef(false);
+  useLayoutEffect(() => {
+    if (cal || !backToDate.current) return;
+    backToDate.current = false;
+    document.getElementById('share-date')?.focus();
+  }, [cal]);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const pwRef = useRef<HTMLInputElement>(null);
   const set = (patch: Partial<ShareDraft>) => onDraft({ ...draft, ...patch });
@@ -389,6 +491,7 @@ function NewLink({
   useEsc(() => {
     if (busy) return;
     if (discard) return setDiscard(false);
+    if (cal) return setCal(false);
     close();
   });
 
@@ -426,6 +529,10 @@ function NewLink({
   async function create() {
     if (!ready || busy) return;
     setErr(null);
+    if (draft.until != null && !untilOk) {
+      setDateErr(true);
+      return setCal(true);
+    }
     if (draft.password != null && !draft.password) {
       setPwErr(true);
       return pwRef.current?.focus();
@@ -433,6 +540,7 @@ function NewLink({
     const options: ShareOptions = {
       title: draft.title.trim() || suggested,
       lasts: draft.lasts,
+      until: draft.until != null ? dayEnd(draft.until) : null,
       oneView: draft.oneView,
       password: draft.password || null,
       hideEmail: draft.hideEmail && !policy.noHideEmail,
@@ -440,7 +548,8 @@ function NewLink({
     setBusy('Creating');
     try {
       const made = isFile ? await uploadFile(file!, options, setBusy) : await send('shareText', { options, text: draft.text });
-      void send('setSettings', { shareLasts: draft.lasts }).catch(() => {});
+      // A picked day goes stale, so only the presets are kept for next time.
+      if (draft.until == null) void send('setSettings', { shareLasts: draft.lasts }).catch(() => {});
       await copyLink(made.link);
       onMade(made.row.id);
     } catch (e) {
@@ -559,13 +668,61 @@ function NewLink({
           <p class="lbl-row">
             <span>Link lasts</span>
           </p>
-          <div class="seg full" role="group" aria-label="Link lasts">
+          <div class="seg full lasts" role="group" aria-label="Link lasts">
             {(Object.keys(SHARE_LASTS) as ShareLasts[]).map((k) => (
-              <button key={k} aria-pressed={draft.lasts === k} onClick={() => set({ lasts: k })}>
+              <button
+                key={k}
+                aria-pressed={draft.until == null && draft.lasts === k}
+                onClick={() => {
+                  setCal(false);
+                  setDateErr(false);
+                  set({ lasts: k, until: null });
+                }}
+              >
                 {SHARE_LASTS[k].label}
               </button>
             ))}
+            <button
+              id="share-date"
+              aria-pressed={draft.until != null}
+              aria-expanded={cal}
+              aria-controls="share-cal"
+              aria-label={untilOk ? `Ends ${endsText(draft.until!)}. Change the date` : 'Pick an end date'}
+              title={untilOk ? 'Change the date' : 'Pick an end date'}
+              onClick={() => {
+                if (draft.until == null) set({ until: '' });
+                setCal(draft.until == null || !cal);
+              }}
+            >
+              <CalendarDays />
+              {untilOk ? fmtDay(dayEnd(draft.until!)) : 'Date'}
+            </button>
           </div>
+          {cal && (
+            <Calendar
+              days={days}
+              value={draft.until || null}
+              onPick={(day) => {
+                set({ until: day });
+                setDateErr(false);
+                setCal(false);
+                backToDate.current = true;
+              }}
+            />
+          )}
+          {draft.until != null && !cal && (
+            <p class={`f-msg ends${dateErr ? ' err' : ''}`} role={dateErr ? 'alert' : undefined}>
+              {untilOk ? (
+                <>
+                  Ends <b>{endsText(draft.until)}</b>
+                </>
+              ) : draft.until ? (
+                'That day has passed. Pick another.'
+              ) : (
+                'Pick the last day the link works.'
+              )}
+            </p>
+          )}
         </div>
         <div class="tgl">
           <span>

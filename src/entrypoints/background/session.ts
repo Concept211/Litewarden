@@ -25,6 +25,8 @@ import {
   loadKeys,
   normalizeServerUrl,
   MAX_SHARE_BYTES,
+  SHARE_DATE_ERR,
+  SHARE_MAX_MS,
   parseLoose,
   readShare,
   resolveUrl,
@@ -804,8 +806,14 @@ async function requireAccount() {
   return account;
 }
 
+/** A picked end that has gone by while the screen sat open, say. */
+function checkUntil(o: ShareOptions, now = Date.now()) {
+  if (o.until != null && !(o.until > now && o.until < now + SHARE_MAX_MS)) throw new UserError(SHARE_DATE_ERR);
+}
+
 export async function shareText(options: ShareOptions, text: string): Promise<ShareMade> {
   if (!text.trim()) throw new UserError('Write the message first.');
+  checkUntil(options);
   if ((await sharePolicyNow()).disabled) throw new UserError("Your organization's policy doesn't allow shared links.");
   const [{ userKey }, account, a] = await Promise.all([sessionKeys(), requireAccount(), api()]);
   const { body, material } = await buildTextSend(C, options, text, userKey);
@@ -821,6 +829,7 @@ export async function shareText(options: ShareOptions, text: string): Promise<Sh
 
 export async function shareFileStart(options: ShareOptions, fileName: string, size: number): Promise<ShareUpload> {
   if (size > MAX_SHARE_BYTES) throw new UserError('That file is over the 100 MB limit.');
+  checkUntil(options);
   if ((await sharePolicyNow()).disabled) throw new UserError("Your organization's policy doesn't allow shared links.");
   const [{ userKey }, account, a] = await Promise.all([sessionKeys(), requireAccount(), api()]);
   const { body, material, encName } = await buildFileSend(C, options, fileName, size, userKey);
