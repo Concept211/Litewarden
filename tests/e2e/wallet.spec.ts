@@ -66,6 +66,12 @@ test('"+" W makes a wallet: network from the name, key and phrase checked, saved
   await p.keyboard.type(`${RUN} Hyperliquid main`);
   await expect(p.locator('#f-network')).toHaveValue('hyperliquid');
   await expect(p.locator('.f-hint').first()).toContainText('Set from the name');
+  // A network of your own keeps the spaces typed into its name.
+  await p.selectOption('#f-network', '__other');
+  await p.locator('#f-network-other').fill('');
+  await p.locator('#f-network-other').pressSequentially('Base Sepolia');
+  await expect(p.locator('#f-network-other')).toHaveValue('Base Sepolia');
+  await p.selectOption('#f-network', 'hyperliquid');
   // A short address gets a warning, the full one doesn't.
   await p.fill('#f-address', ADDR.slice(0, -2));
   await expect(p.locator('.field.err .f-msg')).toHaveText('This 0x address is 2 characters short.');
@@ -77,6 +83,11 @@ test('"+" W makes a wallet: network from the name, key and phrase checked, saved
   await expect(p.locator('.f-hint.ok')).toHaveText('Matches the address');
   await p.fill('#f-seed', SEED.replace('about', 'abuot'));
   await expect(p.locator('.field.err .f-msg')).toHaveText('Word 12, "abuot", isn\'t on the standard list.');
+  // Typed key by key while masked: every space stays.
+  await p.fill('#f-seed', '');
+  await p.locator('#f-seed').pressSequentially(SEED);
+  await expect(p.locator('#f-seed')).toHaveValue(SEED);
+  await expect(p.locator('.f-hint.ok').last()).toHaveText('12 words, all on the standard list');
   // Pasted as a numbered list: tidied on leaving the box.
   await p.fill('#f-seed', SEED.split(' ').map((w, i) => `${i + 1}. ${w}`).join('\n'));
   await p.locator('#f-name').focus();

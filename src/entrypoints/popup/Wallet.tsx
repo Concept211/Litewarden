@@ -224,7 +224,12 @@ export function WalletForm({ fields, name, nameErr, onName, onFields }: { fields
   const network = w?.network ?? '';
   const address = w?.address ?? '';
   const key = w?.privateKey ?? '';
-  const seed = w?.seed ?? '';
+  // The boxes show what was typed: walletOf trims, and a trimmed value fed back would eat each space as it's typed.
+  const typed = (p: WalletPart) => {
+    const at = w?.at[p];
+    return at === undefined ? '' : (fields[at]?.value ?? '');
+  };
+  const seed = typed('seed');
   const [auto, setAuto] = useState<'address' | 'name' | 'site' | null>(network ? null : 'address');
   const [other, setOther] = useState(!!network && !networkById(network));
   // Masked while typed too (someone may be looking over your shoulder); the eye shows them.
@@ -311,7 +316,7 @@ export function WalletForm({ fields, name, nameErr, onName, onFields }: { fields
         </div>
         {other && (
           <span class="inp" style={{ marginTop: '6px' }}>
-            <input id="f-network-other" aria-label="Network name" placeholder="Network name" value={network} onInput={(e) => set('network', val(e))} />
+            <input id="f-network-other" aria-label="Network name" placeholder="Network name" value={typed('network')} onInput={(e) => set('network', val(e))} />
           </span>
         )}
         {auto && net && (
