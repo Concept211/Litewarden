@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Api, compareVersions, normalizeServerUrl, parsePrelogin, type Cipher, type SyncResponse } from '../../src/core/api';
 import { b64encode } from '../../src/core/bytes';
 import { webCrypto as C } from '../../src/core/crypto';
-import { ServerUnreachable, TwoFactorRequired, UnsupportedKeyFormat, WrongPassword, WrongTwoFactorCode } from '../../src/core/errors';
+import { ServerUnreachable, SessionEnded, TwoFactorRequired, UnsupportedKeyFormat, WrongPassword, WrongTwoFactorCode } from '../../src/core/errors';
 import { assertSupportedAccount, decryptItem, decryptList, loadKeys, unlockWithPassword } from '../../src/core/vault';
 
 /** A fake fetch that answers from a route table. */
@@ -91,6 +91,45 @@ describe('login errors', () => {
     await api.sync();
     expect(api.tokens?.access_token).toBe('B');
     expect(saved).toHaveLength(2);
+  });
+  it('a refresh that fails on the way keeps the sign-in, and the next sync works', async () => {
+    for (const bad of [[502, '<html>Bad gateway</html>'], [429, null], [403, '<html>Blocked</html>'], [400, '<html>Bad request</html>'], [200, '<html>Starting</html>']] as Array<[number, unknown]>) {
+      let down = true;
+      let ok = false;
+      const saved: unknown[] = [];
+      const api = new Api('http://t.local', {
+        tokens: { access_token: 'A', refresh_token: 'R' },
+        onTokens: (t) => saved.push(t),
+        fetch: fakeFetch({
+          'POST /identity/connect/token': () => (down ? bad : ((ok = true), [200, { access_token: 'B' }])),
+          'GET /api/sync': () => (ok ? [200, { ciphers: [] }] : [401, null]),
+        }),
+      });
+      await expect(api.sync()).rejects.toMatchObject({ name: 'ApiError', status: bad[0] });
+      expect(api.tokens?.refresh_token).toBe('R');
+      expect(saved).toEqual([]);
+      down = false;
+      await api.sync();
+      expect(api.tokens).toEqual({ access_token: 'B', refresh_token: 'R' });
+    }
+  });
+  it('the server refusing the refresh token ends the session', async () => {
+    const api = new Api('http://t.local', {
+      tokens: { access_token: 'A', refresh_token: 'R' },
+      fetch: fakeFetch({ 'POST /identity/connect/token': () => [400, { error: 'invalid_grant' }], 'GET /api/sync': () => [401, null] }),
+    });
+    await expect(api.sync()).rejects.toBeInstanceOf(SessionEnded);
+    expect(api.tokens).toBeNull();
+    await expect(api.sync()).rejects.toBeInstanceOf(SessionEnded);
+  });
+  it('requests at once share one refresh', async () => {
+    const seen: string[] = [];
+    const api = new Api('http://t.local', {
+      tokens: { access_token: 'A', refresh_token: 'R' },
+      fetch: fakeFetch({ 'POST /identity/connect/token': () => [200, { access_token: 'B', refresh_token: 'R2' }] }, seen),
+    });
+    await Promise.all([api.freshAccessToken(), api.freshAccessToken(), api.refresh()]);
+    expect(seen).toHaveLength(1);
   });
 });
 

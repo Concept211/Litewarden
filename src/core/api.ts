@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Minimal REST client for Vaultwarden (and Bitwarden-compatible) servers. Talks only to the user's server.
 import { b64url, utf8 } from './bytes';
-import { ApiError, ServerUnreachable, TwoFactorRequired, WrongPassword, WrongTwoFactorCode, serverMessage } from './errors';
+import { ApiError, ServerUnreachable, SessionEnded, TwoFactorRequired, WrongPassword, WrongTwoFactorCode, serverMessage } from './errors';
 import type { Kdf } from './crypto/types';
 import type { FileUploadSlot, Policy, SendRecord } from './send';
 
@@ -144,6 +144,7 @@ export class Api {
   tokens: Tokens | null;
   private readonly onTokens: ((t: Tokens | null) => void) | undefined;
   private readonly fetchImpl: typeof fetch;
+  private refreshing: Promise<void> | null = null;
 
   constructor(base: string, opts: ApiOptions = {}) {
     this.urls = serverUrls(base);
@@ -204,6 +205,8 @@ export class Api {
       await this.refresh();
       r = await this.raw(method, path, opts);
     }
+    // No way left to renew it. A 401 with a refresh token still in hand is the server's answer about this request.
+    if (r.status === 401 && !this.tokens?.refresh_token) throw new SessionEnded();
     if (r.status >= 400) throw new ApiError(r.status, r.data, `${method} ${path}`);
     return r.data as T;
   }
@@ -277,15 +280,26 @@ export class Api {
     throw new ApiError(r.status, body, 'Login');
   }
 
-  async refresh(): Promise<void> {
+  /** Renew the access token. Callers at the same moment share one request, so none sends a token just replaced. */
+  refresh(): Promise<void> {
+    this.refreshing ??= this.refreshNow().finally(() => (this.refreshing = null));
+    return this.refreshing;
+  }
+
+  private async refreshNow(): Promise<void> {
     const rt = this.tokens?.refresh_token;
-    if (!rt) throw new ApiError(401, null, 'Refreshing the session');
+    if (!rt) throw new SessionEnded();
     const r = await this.raw('POST', '/identity/connect/token', {
       auth: false,
       form: { grant_type: 'refresh_token', client_id: 'browser', refresh_token: rt },
     });
-    if (r.status !== 200) {
-      this.setTokens(null);
+    if (r.status !== 200 || !(r.data as Tokens | null)?.access_token) {
+      // Only the server itself saying no ends the session. A proxy's error page, a rate limit or a server that is
+      // starting up would otherwise sign the user out for good.
+      if ((r.data as { error?: unknown } | null)?.error === 'invalid_grant') {
+        this.setTokens(null);
+        throw new SessionEnded();
+      }
       throw new ApiError(r.status, r.data, 'Refreshing the session');
     }
     this.setTokens({ ...this.tokens, ...(r.data as Tokens) });
@@ -344,7 +358,7 @@ export class Api {
   /** A fresh access token (refreshing first if it expires within a minute), e.g. for the notifications hub. */
   async freshAccessToken(): Promise<string> {
     if (this.tokenSecondsLeft() < 60) await this.refresh();
-    if (!this.tokens?.access_token) throw new ApiError(401, null, 'Getting a session token');
+    if (!this.tokens?.access_token) throw new SessionEnded();
     return this.tokens.access_token;
   }
 }

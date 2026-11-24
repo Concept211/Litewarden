@@ -150,6 +150,8 @@ export interface LocalStore {
   vault?: SyncResponse;
   lastSync?: number;
   lastSyncError?: string | null;
+  /** The error's name: 'ServerUnreachable', 'SessionEnded', or anything else. */
+  lastSyncErrorName?: string | null;
   settings?: Partial<Settings>;
   /** Most recently used item ids, newest first. */
   recent?: string[];

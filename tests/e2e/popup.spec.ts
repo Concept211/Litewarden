@@ -571,6 +571,60 @@ test('a killed service worker resumes the session without asking again', async (
   await page.close();
 });
 
+test('a proxy error during a token refresh keeps the sign-in; an ended session offers Sign in', async ({ popup, corpus, ctx: context }) => {
+  const page = await corpus('stacked.html');
+  let p = await popup(page);
+  await p.waitForSelector('.card');
+  const spoil = (refresh: boolean) =>
+    p.evaluate(async (all) => {
+      const { tokens } = (await chrome.storage.local.get('tokens')) as { tokens: Record<string, unknown> };
+      await chrome.storage.local.set({ tokens: { ...tokens, access_token: 'spoiled', ...(all ? { refresh_token: 'spoiled' } : {}) } });
+    }, refresh);
+  const hasRefresh = () => p.evaluate(async () => !!((await chrome.storage.local.get('tokens')) as { tokens?: { refresh_token?: string } }).tokens?.refresh_token);
+
+  // The access token has run out, and the proxy in front of the server answers the refresh with a 502.
+  await spoil(false);
+  await context.route('**/identity/connect/token', (r) => r.fulfill({ status: 502, contentType: 'text/html', body: '<html>Bad gateway</html>' }));
+  await p.click('button[aria-label="Sync now"]');
+  await expect(p.locator('.warn')).toContainText("Sync didn't work");
+  await expect(p.locator('.warn')).toContainText('HTTP 502');
+  await shot(p, 'sync-502-light', 1);
+  expect(await hasRefresh()).toBe(true);
+  await context.unroute('**/identity/connect/token');
+  await p.click('.warn button:has-text("Retry")');
+  await expect(p.locator('.warn')).toHaveCount(0);
+
+  // The server itself refuses the sign-in: the banner says so, and signing in again keeps the vault and the PIN.
+  await spoil(true);
+  await p.click('button[aria-label="Sync now"]');
+  await expect(p.locator('.warn')).toContainText('Your sign-in has ended');
+  await shot(p, 'sync-ended-light', 1);
+  await p.close();
+  p = await popup(page);
+  await expect(p.locator('.warn')).toContainText('Your sign-in has ended');
+  await p.click('.warn button:has-text("Sign in")');
+  await expect(p.locator('h2')).toHaveText('Sign in again');
+  await expect(p.locator('#em')).toHaveValue(creds.main.email);
+  await shot(p, 'signin-again-light', 1);
+  await p.click('button:has-text("Not now")');
+  await expect(p.locator('.card')).toHaveCount(2);
+  await p.click('.warn button:has-text("Sign in")');
+  await p.fill('#pw', 'not the password');
+  await p.keyboard.press('Enter');
+  await expect(p.locator('.f-msg').last()).toContainText('wrong');
+  await p.fill('#pw', creds.main.password);
+  await p.keyboard.press('Enter');
+  await finishFirstRun(p);
+  await expect(p.locator('.warn')).toHaveCount(0);
+  await expect(p.locator('.card')).toHaveCount(2);
+  await p.click('button[aria-label="Lock"]');
+  await expect(p.locator('input[aria-label="PIN digit 1"]')).toBeFocused();
+  await p.keyboard.type('135790');
+  await expect(p.locator('#q')).toBeVisible({ timeout: 15_000 });
+  await p.close();
+  await page.close();
+});
+
 test('server down: unlock still works, sync says so in plain words', async ({ popup, corpus }) => {
   const page = await corpus('stacked.html');
   testServer('stop');

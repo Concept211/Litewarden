@@ -141,6 +141,7 @@ export function Main({
   onOpen,
   onNew,
   onShares,
+  onSignIn,
 }: {
   boot: Boot;
   keep: MainKeep;
@@ -150,6 +151,7 @@ export function Main({
   onOpen: (id: string) => void;
   onNew: (p: NewPrefill) => void;
   onShares: () => void;
+  onSignIn: () => void;
 }) {
   const [index, setIndex] = useState<IndexItem[] | null>(null);
   const [count, setCount] = useState(b.count);
@@ -167,7 +169,7 @@ export function Main({
   const [codes, setCodes] = useState<Record<string, string>>({});
   const [secs, setSecs] = useState(secondsRemaining());
   const [kdfHidden, setKdfHidden] = useState(b.kdfDismissed);
-  const [sync, setSync] = useState({ at: b.lastSync, err: b.lastSyncError, busy: false });
+  const [sync, setSync] = useState({ at: b.lastSync, err: b.lastSyncError, errName: b.lastSyncErrorName, busy: false });
   const [notes, setNotes] = useState<Record<string, string> | null>(null);
   const [folders, setFolders] = useState<Folder[] | null>(null);
   const [pick, setPickRaw] = useState(b.listFolder);
@@ -472,10 +474,10 @@ export function Main({
     setSync((s) => ({ ...s, busy: true }));
     try {
       const r = await send('sync');
-      setSync({ at: Date.now(), err: null, busy: false });
+      setSync({ at: Date.now(), err: null, errName: null, busy: false });
       show(`Vault synced. ${r.count.toLocaleString()} items, ${r.changed ? `${r.changed} changed` : 'nothing changed'}`);
     } catch (e) {
-      setSync((s) => ({ ...s, err: (e as Error).message, busy: false }));
+      setSync((s) => ({ ...s, err: (e as Error).message, errName: (e as RemoteError).name, busy: false }));
       show("Sync didn't work. Your vault on this device is unchanged.");
     }
   }
@@ -964,12 +966,21 @@ export function Main({
           <div class="warn">
             <CloudOff />
             <div>
-              <b>Can't reach {server}</b>
-              <p>Showing what was synced {ago(sync.at).replace('Synced ', '')}.</p>
+              <b>{sync.errName === 'ServerUnreachable' ? `Can't reach ${server}` : sync.errName === 'SessionEnded' ? 'Your sign-in has ended' : "Sync didn't work"}</b>
+              <p>
+                {sync.errName === 'ServerUnreachable' || sync.errName === 'SessionEnded' ? '' : `${sync.err} `}
+                Showing what was synced {ago(sync.at).replace('Synced ', '')}.
+              </p>
             </div>
-            <button class="btn" onClick={doSync}>
-              Retry
-            </button>
+            {sync.errName === 'SessionEnded' ? (
+              <button class="btn" onClick={onSignIn}>
+                Sign in
+              </button>
+            ) : (
+              <button class="btn" onClick={doSync}>
+                Retry
+              </button>
+            )}
           </div>
         )}
         {b.kdfWeak.length > 0 && !kdfHidden && (

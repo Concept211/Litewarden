@@ -12,7 +12,7 @@ import type { PopupScreen, ShareDraft } from '../../shared/store';
 
 type Resume = Extract<PopupScreen, { item: string | null }>;
 type ShareScreen = Extract<PopupScreen, { share: string }>;
-type View = Boot['view'] | 'settings' | { item: string; resume?: Resume } | { new: NewPrefill; resume?: Resume } | { share: ShareScreen };
+type View = Boot['view'] | 'settings' | 'signin' | { item: string; resume?: Resume } | { new: NewPrefill; resume?: Resume } | { share: ShareScreen };
 
 /** The view to open on: the remembered screen, if the vault is open and there is one. */
 function firstView(b: Boot): View {
@@ -86,6 +86,7 @@ export function App({ boot: initial }: { boot: Boot }) {
     setView(nb.view === 'main' && next ? next : nb.view);
   };
   if (view === 'firstrun') return <FirstRun onDone={() => reload()} />;
+  if (view === 'signin' && b.account) return <FirstRun again={b.account} onDone={() => reload('main')} />;
   if (view === 'unlock') return <Unlock boot={b} onUnlocked={() => reload()} onLoggedOut={() => reload()} />;
   if (view === 'settings') return SettingsView ? <SettingsView boot={b} page0={settings0.current} onPage={(page) => here({ settings: page })} onBack={() => reload('main')} onLoggedOut={() => reload()} /> : <Shell />;
   if (typeof view === 'object' && 'share' in view)
@@ -126,6 +127,7 @@ export function App({ boot: initial }: { boot: Boot }) {
       onOpen={(id) => setView({ item: id })}
       onNew={(p) => setView({ new: p })}
       onShares={() => setView({ share: { share: 'list' } })}
+      onSignIn={() => setView('signin')}
     />
   );
 }

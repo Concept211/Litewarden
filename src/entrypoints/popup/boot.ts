@@ -25,6 +25,7 @@ export interface Boot {
   recentItems: IndexItem[];
   lastSync: number | null;
   lastSyncError: string | null;
+  lastSyncErrorName: string | null;
   failures: number;
   /** Why the account's key settings are weak (empty when fine). */
   kdfWeak: string[];
@@ -63,7 +64,7 @@ export async function targetTab(): Promise<Tab | null> {
 
 export async function boot(): Promise<Boot> {
   const [l, m, tab] = await Promise.all([
-    local.get('account', 'settings', 'lastSync', 'lastSyncError', 'pinWrapped', 'kdfDismissed', 'listFolder', 'listType'),
+    local.get('account', 'settings', 'lastSync', 'lastSyncError', 'lastSyncErrorName', 'pinWrapped', 'kdfDismissed', 'listFolder', 'listType'),
     // Small keys only: the full index (megabytes for a big vault) is read after the first paint.
     mem.get('session', 'indexCount', 'recentItems', 'tabMatches', 'pinWrapped', 'lockout', 'failures', 'popupWhere'),
     targetTab(),
@@ -88,6 +89,7 @@ export async function boot(): Promise<Boot> {
     recentItems: unlocked ? (m.recentItems ?? []) : [],
     lastSync: l.lastSync ?? null,
     lastSyncError: l.lastSyncError ?? null,
+    lastSyncErrorName: l.lastSyncErrorName ?? null,
     failures: m.failures?.length ?? 0,
     kdfWeak: l.account ? checkKdf(l.account.kdf).reasons : [],
     kdfDismissed: !!l.account && l.kdfDismissed === kdfSignature(l.account.kdf),

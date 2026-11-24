@@ -220,7 +220,7 @@ async function wipeLocalVault() {
   accountEpoch++;
   vaultCache = null;
   keysCache = null;
-  await local.remove('vault', 'lastSync', 'recent', 'pinWrapped', 'persistedSession', 'tokens', 'generated');
+  await local.remove('vault', 'lastSync', 'lastSyncError', 'lastSyncErrorName', 'recent', 'pinWrapped', 'persistedSession', 'tokens', 'generated');
   await dropKey();
   await mem.remove('session', 'index', 'indexCount', 'recentItems', 'notes', 'tabMatches', 'iconCache', 'pinWrapped', 'failures', 'popupWhere');
 }
@@ -436,6 +436,15 @@ export function oneAtATime<T>(fn: () => Promise<T>): Promise<T> {
   return r;
 }
 
+/** Plain words for a failed sync. A server that answered with an error isn't one that can't be reached. */
+function syncError(err: unknown, server: string): Error {
+  if (err instanceof ApiError) {
+    const host = server.replace(/^https?:\/\//, '');
+    return new UserError(err.status === 429 ? `${host} is limiting requests right now. Wait a minute, then try again.` : `${host} answered with an error (HTTP ${err.status}).`);
+  }
+  return err instanceof Error ? err : new Error(String(err));
+}
+
 async function doSync(report: boolean) {
   const signedIn = accountEpoch;
   const a = await api();
@@ -444,8 +453,9 @@ async function doSync(report: boolean) {
   try {
     data = await a.sync();
   } catch (err) {
-    await local.set({ lastSyncError: err instanceof Error ? err.message : String(err) });
-    throw err;
+    const e = syncError(err, a.base);
+    if (signedIn === accountEpoch) await local.set({ lastSyncError: e.message, lastSyncErrorName: e.name });
+    throw e;
   }
   // Signed out while the server was answering: writing this would put the account and vault back.
   return oneAtATime(async () => (signedIn === accountEpoch ? storeSync(data, report) : { count: 0, changed: 0 }));
@@ -463,7 +473,7 @@ async function storeSync(data: SyncResponse, report: boolean) {
     account.encUserKey = data.profile.key || account.encUserKey;
     account.encPrivateKey = data.profile.privateKey ?? account.encPrivateKey;
   }
-  await local.set({ vault: data, lastSync: Date.now(), lastSyncError: null, ...(account ? { account } : {}) });
+  await local.set({ vault: data, lastSync: Date.now(), lastSyncError: null, lastSyncErrorName: null, ...(account ? { account } : {}) });
   await buildIndex(data, report);
   return { count: data.ciphers.filter((c) => !c.deletedDate).length, changed };
 }
@@ -706,7 +716,7 @@ export async function applyCipherPush(id: string, removed: boolean): Promise<voi
   if (removed) await removeLocal(id);
   else await upsertLocal(await (await api()).req<Cipher>('GET', `/api/ciphers/${encodeURIComponent(id)}`));
   // The vault on this device now matches the server as of this moment.
-  await local.set({ lastSync: Date.now(), lastSyncError: null });
+  await local.set({ lastSync: Date.now(), lastSyncError: null, lastSyncErrorName: null });
 }
 
 /** Put one changed cipher into the local vault and the decrypted index without redoing the whole vault. */

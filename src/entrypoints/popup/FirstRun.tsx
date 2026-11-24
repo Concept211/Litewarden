@@ -16,13 +16,14 @@ const host = (u: string) => {
   }
 };
 
-export function FirstRun({ onDone }: { onDone: () => void }) {
-  const [step, setStep] = useState<Step>('url');
-  const [url, setUrl] = useState('https://');
+/** `again`: the same account signing back in after its session ended. The vault on this device stays as it is. */
+export function FirstRun({ onDone, again }: { onDone: () => void; again?: { server: string; email: string } }) {
+  const [step, setStep] = useState<Step>(again ? 'login' : 'url');
+  const [url, setUrl] = useState(again?.server ?? 'https://');
   const [found, setFound] = useState<(ServerInfo & { url: string }) | null>(null);
   const [urlErr, setUrlErr] = useState<{ kind: 'old' | 'down' | 'bad' | 'other'; text: string } | null>(null);
   const [region, setRegion] = useState<'US' | 'EU'>('US');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(again?.email ?? '');
   const [pw, setPw] = useState('');
   const [reveal, setReveal] = useState(false);
   const [loginErr, setLoginErr] = useState<string | null>(null);
@@ -116,9 +117,9 @@ export function FirstRun({ onDone }: { onDone: () => void }) {
     <>
       <div class="fr-top">
         <Keep />
-        Litewarden{stepNo < 4 && <span class="step">Step {stepNo} of 3</span>}
+        Litewarden{stepNo < 4 && !again && <span class="step">Step {stepNo} of 3</span>}
       </div>
-      {stepNo < 4 && (
+      {stepNo < 4 && !again && (
         <div class="bar3">
           {[1, 2, 3].map((n) => (
             <i class={n <= stepNo ? 'on' : ''} />
@@ -246,12 +247,12 @@ export function FirstRun({ onDone }: { onDone: () => void }) {
     return (
       <form class="fr" onSubmit={(e) => (e.preventDefault(), void signIn())}>
         {top}
-        <h2>Sign in</h2>
+        <h2>{again ? 'Sign in again' : 'Sign in'}</h2>
         <p class="lead">to {host(server)}</p>
         <label class="field">
           <span class="l">Email</span>
           <span class="inp">
-            <input id="em" type="email" autocomplete="username" value={email} data-af={!email || undefined} onInput={(e) => setEmail((e.currentTarget as HTMLInputElement).value)} />
+            <input id="em" type="email" autocomplete="username" value={email} readOnly={!!again} data-af={!email || undefined} onInput={(e) => setEmail((e.currentTarget as HTMLInputElement).value)} />
           </span>
         </label>
         <label class={`field${loginErr ? ' err' : ''}`}>
@@ -278,8 +279,8 @@ export function FirstRun({ onDone }: { onDone: () => void }) {
         <Busy class="btn wide" type="submit" busy={busy} label="Signing in…">
           Sign in
         </Busy>
-        <button type="button" class="btn ghost wide" onClick={() => (setStep('url'), setLoginErr(null))}>
-          Change server
+        <button type="button" class="btn ghost wide" onClick={() => (again ? onDone() : (setStep('url'), setLoginErr(null)))}>
+          {again ? 'Not now' : 'Change server'}
         </button>
       </form>
     );

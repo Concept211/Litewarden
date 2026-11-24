@@ -64,6 +64,14 @@ export class ServerUnreachable extends LitewardenError {
   }
 }
 
+/** The server no longer accepts this device's sign-in (it expired, or the session was ended). Only signing in again helps. */
+export class SessionEnded extends LitewardenError {
+  override name = 'SessionEnded';
+  constructor() {
+    super('Your sign-in has ended. Sign in again to sync.');
+  }
+}
+
 /** Pull the human message out of a Vaultwarden/Bitwarden error body (it lives in a few places). */
 export function serverMessage(body: unknown): string {
   if (!body || typeof body !== 'object') return typeof body === 'string' ? body.slice(0, 200) : '';
