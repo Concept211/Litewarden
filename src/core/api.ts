@@ -296,7 +296,8 @@ export class Api {
     if (r.status !== 200 || !(r.data as Tokens | null)?.access_token) {
       // Only the server itself saying no ends the session. A proxy's error page, a rate limit or a server that is
       // starting up would otherwise sign the user out for good.
-      if ((r.data as { error?: unknown } | null)?.error === 'invalid_grant') {
+      const body = r.data && typeof r.data === 'object' ? (r.data as { error?: unknown }) : null;
+      if (body && (body.error === 'invalid_grant' || r.status === 401)) {
         this.setTokens(null);
         throw new SessionEnded();
       }

@@ -625,6 +625,28 @@ test('a proxy error during a token refresh keeps the sign-in; an ended session o
   await page.close();
 });
 
+test('live updates coming back sync at once and clear the banner, without Retry', async ({ popup, corpus }) => {
+  const page = await corpus('stacked.html');
+  const p = await popup(page);
+  await p.waitForSelector('.card');
+  const set = (patch: Record<string, unknown>) => p.evaluate((x) => chrome.runtime.sendMessage({ type: 'setSettings', data: x }), patch);
+  const synced = () => p.evaluate(async () => ((await chrome.storage.local.get('lastSync')) as { lastSync: number }).lastSync);
+  await set({ liveSync: false });
+  testServer('stop');
+  try {
+    await p.click('button[aria-label="Sync now"]');
+    await expect(p.locator('.warn')).toContainText("Can't reach");
+  } finally {
+    testServer('start');
+  }
+  const before = await synced();
+  await set({ liveSync: true });
+  await expect.poll(synced, { timeout: 15_000 }).toBeGreaterThan(before);
+  await expect(p.locator('.warn')).toHaveCount(0);
+  await p.close();
+  await page.close();
+});
+
 test('server down: unlock still works, sync says so in plain words', async ({ popup, corpus }) => {
   const page = await corpus('stacked.html');
   testServer('stop');

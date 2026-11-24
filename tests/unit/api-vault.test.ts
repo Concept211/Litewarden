@@ -114,13 +114,15 @@ describe('login errors', () => {
     }
   });
   it('the server refusing the refresh token ends the session', async () => {
-    const api = new Api('http://t.local', {
-      tokens: { access_token: 'A', refresh_token: 'R' },
-      fetch: fakeFetch({ 'POST /identity/connect/token': () => [400, { error: 'invalid_grant' }], 'GET /api/sync': () => [401, null] }),
-    });
-    await expect(api.sync()).rejects.toBeInstanceOf(SessionEnded);
-    expect(api.tokens).toBeNull();
-    await expect(api.sync()).rejects.toBeInstanceOf(SessionEnded);
+    for (const no of [[400, { error: 'invalid_grant' }], [401, { message: 'Unable to refresh login credentials' }]] as Array<[number, unknown]>) {
+      const api = new Api('http://t.local', {
+        tokens: { access_token: 'A', refresh_token: 'R' },
+        fetch: fakeFetch({ 'POST /identity/connect/token': () => no, 'GET /api/sync': () => [401, null] }),
+      });
+      await expect(api.sync()).rejects.toBeInstanceOf(SessionEnded);
+      expect(api.tokens).toBeNull();
+      await expect(api.sync()).rejects.toBeInstanceOf(SessionEnded);
+    }
   });
   it('requests at once share one refresh', async () => {
     const seen: string[] = [];

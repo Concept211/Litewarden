@@ -238,7 +238,8 @@ export function Main({
       if (area === 'session' && ch.pendingTotps) loadTfa();
       if (area === 'session' && ch.session && !ch.session.newValue) onLocked();
       if (area === 'session' && ch.notes?.newValue && notes) setNotes(ch.notes.newValue as Record<string, string>);
-      if (area === 'local' && ch.lastSync) setSync((s) => ({ ...s, at: (ch.lastSync!.newValue as number) ?? s.at }));
+      // Written only when a sync worked, so an error still showing is over.
+      if (area === 'local' && ch.lastSync?.newValue) setSync((s) => ({ ...s, at: ch.lastSync!.newValue as number, err: null, errName: null }));
     };
     chrome.storage.onChanged.addListener(onStore);
     return () => chrome.storage.onChanged.removeListener(onStore);

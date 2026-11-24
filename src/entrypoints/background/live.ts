@@ -64,6 +64,7 @@ export async function startLive(): Promise<void> {
       ready = true;
       backoff = 5_000;
       void setState('connected');
+      void catchUp(sock).catch(() => {});
       pingTimer = setInterval(() => sock.readyState === WebSocket.OPEN && sock.send(PING), 20_000);
       return;
     }
@@ -108,6 +109,26 @@ export async function startLive(): Promise<void> {
   sock.onerror = () => {
     /* onclose follows and handles it */
   };
+}
+
+/**
+ * Connected: pushes sent while the line was down are gone, so sync now rather than at the next timer. Skipped when
+ * the last sync is recent and worked. After a failure it waits a minute, so a line that keeps dropping doesn't
+ * hammer the server. The short delay lets the sync that comes with signing in or unlocking go first.
+ */
+const CATCH_UP_DELAY_MS = 2_000;
+const FRESH_MS = 5 * 60_000;
+let failedAt = 0;
+async function catchUp(sock: WebSocket): Promise<void> {
+  await new Promise((r) => setTimeout(r, CATCH_UP_DELAY_MS));
+  const [{ lastSync, lastSyncError }, { session }] = await Promise.all([local.get('lastSync', 'lastSyncError'), mem.get('session')]);
+  const now = Date.now();
+  if (ws !== sock || !session || now - failedAt < 60_000 || (!lastSyncError && now - (lastSync ?? 0) < FRESH_MS)) return;
+  try {
+    await syncNow(false);
+  } catch {
+    failedAt = Date.now();
+  }
 }
 
 /** Several pushes in a row (an import, a bulk move) become one sync. */
