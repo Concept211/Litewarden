@@ -113,17 +113,17 @@ export async function startLive(): Promise<void> {
 
 /**
  * Connected: pushes sent while the line was down are gone, so sync now rather than at the next timer. Skipped when
- * the last sync is recent and worked. After a failure it waits a minute, so a line that keeps dropping doesn't
- * hammer the server. The short delay lets the sync that comes with signing in or unlocking go first.
+ * the last sync is recent and worked. The short delay lets the sync that comes with signing in or unlocking go first.
+ * After a failed try it is longer, so a line that keeps dropping doesn't hammer the server, but a try is never skipped.
  */
 const CATCH_UP_DELAY_MS = 2_000;
+const CATCH_UP_GAP_MS = 20_000;
 const FRESH_MS = 5 * 60_000;
 let failedAt = 0;
 async function catchUp(sock: WebSocket): Promise<void> {
-  await new Promise((r) => setTimeout(r, CATCH_UP_DELAY_MS));
+  await new Promise((r) => setTimeout(r, Math.max(CATCH_UP_DELAY_MS, failedAt + CATCH_UP_GAP_MS - Date.now())));
   const [{ lastSync, lastSyncError }, { session }] = await Promise.all([local.get('lastSync', 'lastSyncError'), mem.get('session')]);
-  const now = Date.now();
-  if (ws !== sock || !session || now - failedAt < 60_000 || (!lastSyncError && now - (lastSync ?? 0) < FRESH_MS)) return;
+  if (ws !== sock || !session || (!lastSyncError && Date.now() - (lastSync ?? 0) < FRESH_MS)) return;
   try {
     await syncNow(false);
   } catch {

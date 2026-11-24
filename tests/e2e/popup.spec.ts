@@ -625,7 +625,7 @@ test('a proxy error during a token refresh keeps the sign-in; an ended session o
   await page.close();
 });
 
-test('live updates coming back sync at once and clear the banner, without Retry', async ({ popup, corpus }) => {
+test('live updates coming back sync by themselves and clear the banner, without Retry', async ({ popup, corpus, ctx: context }) => {
   const page = await corpus('stacked.html');
   const p = await popup(page);
   await p.waitForSelector('.card');
@@ -640,8 +640,17 @@ test('live updates coming back sync at once and clear the banner, without Retry'
     testServer('start');
   }
   const before = await synced();
+  // The line comes back while the server still answers with errors, so that first try fails. Then the line drops.
+  let tries = 0;
+  await context.route('**/api/sync*', (r) => (tries++, r.fulfill({ status: 502, contentType: 'text/html', body: '<html>Bad gateway</html>' })));
   await set({ liveSync: true });
-  await expect.poll(synced, { timeout: 15_000 }).toBeGreaterThan(before);
+  await expect.poll(() => tries, { timeout: 40_000 }).toBeGreaterThan(0);
+  await expect.poll(() => p.evaluate(async () => ((await chrome.storage.local.get('lastSyncError')) as { lastSyncError?: string }).lastSyncError ?? '')).toContain('502');
+  await set({ liveSync: false });
+  await context.unroute('**/api/sync*');
+  // Back again moments later: it waits out the gap, then syncs. It must not leave it to the next timer.
+  await set({ liveSync: true });
+  await expect.poll(synced, { timeout: 40_000 }).toBeGreaterThan(before);
   await expect(p.locator('.warn')).toHaveCount(0);
   await p.close();
   await page.close();
